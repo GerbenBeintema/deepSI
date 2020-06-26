@@ -1,7 +1,8 @@
 
 #https://homes.esat.kuleuven.be/~tokka/daisydata.html
 
-from deepSI import System_data, System_data_list
+# from deepSI import System_data, System_data_list
+from deepSI.system_data.System_data import System_data, System_data_list
 from deepSI.system_data.datasets.dataset_utils import *
 
 import os

@@ -32,7 +32,7 @@ class System_data(object):
 
         #checks
         if self.y is not None:
-            assert self.u.shape[0]==self.y.shape[0]
+            assert self.u.shape[0]==self.y.shape[0], f'{self.u.shape[0]}!={self.y.shape[0]}'
         if self.x is not None: 
             assert self.x.shape[0]==self.y.shape[0]
 

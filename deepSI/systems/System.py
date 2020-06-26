@@ -56,23 +56,27 @@ class System(object):
         '''sys_data is already normed'''
         raise NotImplementedError('init_state_multi is to be implemented')
 
-    def step(action):
+    def step(self,action):
         '''Applies the action to the systems and returns the new observation'''
         raise NotImplementedError('one_step_ahead should be implemented in child')
+
+    def step_multi(self,actions):
+        return self.step(actions)
 
     def reset():
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('one_step_ahead should be implemented in child')
 
-    def reset_multi(n):
+    def reset_multi(self,n):
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('reset_multi is to be implemented')
+
 
     def one_step_ahead(self,sys_data):
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data_norm,nf=0)
+        obs, k0 = self.init_state_multi(sys_data_norm,nf=1)
         Y = np.concatenate([sys_data_norm.y[:k0],obs],axis=0)
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
@@ -93,7 +97,7 @@ class System(object):
         Losses = []
         for unow,ynow in zip(np.swapaxes(ufuture,0,1),np.swapaxes(yfuture,0,1)):
             Losses.append(np.mean((ynow-obs)**2)**0.5)
-            obs = self.step(unow)
+            obs = self.step_multi(unow)
         return np.array(Losses)
 
 
@@ -194,6 +198,12 @@ class System_IO(System):
         #when taking an action uhist gets appended to create the current state
         return sys_data.y[k0-1], k0
 
+    def init_state_multi(self,sys_data,nf=100):
+        k0 = max(self.na,self.nb)
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = 
+        return self.yhist[:,k0-1], k0
+
     def step(self,action):
         self.uhist.append(action)
         uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhist).flat),axis=0) #might not be the quickest way
@@ -201,6 +211,14 @@ class System_IO(System):
         self.yhist.append(yout)
         self.yhist.pop(0)
         self.uhist.pop(0)
+        return yout
+
+    def step_multi(self,actions):
+        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
+        uy = np.concatenate([self.uhist,self.yhist],axis=1)
+        yout = self.IO_step(uy) #multi IO?
+        self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
+        self.uhist = self.uhist[:,1:]
         return yout
 
     def IO_step(self,uy):

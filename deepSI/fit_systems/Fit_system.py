@@ -1,9 +1,12 @@
 
 from deepSI.systems.System import System, System_IO, System_data, load_system
 import numpy as np
+from deepSI.system_data.datasets import get_work_dirs
 import deepSI
 import torch
+from torch import nn, optim
 from tqdm.auto import tqdm
+import time
 
 class System_fittable(System):
     """docstring for System_fit"""
@@ -26,7 +29,8 @@ class System_IO_fit_sklearn(System_fittable, System_IO): #name?
         self.reg.fit(hist,y)
 
     def IO_step(self,uy):
-        return self.reg.predict([uy])[0] if uy.ndim==1 else reg.predict(uy)
+        return self.reg.predict([uy])[0] if uy.ndim==1 else self.reg.predict(uy)
+
 
 class System_PyTorch(System_fittable):
     """docstring for System_PyTorch"""
@@ -47,11 +51,25 @@ class System_PyTorch(System_fittable):
         raise NotImplementedError
 
 
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, sim_val=True, n_val=10000, verbose=1):
+    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2):
         #1. init funcs already happened
         #2. init optimizer
         #3. training data
         #4. optimization
+
+        def validation():
+            if sim_val is not None:
+                sim_val_data = self.apply_experiment(sim_val)
+                Loss_val = sim_val_data.NRMS(sim_val)
+            else:
+                with torch.no_grad():
+                    Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
+            self.Loss_val.append(Loss_val)
+            if self.bestfit>Loss_val:
+                print('########## new best ###########')
+                self.checkpoint_save_system()
+                self.bestfit = Loss_val
+            return Loss_val
 
         if self.fitted==False:
             self.norm.fit(sys_data)
@@ -59,62 +77,111 @@ class System_PyTorch(System_fittable):
             self.ny = sys_data.ny
             self.paremters = list(self.init_nets(self.nu,self.ny))
             self.optimizer = self.init_optimizer(self.paremters)
+            self.bestfit = float('inf')
+            self.Loss_val,self.Loss_train,self.batch_id,self.time = [],[],[],[]
+            self.batch_counter = 0
+            extra_t = 0
+            self.fitted = True
+        else:
+            self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
+            extra_t = 0 if len(self.time)==0 else self.time[-1]
+
 
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
         data_full = self.make_training_data(sys_data,**Loss_kwargs)
         data_full = [torch.tensor(dat,dtype=torch.float32) for dat in data_full]
 
-        data_train = data_full #later validation
 
+        if sim_val is not None:
+            data_train = data_full #later validation
+        else:
+            split = int(len(data_full)*(1-val_frac))
+            data_train = [dat[:split] for dat in data_full]
+            data_val = [dat[split:] for dat in data_full]
 
+        Loss_val = validation()
         N_training_samples = len(data_train[0])
+        batch_size = min(batch_size,N_training_samples)
         ids = np.arange(0,N_training_samples,dtype=int)
-        for epoch in tqdm(range(epochs)):
-            np.random.shuffle(ids)
+        try:
+            self.start_t = time.time()
+            for epoch in tqdm(range(epochs)):
+                np.random.shuffle(ids)
 
-            Losses = 0
-            for i in range(batch_size,N_training_samples+1,batch_size):
-                ids_batch = ids[i-batch_size:i]
-                train_batch = [part[ids_batch] for part in data_train]
-                Loss = self.CallLoss(*train_batch,**Loss_kwargs)
-                self.optimizer.zero_grad()
-                Loss.backward()
-                self.optimizer.step()
-                Losses += Loss.item()
-            Losses /= N_training_samples//batch_size
+                Loss_acc = 0
+                for i in range(batch_size,N_training_samples+1,batch_size):
+                    ids_batch = ids[i-batch_size:i]
+                    train_batch = [part[ids_batch] for part in data_train]
+                    Loss = self.CallLoss(*train_batch,**Loss_kwargs)
+                    self.optimizer.zero_grad()
+                    Loss.backward()
+                    self.optimizer.step()
+                    Loss_acc += Loss.item()
+                Loss_acc /= N_training_samples//batch_size
+                self.batch_counter += N_training_samples//batch_size
+                self.batch_id.append(self.batch_counter)
+                self.Loss_train.append(Loss_acc)
+                self.time.append(time.time()-self.start_t+extra_t)
 
-            data_val = self.apply_experiment(sys_data0[-n_val:])
-            Loss_val = data_val.NRMS(sys_data0[-n_val:])
-
-            print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Losses:.5f}')
-
-        self.fitted = True       
+                Loss_val = validation()
+                print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
+        except KeyboardInterrupt:
+            print('stopping early due to KeyboardInterrupt')
+        self.checkpoint_load_system()
 
     def CallLoss(*args,**kwargs):
         #kwargs are the settings
         #args is the data
         raise NotImplementedError
     
-    def _pytorch_save_system(self,vars=[],dir_placement=None,name=''):
-        self._save_system_torch(dir_placement=dir_placement,name=name) #error here if you have 
-        if self.fitted:
-            this_vars = self.fitted,self.bestfit,self.Loss_val,self.Loss_train,self.batch_id,self.time
-        else:
-            this_vars = self.fitted,self.bestfit
-        self._save_system_np(this_vars,dir_placement=dir_placement,name=name) #also could save 
-        self._save_system_pickle([self.norm_sys_data,self.norm]+vars,dir_placement=dir_placement,name=name)
+    def checkpoint_save_system(self):
+        from pathlib import Path
+        import os.path
+        directory  = get_work_dirs()['checkpoints']
+        self._save_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth')) #error here if you have 
+        vars = self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time
+        np.savez(os.path.join(directory,self.name+'_best'+'.npz'),*vars)
 
-    def _pytorch_load_system(self,dir_placement=None,name=''):
-        self._load_system_torch(dir_placement=dir_placement,name=name)
-        vars = self._load_system_np(dir_placement=dir_placement,name=name)
-        self.fitted = vars[0]
-        if self.fitted:
-            self.fitted, self.bestfit, self.Loss_val, self.Loss_train,self.batch_id,self.time = vars
-            self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val.tolist(), self.Loss_train.tolist(), self.batch_id.tolist(), self.time.tolist()
-        else:
-            self.fitted,self.bestfit = vars
-        self.norm_sys_data,self.norm = self._load_system_pickle(dir_placement=dir_placement,name=name)[:2]
+    def checkpoint_load_system(self):
+        from pathlib import Path
+        import os.path
+        directory  = get_work_dirs()['checkpoints'] 
+        self._load_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth'))
+        out = np.load(os.path.join(directory,self.name+'_best'+'.npz'))
+        out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
+
+        # out_real = []
+        # for a in out.items(): #if it is a ndim number it will remove the array
+        #     a = a[1] #keys only
+        #     if a.ndim==0:
+        #         out_real.append(a.tolist())
+        #     else:
+        #         out_real.append(a)
+        self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
         
+    #torch variant
+    def _save_system_torch(self,file):
+        # save_dir = tempfile.gettempdir() if dir_placement is None else Path(dir_placement)
+        # if os.path.isdir(save_dir) is False:
+        #     os.mkdir(save_dir)
+        save_dict = {}
+        for d in dir(self):
+            attribute = self.__getattribute__(d)
+            if isinstance(attribute,(nn.Module,optim.Optimizer)):
+                save_dict[d] = attribute.state_dict()
+        # name_file = os.path.join(save_dir,self.name + name + '.pth')
+        torch.save(save_dict,file)
+    def _load_system_torch(self,file):
+        # save_dir = tempfile.gettempdir() if dir_placement is None else Path(dir_placement)
+        # assert os.path.isdir(save_dir)
+        # name_file = os.path.join(save_dir,self.name + name + '.pth')
+        save_dict = torch.load(file)
+        for key in save_dict:
+            attribute = self.__getattribute__(key)
+            try:
+                attribute.load_state_dict(save_dict[key])
+            except (AttributeError, ValueError):
+                print('Error loading key',key)
 
 
 import torch
@@ -232,24 +299,24 @@ if __name__ == '__main__':
         def __init__(self,na,nb):
             super(System_IO_fit_linear,self).__init__(na,nb,linear_model.LinearRegression())
 
-    train, test = deepSI.datasets.WienerHammerBenchMark()
-
+    train, test = deepSI.datasets.Cascaded_Tanks()
+    sys = System_Torch_IO(na=5,nb=5)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))
 
     # sys = System_IO_fit_linear(7,3)
-    sys = System_encoder(nx=8,na=20,nb=20)
+    # sys = System_encoder(nx=8,na=20,nb=20)
     # sys_data = System_data(u=np.random.normal(size=100),y=np.random.normal(size=100))
-    sys.fit(train,epochs=100,Loss_kwargs=dict(nf=40))
+    sys.fit(train,epochs=100,Loss_kwargs=dict(nf=40),sim_val=test)
 
     sys_data_predict = sys.apply_experiment(test)
-    print(sys_data_predict.NRMS(sys_data))
+    print(sys_data_predict.NRMS(test))
     # sys.save_system('../../testing/test-fit.p')
     # del sys
     # sys = load_system('../../testing/test-fit.p')
     # sys_data_predict2 = sys.apply_experiment(sys_data)
 
-    sys_data.plot()
+    test.plot()
     sys_data_predict.plot(show=True)
     # sys_data_predict2.plot(show=True)
 
