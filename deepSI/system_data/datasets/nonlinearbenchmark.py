@@ -123,7 +123,7 @@ def Cascaded_Tanks(dir_placement=None,force_download=False,split_data=True):
     uEst, uVal, yEst, yVal, Ts = out['uEst'][:,0],out['uVal'][:,0],out['yEst'][:,0],out['yVal'][:,0],out['Ts'][0,0]
     datasets = [System_data(u=uEst,y=yEst),System_data(u=uVal,y=yVal)]
     datasets = System_data_list(datasets)
-    return datasets if not split_data else datasets.sdl[0], datasets.sdl[1]
+    return datasets if not split_data else (datasets.sdl[0], datasets.sdl[1])
 
 def WienerHammerstein_Process_Noise(dir_placement=None, force_download=False, split_data=True):
     '''Warning this is a quite a bit of data'''

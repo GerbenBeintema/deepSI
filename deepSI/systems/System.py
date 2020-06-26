@@ -5,10 +5,12 @@ from matplotlib import pyplot as plt
 import pickle
 
 def load_system(file):
+    """This is not a safe function, only use on trusted files"""
     return pickle.load( open(file,'rb') )
 
 class System(object):
-    def __init__(self,action_space,observation_space):
+    def __init__(self,action_space=None,observation_space=None):
+        #implement action_space observation space later
         self.norm = System_data_norm()
         self.fitted = False
         self.name = self.__class__.__name__
@@ -47,20 +49,61 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
     def init_state(self, sys_data):
+        '''sys_data is already normed'''
         return self.reset(), 0
 
+    def init_state_multi(self, sys_data, nf=100):
+        '''sys_data is already normed'''
+        raise NotImplementedError('init_state_multi is to be implemented')
+
     def step(action):
+        '''Applies the action to the systems and returns the new observation'''
         raise NotImplementedError('one_step_ahead should be implemented in child')
 
     def reset():
-        '''Should reset the '''
-        raise NotImplementedError('one_step_ahead should be implemented in child')        
+        '''Should reset the internal state and return the current obs'''
+        raise NotImplementedError('one_step_ahead should be implemented in child')
+
+    def reset_multi(n):
+        '''Should reset the internal state and return the current obs'''
+        raise NotImplementedError('reset_multi is to be implemented')
 
     def one_step_ahead(self,sys_data):
-        pass
+        if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
+            return System_data_list([self.apply_experiment(sd) for sd in sys_data])
+        sys_data_norm = self.norm.transform(sys_data)
+        obs, k0 = self.init_state_multi(sys_data_norm,nf=0)
+        Y = np.concatenate([sys_data_norm.y[:k0],obs],axis=0)
+        return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
+        # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data):
-        pass
+    def n_step_error(self,sys_data,nf=100):
+        # 1. init a multi state
+        # do the normal loop, 
+        # how to deal with list sys_data?
+        # raise NotImplementedError('n_step_error is to be implemented')
+
+        if isinstance(sys_data,(list,tuple)):
+            sys_data = System_data_list(sys_data)
+            # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
+        sys_data = self.norm.transform(sys_data)
+        obs, k0 = self.init_state_multi(sys_data, nf=nf)
+        _,_,ufuture,yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf)
+
+        Losses = []
+        for unow,ynow in zip(np.swapaxes(ufuture,0,1),np.swapaxes(yfuture,0,1)):
+            Losses.append(np.mean((ynow-obs)**2)**0.5)
+            obs = self.step(unow)
+        return np.array(Losses)
+
+
+
+    def n_step_error_slow(self,sys_data,nf=100):
+        '''Slow variant of n_step_error'''
+        # do it in a for loop
+        # for k in range(len(sys_data)-nf-k0?):
+        #     init state
+        raise NotImplementedError('one_step_ahead is to be implemented')
 
     def save_system(self,file):
         pickle.dump(self, open(file,'wb'))
@@ -78,7 +121,7 @@ class System(object):
 
 class System_SS(System): #simple state space systems
     def __init__(self,nx,nu=None,ny=None):
-        super(System_SS,self).__init__(None,None)
+        super(System_SS,self).__init__()
         assert nx is not None
         self.nx = nx
         self.nu = nu
@@ -87,6 +130,10 @@ class System_SS(System): #simple state space systems
 
     def reset(self):
         self.x = np.zeros((self.nx,))
+        return self.h(self.x)
+
+    def reset_multi(self,n):
+        self.x = np.zeros((n,self.nx))
         return self.h(self.x)
 
     def step(self,action):
@@ -119,16 +166,19 @@ class System_Deriv(System_SS):
         k4 = self.dt*np.array(self.deriv(x+k3,u))
         return x + (k1+2*k2+2*k3+k4)/6
 
+    def deriv(self,x,u):
+        raise NotImplementedError('self.deriv should be implemented in child')
+
 
 class System_IO(System):
     def __init__(self,na,nb,nu=None,ny=None): #(u,y)
-        super(System_IO, self).__init__(None,None)
+        super(System_IO, self).__init__()
         self.nb = nb #hist length of u
         self.na = na #hist length of y
         self.nu = nu
         self.ny = ny
         #y[k] = step(u[k-nb,k-1],y[k-na,...,k-1])
-        #y[k+1] = step(u[k-nb-1,k],y[k-na-1,...,k])
+        #y[k+1] = step(u[k-nb+1,k],y[k-na-1,...,k])
         self.reset()
 
     def reset(self):
@@ -140,7 +190,8 @@ class System_IO(System):
         #sys_data already normed
         k0 = max(self.na,self.nb)
         self.yhist = list(sys_data.y[k0-self.na:k0])
-        self.uhist = list(sys_data.u[k0-self.nb:k0-1])
+        self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
+        #when taking an action uhist gets appended to create the current state
         return sys_data.y[k0-1], k0
 
     def step(self,action):

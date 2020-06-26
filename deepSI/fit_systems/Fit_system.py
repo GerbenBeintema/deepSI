@@ -13,7 +13,7 @@ class System_fittable(System):
             self.nu = sys_data.nu
             self.ny = sys_data.ny
         self._fit(self.norm.transform(sys_data),**kwargs) #transfrom data to fittable data?
-        self.fitted = True        
+        self.fitted = True
 
 class System_IO_fit_sklearn(System_fittable, System_IO): #name?
     def __init__(self, na, nb, reg):

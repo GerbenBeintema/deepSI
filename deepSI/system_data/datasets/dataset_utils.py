@@ -121,7 +121,9 @@ def cashed_download(url,name_dir,dir_placement=None,download_size=None,force_dow
 
 
 if __name__ == '__main__':
-    pass
+    import deepSI
+    sys_data = deepSI.datasets.CED(split_data=False)
+    sys_data.plot(show=True)
 
     # filename = './file.zip'
     # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/EMPS/EMPS.zip'
