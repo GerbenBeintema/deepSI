@@ -1,0 +1,1 @@
+from deepSI.utils.PyTorch_nets import simple_res_net, feed_forward_nn

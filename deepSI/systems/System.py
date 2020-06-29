@@ -43,9 +43,10 @@ class System(object):
             Y.extend(sys_data_norm.y[:k0])
         else:
             obs, k0 = self.reset(), 0
+
         for action in U[k0:]:
-            obs = self.step(action)
             Y.append(obs)
+            obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
     def init_state(self, sys_data):

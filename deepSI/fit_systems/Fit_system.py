@@ -52,6 +52,8 @@ class System_PyTorch(System_fittable):
 
 
     def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2):
+        #todo implement verbose
+
         #1. init funcs already happened
         #2. init optimizer
         #3. training data
@@ -88,12 +90,12 @@ class System_PyTorch(System_fittable):
 
 
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
-        data_full = self.make_training_data(sys_data,**Loss_kwargs)
-        data_full = [torch.tensor(dat,dtype=torch.float32) for dat in data_full]
+        data_full = self.make_training_data(sys_data, **Loss_kwargs)
+        data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
 
 
         if sim_val is not None:
-            data_train = data_full #later validation
+            data_train = data_full
         else:
             split = int(len(data_full)*(1-val_frac))
             data_train = [dat[:split] for dat in data_full]
@@ -101,24 +103,26 @@ class System_PyTorch(System_fittable):
 
         Loss_val = validation()
         N_training_samples = len(data_train[0])
-        batch_size = min(batch_size,N_training_samples)
-        ids = np.arange(0,N_training_samples,dtype=int)
+        batch_size = min(batch_size, N_training_samples)
+        N_batch_updates_per_epoch = N_training_samples//batch_size
+        print(f'N_training_samples={N_training_samples}, batch_size={batch_size}, N_batch_updates_per_epoch={N_batch_updates_per_epoch}')
+        ids = np.arange(0, N_training_samples, dtype=int)
         try:
             self.start_t = time.time()
             for epoch in tqdm(range(epochs)):
                 np.random.shuffle(ids)
 
                 Loss_acc = 0
-                for i in range(batch_size,N_training_samples+1,batch_size):
+                for i in range(batch_size, N_training_samples + 1, batch_size):
                     ids_batch = ids[i-batch_size:i]
                     train_batch = [part[ids_batch] for part in data_train]
-                    Loss = self.CallLoss(*train_batch,**Loss_kwargs)
+                    Loss = self.CallLoss(*train_batch, **Loss_kwargs)
                     self.optimizer.zero_grad()
                     Loss.backward()
                     self.optimizer.step()
                     Loss_acc += Loss.item()
-                Loss_acc /= N_training_samples//batch_size
-                self.batch_counter += N_training_samples//batch_size
+                Loss_acc /= N_batch_updates_per_epoch
+                self.batch_counter += N_batch_updates_per_epoch
                 self.batch_id.append(self.batch_counter)
                 self.Loss_train.append(Loss_acc)
                 self.time.append(time.time()-self.start_t+extra_t)
@@ -158,6 +162,7 @@ class System_PyTorch(System_fittable):
         #     else:
         #         out_real.append(a)
         self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
+        self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val.tolist(), self.Loss_train.tolist(), self.batch_id.tolist(), self.time.tolist()
         
     #torch variant
     def _save_system_torch(self,file):
@@ -196,7 +201,6 @@ class System_Torch_IO(System_PyTorch, System_IO):
         return sys_data.to_IO_data(na=self.na,nb=self.nb) #np.array(hist), np.array(Y)
 
     def init_nets(self, nu, ny):
-        print(nu,ny)
         assert ny==None
         #returns parameters
         nu = 1 if nu is None else nu
@@ -225,16 +229,22 @@ class System_encoder(System_PyTorch):
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf) #np.array(hist),np.array(ufuture),np.array(yfuture)
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
-        print(nu,ny)
+        # print(nu,ny)
         assert ny==None and nu==None
         ny = 1
         nu = 1
-        self.encoder = nn.Sequential(nn.Linear(self.na+self.nb,64),nn.Tanh(),nn.Linear(64,self.nx))
-        self.fn = nn.Sequential(nn.Linear(self.nx+nu,64),nn.Tanh(),nn.Linear(64,self.nx))
-        self.hn = nn.Sequential(nn.Linear(self.nx,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten())
+        from deepSI.utils import simple_res_net, feed_forward_nn
+
+        self.encoder = simple_res_net(n_in=self.nb+self.na,n_out=self.nx,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
+        self.fn = simple_res_net(n_in=self.nx+nu,          n_out=self.nx,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
+        self.hn = simple_res_net(n_in=self.nx,             n_out=ny,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
+
+        # self.encoder = nn.Sequential(nn.Linear(self.na+self.nb,64),nn.Tanh(),nn.Linear(64,self.nx))
+        # self.fn = nn.Sequential(nn.Linear(self.nx+nu,64),nn.Tanh(),nn.Linear(64,self.nx))
+        # self.hn = nn.Sequential(nn.Linear(self.nx,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten())
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
     def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
@@ -249,12 +259,22 @@ class System_encoder(System_PyTorch):
     def init_state(self,sys_data): #put nf here for n-step error?
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist)
-        return self.hn(self.state)[0].item(), max(self.na,self.nb)
+        return self.hn(self.state)[0,0].item(), max(self.na,self.nb)
+
+    def init_state_multi(self,sys_data,nf=100):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf)[0],dtype=torch.float32) #(1,)
+        self.state = self.encoder(hist)
+        return self.hn(self.state)[:,0].detach().numpy(), max(self.na,self.nb)
 
     def step(self,action):
         action = torch.tensor(action,dtype=torch.float32) #number
         self.state = self.fn(torch.cat((self.state,action[None,None]),axis=1))
-        return self.hn(self.state)[0].item()
+        return self.hn(self.state)[0,0].item()
+
+    def step_multi(self,action):
+        action = torch.tensor(action,dtype=torch.float32) #array
+        self.state = self.fn(torch.cat((self.state,action[:,None]),axis=1))
+        return self.hn(self.state)[:,0].detach().numpy()
 
 
 
@@ -295,28 +315,35 @@ def fit_system_tuner(fit_system, sys_data, search_dict, verbose=1):
 
 if __name__ == '__main__':
     from sklearn import linear_model 
+    from matplotlib import pyplot as plt
     class System_IO_fit_linear(System_IO_fit_sklearn):
         def __init__(self,na,nb):
             super(System_IO_fit_linear,self).__init__(na,nb,linear_model.LinearRegression())
 
     train, test = deepSI.datasets.Cascaded_Tanks()
-    sys = System_Torch_IO(na=5,nb=5)
+    # sys = System_Torch_IO(na=5,nb=5)
+    sys = System_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))
 
     # sys = System_IO_fit_linear(7,3)
     # sys = System_encoder(nx=8,na=20,nb=20)
     # sys_data = System_data(u=np.random.normal(size=100),y=np.random.normal(size=100))
-    sys.fit(train,epochs=100,Loss_kwargs=dict(nf=40),sim_val=test)
+    # sys.fit(train,epochs=100,Loss_kwargs=dict(nf=15),batch_size=32,sim_val=test)
+    # sys.save_system('../../testing/test-fit.p')
+    # del sys
+    sys = load_system('../../testing/test-fit.p')
 
     sys_data_predict = sys.apply_experiment(test)
     print(sys_data_predict.NRMS(test))
-    # sys.save_system('../../testing/test-fit.p')
-    # del sys
-    # sys = load_system('../../testing/test-fit.p')
+    plt.plot(sys.n_step_error(test))
+    plt.show()
+
     # sys_data_predict2 = sys.apply_experiment(sys_data)
 
     test.plot()
     sys_data_predict.plot(show=True)
+    plt.plot(test.u)
+    plt.show()
     # sys_data_predict2.plot(show=True)
 

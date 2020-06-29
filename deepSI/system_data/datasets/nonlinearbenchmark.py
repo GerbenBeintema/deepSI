@@ -226,8 +226,9 @@ def WienerHammerBenchMark(dir_placement=None,force_download=False, split_data=Tr
 
     out = loadmat(os.path.join(save_dir,'WienerHammerBenchMark.mat'))
     u,y,fs = out['uBenchMark'][:,0],out['yBenchMark'][:,0],out['fs'][0,0]
-    out = System_data(u=u[5200:184000],y=y[5200:184000])
-    return out.train_test_split() if split_data else out
+    out = System_data(u=u[5200:184000],y=y[5200:184000]) #fine only were u is active
+    # out = System_data(u=u,y=y)
+    return (out[:100000],out[100000:]) if split_data else out
 
 def Silverbox(dir_placement=None,force_download=False, split_data=True):
     '''The Silverbox system can be seen as an electronic implementation of the Duffing oscillator. It is build as a 2nd order linear time-invariant system with a 3rd degree polynomial static nonlinearity around it in feedback. This type of dynamics are, for instance, often encountered in mechanical systems.

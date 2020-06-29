@@ -111,7 +111,7 @@ class System_data(object):
         ufuture = []
         yfuture = []
         for k in range(max(nb,na)+nf,len(u)+1):
-            hist.append(np.concatenate((u[k-nb:k].flat,y[k-na:k].flat)))
+            hist.append(np.concatenate((u[k-nb-nf:k-nf].flat,y[k-na-nf:k-nf].flat)))
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
         return np.array(hist),np.array(ufuture),np.array(yfuture)
