@@ -42,16 +42,21 @@ class System_PyTorch(System_fittable):
         #returns parameters
         raise NotImplementedError
 
-    def init_optimizer(self,parameters):
+    def init_optimizer(self,parameters,**optimizer_kwargs):
         #return the optimizer with a optimizer.zero_grad and optimizer.step method
-        return torch.optim.Adam(parameters,lr=3e-3) 
+        if optimizer_kwargs.get('optimizer') is not None:
+            optimizer = optimizer_kwargs['optimizer']
+            del optimizer_kwargs['optimizer']
+        else:
+            optimizer = torch.optim.Adam
+        return optimizer(parameters,**optimizer_kwargs) 
 
     def make_training_data(self,sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         raise NotImplementedError
 
 
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2):
+    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2):
         #todo implement verbose
 
         #1. init funcs already happened
@@ -60,15 +65,18 @@ class System_PyTorch(System_fittable):
         #4. optimization
 
         def validation():
+            global time_val
+            t_start_val = time.time()
             if sim_val is not None:
                 sim_val_data = self.apply_experiment(sim_val)
                 Loss_val = sim_val_data.NRMS(sim_val)
             else:
                 with torch.no_grad():
                     Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
+            time_val += time.time() - t_start_val
             self.Loss_val.append(Loss_val)
             if self.bestfit>Loss_val:
-                print('########## new best ###########')
+                if verbose: print('########## new best ###########')
                 self.checkpoint_save_system()
                 self.bestfit = Loss_val
             return Loss_val
@@ -78,7 +86,7 @@ class System_PyTorch(System_fittable):
             self.nu = sys_data.nu
             self.ny = sys_data.ny
             self.paremters = list(self.init_nets(self.nu,self.ny))
-            self.optimizer = self.init_optimizer(self.paremters)
+            self.optimizer = self.init_optimizer(self.paremters,**optimizer_kwargs)
             self.bestfit = float('inf')
             self.Loss_val,self.Loss_train,self.batch_id,self.time = [],[],[],[]
             self.batch_counter = 0
@@ -101,7 +109,11 @@ class System_PyTorch(System_fittable):
             data_train = [dat[:split] for dat in data_full]
             data_val = [dat[split:] for dat in data_full]
 
+        
+        global time_val
+        time_val = time_back = time_loss = 0
         Loss_val = validation()
+        time_val = 0 #reset
         N_training_samples = len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
@@ -116,9 +128,16 @@ class System_PyTorch(System_fittable):
                 for i in range(batch_size, N_training_samples + 1, batch_size):
                     ids_batch = ids[i-batch_size:i]
                     train_batch = [part[ids_batch] for part in data_train]
+                    start_t_loss = time.time()
                     Loss = self.CallLoss(*train_batch, **Loss_kwargs)
+                    time_loss += time.time() - start_t_loss
+
                     self.optimizer.zero_grad()
+
+                    start_t_back = time.time()
                     Loss.backward()
+                    time_back += time.time() - start_t_back
+
                     self.optimizer.step()
                     Loss_acc += Loss.item()
                 Loss_acc /= N_batch_updates_per_epoch
@@ -128,7 +147,10 @@ class System_PyTorch(System_fittable):
                 self.time.append(time.time()-self.start_t+extra_t)
 
                 Loss_val = validation()
-                print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
+                if verbose>0: 
+                    time_elapsed = time.time()-self.start_t
+                    print(f'Epoch: {epoch+1:4} Training loss: {self.Loss_train[-1]:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
+                # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
         self.checkpoint_load_system()
@@ -138,6 +160,7 @@ class System_PyTorch(System_fittable):
         #args is the data
         raise NotImplementedError
     
+    ########## Saving and loading ############
     def checkpoint_save_system(self):
         from pathlib import Path
         import os.path
@@ -145,7 +168,6 @@ class System_PyTorch(System_fittable):
         self._save_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth')) #error here if you have 
         vars = self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time
         np.savez(os.path.join(directory,self.name+'_best'+'.npz'),*vars)
-
     def checkpoint_load_system(self):
         from pathlib import Path
         import os.path
@@ -153,33 +175,17 @@ class System_PyTorch(System_fittable):
         self._load_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth'))
         out = np.load(os.path.join(directory,self.name+'_best'+'.npz'))
         out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
-
-        # out_real = []
-        # for a in out.items(): #if it is a ndim number it will remove the array
-        #     a = a[1] #keys only
-        #     if a.ndim==0:
-        #         out_real.append(a.tolist())
-        #     else:
-        #         out_real.append(a)
         self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
         self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val.tolist(), self.Loss_train.tolist(), self.batch_id.tolist(), self.time.tolist()
         
-    #torch variant
     def _save_system_torch(self,file):
-        # save_dir = tempfile.gettempdir() if dir_placement is None else Path(dir_placement)
-        # if os.path.isdir(save_dir) is False:
-        #     os.mkdir(save_dir)
         save_dict = {}
         for d in dir(self):
             attribute = self.__getattribute__(d)
             if isinstance(attribute,(nn.Module,optim.Optimizer)):
                 save_dict[d] = attribute.state_dict()
-        # name_file = os.path.join(save_dir,self.name + name + '.pth')
         torch.save(save_dict,file)
     def _load_system_torch(self,file):
-        # save_dir = tempfile.gettempdir() if dir_placement is None else Path(dir_placement)
-        # assert os.path.isdir(save_dir)
-        # name_file = os.path.join(save_dir,self.name + name + '.pth')
         save_dict = torch.load(file)
         for key in save_dict:
             attribute = self.__getattribute__(key)
@@ -215,66 +221,12 @@ class System_Torch_IO(System_PyTorch, System_IO):
         return torch.mean((self.net(hist)[:,0]-Y)**2)
 
     def IO_step(self,uy):
-        uy = torch.tensor(uy,dtype=torch.float32)[None,:]
-        return self.net(uy)[0,0].item()
-
-class System_encoder(System_PyTorch):
-    """docstring for System_encoder"""
-    def __init__(self, nx=10, na=20, nb=20):
-        super(System_encoder, self).__init__(None,None)
-        self.nx = nx
-        self.na = na
-        self.nb = nb
-
-    def make_training_data(self, sys_data, **Loss_kwargs):
-        assert sys_data.normed == True
-        nf = Loss_kwargs.get('nf',25)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
-
-    def init_nets(self, nu, ny): # a bit weird
-        # print(nu,ny)
-        assert ny==None and nu==None
-        ny = 1
-        nu = 1
-        from deepSI.utils import simple_res_net, feed_forward_nn
-
-        self.encoder = simple_res_net(n_in=self.nb+self.na,n_out=self.nx,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
-        self.fn = simple_res_net(n_in=self.nx+nu,          n_out=self.nx,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
-        self.hn = simple_res_net(n_in=self.nx,             n_out=ny,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh)
-
-        # self.encoder = nn.Sequential(nn.Linear(self.na+self.nb,64),nn.Tanh(),nn.Linear(64,self.nx))
-        # self.fn = nn.Sequential(nn.Linear(self.nx+nu,64),nn.Tanh(),nn.Linear(64,self.nx))
-        # self.hn = nn.Sequential(nn.Linear(self.nx,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten())
-        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
-
-    def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
-        x = self.encoder(hist)
-        y_predict = []
-        for u in torch.transpose(ufuture,0,1):
-            y_predict.append(self.hn(x)[:,0]) #output prediction
-            fn_in = torch.cat((x,u[:,None]),dim=1)
-            x = self.fn(fn_in)
-        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
-
-    def init_state(self,sys_data): #put nf here for n-step error?
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist)
-        return self.hn(self.state)[0,0].item(), max(self.na,self.nb)
-
-    def init_state_multi(self,sys_data,nf=100):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf)[0],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist)
-        return self.hn(self.state)[:,0].detach().numpy(), max(self.na,self.nb)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number
-        self.state = self.fn(torch.cat((self.state,action[None,None]),axis=1))
-        return self.hn(self.state)[0,0].item()
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #array
-        self.state = self.fn(torch.cat((self.state,action[:,None]),axis=1))
-        return self.hn(self.state)[:,0].detach().numpy()
+        uy = torch.tensor(uy,dtype=torch.float32)
+        if uy.ndim==1:
+            uy = uy[None,:]
+            return self.net(uy)[0,0].item()
+        else:
+            return self.net(uy)[:,0].detach().numpy()
 
 
 
@@ -321,18 +273,19 @@ if __name__ == '__main__':
             super(System_IO_fit_linear,self).__init__(na,nb,linear_model.LinearRegression())
 
     train, test = deepSI.datasets.Cascaded_Tanks()
-    # sys = System_Torch_IO(na=5,nb=5)
-    sys = System_encoder(nx=8, na=50, nb=50)
+    sys = System_Torch_IO(na=5,nb=5)
+    # sys = System_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))
 
     # sys = System_IO_fit_linear(7,3)
     # sys = System_encoder(nx=8,na=20,nb=20)
     # sys_data = System_data(u=np.random.normal(size=100),y=np.random.normal(size=100))
-    # sys.fit(train,epochs=100,Loss_kwargs=dict(nf=15),batch_size=32,sim_val=test)
+    sys.fit(train,epochs=1000,Loss_kwargs=dict(nf=15),batch_size=8,sim_val=None,optimizer_kwargs=dict(optimizer=optim.Adam,lr=1e-3))
+    print(sys.optimizer)
     # sys.save_system('../../testing/test-fit.p')
     # del sys
-    sys = load_system('../../testing/test-fit.p')
+    # sys = load_system('../../testing/test-fit.p')
 
     sys_data_predict = sys.apply_experiment(test)
     print(sys_data_predict.NRMS(test))
@@ -343,7 +296,7 @@ if __name__ == '__main__':
 
     test.plot()
     sys_data_predict.plot(show=True)
-    plt.plot(test.u)
-    plt.show()
+    # plt.plot(test.u)
+    # plt.show()
     # sys_data_predict2.plot(show=True)
 

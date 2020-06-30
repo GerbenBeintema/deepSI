@@ -231,13 +231,20 @@ def WienerHammerBenchMark(dir_placement=None,force_download=False, split_data=Tr
     return (out[:100000],out[100000:]) if split_data else out
 
 def Silverbox(dir_placement=None,force_download=False, split_data=True):
-    '''The Silverbox system can be seen as an electronic implementation of the Duffing oscillator. It is build as a 2nd order linear time-invariant system with a 3rd degree polynomial static nonlinearity around it in feedback. This type of dynamics are, for instance, often encountered in mechanical systems.
+    '''The Silverbox system can be seen as an electronic implementation of the Duffing oscillator. It is build as a 
+    2nd order linear time-invariant system with a 3rd degree polynomial static nonlinearity around it in feedback. 
+    This type of dynamics are, for instance, often encountered in mechanical systems.
 
-    The provided data is part of a previously published ECC paper available online. A technical note describing the Silverbox benchmark can be found here. All the provided data (.mat file format) on the Silverbox system is available for download here. This .zip file contains the Silverbox dataset as specified in the benchmark document (V1 is the input record, while V2 is the measured output), extended with .csv version of the same data and an extra data record containing a Schroeder phase multisine measurement.
+    The provided data is part of a previously published ECC paper available online. A technical note describing the 
+    Silverbox benchmark can be found here. All the provided data (.mat file format) on the Silverbox system is available
+    for download here. This .zip file contains the Silverbox dataset as specified in the benchmark document (V1 is the
+    input record, while V2 is the measured output), extended with .csv version of the same data and an extra data record 
+    containing a Schroeder phase multisine measurement.
 
     Please refer to the Silverbox benchmark as:
 
-    T. Wigren and J. Schoukens. Three free data sets for development and benchmarking in nonlinear system identification. 2013 European Control Conference (ECC), pp.2933-2938 July 17-19, 2013, Zurich, Switzerland.
+    T. Wigren and J. Schoukens. Three free data sets for development and benchmarking in nonlinear system identification. 
+    2013 European Control Conference (ECC), pp.2933-2938 July 17-19, 2013, Zurich, Switzerland.
 
     Previously published results on the Silverbox benchmark are listed in the history section of this webpage.
 

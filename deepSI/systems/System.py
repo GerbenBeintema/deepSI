@@ -21,13 +21,12 @@ class System(object):
         Y = []
         U = []
         obs = self.reset() #normed obs
-        Y.append(obs)
         for i in range(N_samples):
-            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd
+            Y.append(obs)
+            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd #transform y and inverse transform resulting action
             U.append(action)
             obs = self.step(action)
-            Y.append(obs)
-        Y = Y[:-1]
+        # Y = Y[:-1]
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
 
 
@@ -55,7 +54,7 @@ class System(object):
 
     def init_state_multi(self, sys_data, nf=100):
         '''sys_data is already normed'''
-        raise NotImplementedError('init_state_multi is to be implemented')
+        raise NotImplementedError('init_state_multi should be implemented in child')
 
     def step(self,action):
         '''Applies the action to the systems and returns the new observation'''
