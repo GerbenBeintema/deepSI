@@ -88,7 +88,7 @@ class System_PyTorch(System_fittable):
             self.paremters = list(self.init_nets(self.nu,self.ny))
             self.optimizer = self.init_optimizer(self.paremters,**optimizer_kwargs)
             self.bestfit = float('inf')
-            self.Loss_val,self.Loss_train,self.batch_id,self.time = [],[],[],[]
+            self.Loss_val, self.Loss_train, self.batch_id, self.time = [],[],[],[]
             self.batch_counter = 0
             extra_t = 0
             self.fitted = True
@@ -101,11 +101,10 @@ class System_PyTorch(System_fittable):
         data_full = self.make_training_data(sys_data, **Loss_kwargs)
         data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
 
-
         if sim_val is not None:
             data_train = data_full
         else:
-            split = int(len(data_full)*(1-val_frac))
+            split = int(len(data_full[0])*(1-val_frac))
             data_train = [dat[:split] for dat in data_full]
             data_val = [dat[split:] for dat in data_full]
 
@@ -149,10 +148,12 @@ class System_PyTorch(System_fittable):
                 Loss_val = validation()
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
+                    # print('train Loss:',self.CallLoss(*data_train, **Loss_kwargs).item(), 'val:',self.CallLoss(*data_val, **Loss_kwargs).item() )
                     print(f'Epoch: {epoch+1:4} Training loss: {self.Loss_train[-1]:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
                 # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
+        self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system()
 
     def CallLoss(*args,**kwargs):
@@ -161,19 +162,19 @@ class System_PyTorch(System_fittable):
         raise NotImplementedError
     
     ########## Saving and loading ############
-    def checkpoint_save_system(self):
+    def checkpoint_save_system(self,name='_best'):
         from pathlib import Path
         import os.path
         directory  = get_work_dirs()['checkpoints']
-        self._save_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth')) #error here if you have 
+        self._save_system_torch(file=os.path.join(directory,self.name+name+'.pth')) #error here if you have 
         vars = self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time
-        np.savez(os.path.join(directory,self.name+'_best'+'.npz'),*vars)
-    def checkpoint_load_system(self):
+        np.savez(os.path.join(directory,self.name+name+'.npz'),*vars)
+    def checkpoint_load_system(self,name='_best'):
         from pathlib import Path
         import os.path
         directory  = get_work_dirs()['checkpoints'] 
-        self._load_system_torch(file=os.path.join(directory,self.name+'_best'+'.pth'))
-        out = np.load(os.path.join(directory,self.name+'_best'+'.npz'))
+        self._load_system_torch(file=os.path.join(directory,self.name+name+'.pth'))
+        out = np.load(os.path.join(directory,self.name+name+'.npz'))
         out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
         self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
         self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val.tolist(), self.Loss_train.tolist(), self.batch_id.tolist(), self.time.tolist()

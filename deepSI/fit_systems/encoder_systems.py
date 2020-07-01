@@ -6,10 +6,9 @@ from torch import nn
 class System_encoder(System_PyTorch):
     """docstring for System_encoder"""
     def __init__(self, nx=10, na=20, nb=20):
-        super(System_encoder, self).__init__(None,None)
-        self.nx = nx
-        self.na = na
-        self.nb = nb
+        super(System_encoder, self).__init__()
+        self.nx, self.na, self.nb = nx, na, nb
+        
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.net = simple_res_net
         self.n_hidden_layers = 2
@@ -22,18 +21,11 @@ class System_encoder(System_PyTorch):
         return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
-        # print(nu,ny)
         assert ny==None and nu==None
-        ny = 1
-        nu = 1
-        
+        ny = nu = 1
         self.encoder = self.net(n_in=self.nb+self.na, n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         self.fn =      self.net(n_in=self.nx+nu,      n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         self.hn =      self.net(n_in=self.nx,         n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-
-        # self.encoder = nn.Sequential(nn.Linear(self.na+self.nb,64),nn.Tanh(),nn.Linear(64,self.nx))
-        # self.fn = nn.Sequential(nn.Linear(self.nx+nu,64),nn.Tanh(),nn.Linear(64,self.nx))
-        # self.hn = nn.Sequential(nn.Linear(self.nx,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten())
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
     def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):

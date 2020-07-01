@@ -16,3 +16,4 @@ from deepSI.systems.nonlinear_RLC import nonlinear_RLC
 all_systems = [test_system,double_bath_system,cheby1,butter,pendulum_system,nonlin_Ibased_normals_system,example_2_non_lin,Hammerstein_sys_ID_book,Wiener_sys_ID_book,
                 WienerV2_sys_ID_book, NDE_squared_sys_ID_book, dynamic_nonlin_sys_ID_book, nonlinear_RLC]
 from deepSI.systems.nonlindrag import nonlindrag_sys, CED_sim
+from deepSI.systems.Lorenz_attractor import Lorenz_attractor

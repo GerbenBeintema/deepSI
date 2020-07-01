@@ -14,11 +14,11 @@ def get_work_dirs():
             os.mkdir(directory)
     from sys import platform
     if platform == "darwin": #not tested but here it goes
-        base_dir = Path('~/Library/Application Support/deepSI/')
+        base_dir = os.path.expanduser('~/Library/Application Support/deepSI/')
     elif platform == "win32":
         base_dir = os.path.join(os.getenv('LOCALAPPDATA'),'deepSI/')
     else: #unix like, might be problematic for some weird operating systems.
-        base_dir = Path('~/.deepSI/')
+        base_dir = os.path.expanduser('~/.deepSI/')#Path('~/.deepSI/')
     mkdir(base_dir)
     data_sets_dir = os.path.join(base_dir,'data_sets/')
     mkdir(data_sets_dir)
