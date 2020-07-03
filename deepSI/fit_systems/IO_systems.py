@@ -1,5 +1,5 @@
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_Torch_IO, System_PyTorch
+from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_PyTorch
 from deepSI.systems.System import System_IO
 import deepSI
 import torch
@@ -56,6 +56,37 @@ class System_IO_pytorch(System_PyTorch, System_IO):
                 return yout[0]
             else:
                 return yout
+
+
+class System_IO_SISO_pytorch(System_PyTorch, System_IO):
+    def __init__(self,na,nb):
+        super(System_IO_SISO_pytorch, self).__init__(na,nb)
+
+    def make_training_data(self, sys_data, **Loss_kwargs):
+        assert sys_data.normed == True
+        return sys_data.to_IO_data(na=self.na,nb=self.nb) #np.array(hist), np.array(Y)
+
+    def init_nets(self, nu, ny):
+        assert ny==None
+        #returns parameters
+        nu = 1 if nu is None else nu
+        one_out = ny==None
+        ny = 1 if ny is None else ny
+        n_in = nu*self.nb + ny*self.na
+        IN = [nn.Linear(n_in,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten()]
+        self.net = nn.Sequential(*IN)
+        return self.net.parameters()
+
+    def CallLoss(self,hist,Y, **kwargs):
+        return torch.mean((self.net(hist)[:,0]-Y)**2)
+
+    def IO_step(self,uy):
+        uy = torch.tensor(uy,dtype=torch.float32)
+        if uy.ndim==1:
+            uy = uy[None,:]
+            return self.net(uy)[0,0].item()
+        else:
+            return self.net(uy)[:,0].detach().numpy()
 
 
 if __name__ == '__main__':

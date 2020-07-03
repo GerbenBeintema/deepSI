@@ -33,11 +33,6 @@ class System_IO_fit_sklearn(System_fittable, System_IO): #name?
 
 
 class System_PyTorch(System_fittable):
-    """docstring for System_PyTorch"""
-    # def __init__(self, arg):
-    #     super(System_PyTorch, self).__init__()
-    #     self.arg = arg
-
     def init_nets(self,nu,ny):
         #returns parameters
         raise NotImplementedError
@@ -199,38 +194,6 @@ class System_PyTorch(System_fittable):
 import torch
 from torch import nn
 
-class System_Torch_IO(System_PyTorch, System_IO):
-    def __init__(self,na,nb):
-        super(System_Torch_IO, self).__init__(na,nb)
-
-    def make_training_data(self, sys_data, **Loss_kwargs):
-        assert sys_data.normed == True
-        return sys_data.to_IO_data(na=self.na,nb=self.nb) #np.array(hist), np.array(Y)
-
-    def init_nets(self, nu, ny):
-        assert ny==None
-        #returns parameters
-        nu = 1 if nu is None else nu
-        one_out = ny==None
-        ny = 1 if ny is None else ny
-        n_in = nu*self.nb + ny*self.na
-        IN = [nn.Linear(n_in,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten()]
-        self.net = nn.Sequential(*IN)
-        return self.net.parameters()
-
-    def CallLoss(self,hist,Y, **kwargs):
-        return torch.mean((self.net(hist)[:,0]-Y)**2)
-
-    def IO_step(self,uy):
-        uy = torch.tensor(uy,dtype=torch.float32)
-        if uy.ndim==1:
-            uy = uy[None,:]
-            return self.net(uy)[0,0].item()
-        else:
-            return self.net(uy)[:,0].detach().numpy()
-
-
-
 def fit_system_tuner(fit_system, sys_data, search_dict, verbose=1):
     import copy
     #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
@@ -274,7 +237,7 @@ if __name__ == '__main__':
             super(System_IO_fit_linear,self).__init__(na,nb,linear_model.LinearRegression())
 
     train, test = deepSI.datasets.Cascaded_Tanks()
-    sys = System_Torch_IO(na=5,nb=5)
+    sys = deepSI.fit_systems.System_IO_pytorch(na=5,nb=5)
     # sys = System_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))

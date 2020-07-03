@@ -1,5 +1,5 @@
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_Torch_IO, System_PyTorch
+from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_PyTorch
 import torch
 from torch import nn
 
