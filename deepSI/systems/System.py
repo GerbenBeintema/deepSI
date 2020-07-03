@@ -196,13 +196,13 @@ class System_IO(System):
         self.yhist = list(sys_data.y[k0-self.na:k0])
         self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
         #when taking an action uhist gets appended to create the current state
-        return sys_data.y[k0-1], k0
+        return self.yhist[-1], k0
 
     def init_state_multi(self,sys_data,nf=100):
         k0 = max(self.na,self.nb)
         self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,na)
         self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = 
-        return self.yhist[:,k0-1], k0
+        return self.yhist[:,-1], k0
 
     def step(self,action):
         self.uhist.append(action)
@@ -216,13 +216,16 @@ class System_IO(System):
     def step_multi(self,actions):
         self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         uy = np.concatenate([self.uhist,self.yhist],axis=1)
-        yout = self.IO_step(uy) #multi IO?
+        yout = self.multi_IO_step(uy)
         self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
         self.uhist = self.uhist[:,1:]
         return yout
 
     def IO_step(self,uy):
         raise NotImplementedError('f and h should be implemented in child')
+
+    def multi_IO_step(self,uy):
+        return self.IO_step(uy)
 
 
 

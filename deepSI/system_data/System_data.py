@@ -63,7 +63,7 @@ class System_data(object):
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5):
+    def to_hist_future_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
         '''convertes data set to  a system of 
         yhist = [y[k-na],....,y[k-1]]
         uhist = [u[k-nb],....,u[k-1]]
@@ -84,7 +84,15 @@ class System_data(object):
             uhist.append(u[k-nb-nf:k-nf])
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
-        return np.array(uhist),np.array(yhist),np.array(ufuture),np.array(yfuture)
+        uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
+        
+        if force_multi_u and uhist.ndim==2: #(uhist, time_seq, nu)
+            uhist = uhist[:,:,None]
+            ufuture = ufuture[:,:,None]
+        if force_multi_y and yhist.ndim==2: #(yhist, time_seq, ny)
+            yhist = yhist[:,:,None]
+            yfuture = yfuture[:,:,None]
+        return uhist, yhist, ufuture, yfuture
 
 
     def to_ss_data(self,nf=20):
@@ -243,8 +251,8 @@ class System_data_list(object):
         out = [sys_data.to_IO_data(na=na,nb=nb) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_hist_future_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
     def to_ss_data(self,nf=20):

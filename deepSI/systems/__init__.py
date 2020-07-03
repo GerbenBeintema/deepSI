@@ -17,3 +17,4 @@ all_systems = [test_system,double_bath_system,cheby1,butter,pendulum_system,nonl
                 WienerV2_sys_ID_book, NDE_squared_sys_ID_book, dynamic_nonlin_sys_ID_book, nonlinear_RLC]
 from deepSI.systems.nonlindrag import nonlindrag_sys, CED_sim
 from deepSI.systems.Lorenz_attractor import Lorenz_attractor
+from deepSI.systems.Van_der_Pol_oscillator import Van_der_Pol_oscillator
