@@ -95,16 +95,20 @@ class System_data(object):
         return uhist, yhist, ufuture, yfuture
 
 
-    def to_ss_data(self,nf=20):
+    def to_ss_data(self,nf=20,force_multi_u=False,force_multi_y=False):
         u, y = np.copy(self.u), np.copy(self.y)
         ufuture = []
         yfuture = []
         for k in range(nf,len(u)+1):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
+        if force_multi_u and ufuture.ndim==2: #(uhist, time_seq, nu)
+            ufuture = ufuture[:,:,None]
+        if force_multi_y and yfuture.ndim==2: #(yhist, time_seq, ny)
+            yfuture = yfuture[:,:,None]
         return np.array(ufuture), np.array(yfuture)
 
-    def to_encoder_data(self,na=10,nb=10,nf=5):
+    def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
         '''convertes data set to  a system of 
         hist = [u[k-nb:k].flat,y[k-na:k].flat]
         yfuture = [y[k],....,y[k+nf-1]]
@@ -122,6 +126,10 @@ class System_data(object):
             hist.append(np.concatenate((u[k-nb-nf:k-nf].flat,y[k-na-nf:k-nf].flat)))
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
+        if force_multi_u and ufuture.ndim==2: #(uhist, time_seq, nu)
+            ufuture = ufuture[:,:,None]
+        if force_multi_y and yfuture.ndim==2: #(yhist, time_seq, ny)
+            yfuture = yfuture[:,:,None]
         return np.array(hist),np.array(ufuture),np.array(yfuture)
 
 
@@ -255,13 +263,13 @@ class System_data_list(object):
         out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
-    def to_ss_data(self,nf=20):
-        out = [sys_data.to_ss_data(nf=nf) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_ss_data(self,nf=20,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_ss_data(nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
 
-    def to_encoder_data(self,na=10,nb=10,nf=5):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
     def save(self,file):
@@ -310,19 +318,21 @@ class System_data_list(object):
         return left, right
 
     def __getitem__(self,arg): #by data set or by time?
-        '''Will use time as an argument, use self.sdl[arg]'''
-        if isinstance(arg,tuple) and len(arg)>1: #than it has two arguments
-            assert len(arg)==2, f'what would {arg} for length>2 even do?'
-            sdl_sub = self.sdl[arg[1]]
-            if isinstance(sdl_sub,list):
-                return System_data_list([sd[arg[0]] for sd in sdl_sub])
-            else:
-                return sdl_sub[arg[0]]
+        '''[ith data set, time]'''
+        if isinstance(arg,tuple) and len(arg)>1: #
+            sdl_sub = self.sdl[arg[0]]
+            if isinstance(sdl_sub,System_data):
+                return sdl_sub[arg[1]]
+            else: #sdl_sub is a list
+                return System_data_list([sd[arg[1]] for sd in sdl_sub])
         else:
-            return System_data_list([sd[arg] for sd in self.sdl])
+            if isinstance(arg,int): #sdl[i] -> ith data system set
+                return self.sdl[arg]
+            else: #slice of something
+                return System_data_list(self.sdl[arg])
 
     def __len__(self):
-        return self.N_samples
+        return len(self.sdl)
 
     def down_sample_by_average(self,factor):
         return System_data_list([sd.down_sample_by_average(factor) for sd in self.sdl])
@@ -405,7 +415,7 @@ if __name__=='__main__':
     print(len(sys_data2[10:20]))
     sdl = System_data_list([sys_data,sys_data2,sys_data3])
     print(sdl.to_encoder_data(9)[0].shape)
-    print(len(sdl))
+    print(len(sdl),sdl.N_samples)
     # sdl.plot(show=True)
     print(sdl.train_test_split())
     print(sdl.down_sample_by_average(10))
@@ -416,7 +426,8 @@ if __name__=='__main__':
     sdl3 = norm.inverse_transform(sdl2)
     print(sdl2.NRMS(sdl))
     print(sdl3.NRMS(sdl))
-    print(np.std(sdl2.sdl[0].y,axis=0))
+    print(np.std(sdl2.y,axis=0))
+    print('yshape=',sdl2.y.shape)
 
     # class Test_class(object):
     #     def __init__(self):
@@ -425,6 +436,7 @@ if __name__=='__main__':
     #         print(arg)
     # T = Test_class()
     # T[1]
-    print(sdl[:-10,-1])
+    print(sdl[1:2,:-10])
+    print(len(sdl))
     # sys_data.plot()
     # plt.show()

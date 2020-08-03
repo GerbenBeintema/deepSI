@@ -14,8 +14,15 @@ class System(object):
         self.norm = System_data_norm()
         self.fitted = False
         self.name = self.__class__.__name__
-        self.random = np.random.RandomState(seed=42)
+        self.seed = 42
+        # self.random = np.random.RandomState(seed=42)
 
+    @property
+    def random(self):
+        if not hasattr(self,'_random'):
+            self._random = np.random.RandomState(seed=self.seed)
+        return self._random
+    
 
     def apply_controller(self,controller,N_samples):
         Y = []

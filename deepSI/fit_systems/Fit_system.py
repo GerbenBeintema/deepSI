@@ -59,7 +59,7 @@ class System_PyTorch(System_fittable):
         #3. training data
         #4. optimization
 
-        def validation():
+        def validation(append=True):
             global time_val
             t_start_val = time.time()
             if sim_val is not None:
@@ -69,7 +69,7 @@ class System_PyTorch(System_fittable):
                 with torch.no_grad():
                     Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
             time_val += time.time() - t_start_val
-            self.Loss_val.append(Loss_val)
+            if append: self.Loss_val.append(Loss_val) 
             if self.bestfit>Loss_val:
                 if verbose: print('########## new best ###########')
                 self.checkpoint_save_system()
@@ -106,7 +106,7 @@ class System_PyTorch(System_fittable):
         
         global time_val
         time_val = time_back = time_loss = 0
-        Loss_val = validation()
+        Loss_val = validation(append=False)
         time_val = 0 #reset
         N_training_samples = len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
@@ -134,12 +134,11 @@ class System_PyTorch(System_fittable):
 
                     self.optimizer.step()
                     Loss_acc += Loss.item()
-                Loss_acc /= N_batch_updates_per_epoch
                 self.batch_counter += N_batch_updates_per_epoch
-                self.batch_id.append(self.batch_counter)
+                Loss_acc /= N_batch_updates_per_epoch
                 self.Loss_train.append(Loss_acc)
                 self.time.append(time.time()-self.start_t+extra_t)
-
+                self.batch_id.append(self.batch_counter)
                 Loss_val = validation()
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
