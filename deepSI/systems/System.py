@@ -9,8 +9,9 @@ def load_system(file):
     return pickle.load( open(file,'rb') )
 
 class System(object):
-    def __init__(self,action_space=None,observation_space=None):
+    def __init__(self,action_space=None, observation_space=None):
         #implement action_space observation space later
+        self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
         self.fitted = False
         self.name = self.__class__.__name__
@@ -23,7 +24,6 @@ class System(object):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
     
-
     def apply_controller(self,controller,N_samples):
         Y = []
         U = []
@@ -55,11 +55,11 @@ class System(object):
             obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
-    def init_state(self, sys_data):
+    def init_state(self):
         '''sys_data is already normed'''
         return self.reset(), 0
 
-    def init_state_multi(self, sys_data, nf=100):
+    def init_state_multi(self, n):
         '''sys_data is already normed'''
         raise NotImplementedError('init_state_multi should be implemented in child')
 
@@ -107,8 +107,6 @@ class System(object):
             obs = self.step_multi(unow)
         return np.array(Losses)
 
-
-
     def n_step_error_slow(self,sys_data,nf=100):
         '''Slow variant of n_step_error'''
         # do it in a for loop
@@ -120,7 +118,7 @@ class System(object):
         pickle.dump(self, open(file,'wb'))
 
     def __repr__(self):
-        return f'System: {self.name}'
+        return f'System: {self.name}, action_space={self.action_space}, observation_space={self.observation_space}'
 
     def get_train_data(self):
         exp = System_data(u=self.random.uniform(-2,2,size=10**4))
@@ -130,9 +128,39 @@ class System(object):
         exp = System_data(u=self.random.uniform(-2,2,size=10**3))
         return self.apply_experiment(exp)
 
+import gym
+from gym.spaces import Box
+
+class Systems_gyms(System):
+    """docstring for Systems_gyms"""
+    def __init__(self, env, env_kwargs=dict(), n=None):
+        
+        if isinstance(env,gym.Env):
+            assert n==None, 'if env is already a gym environment than n cannot be given'
+            self.env = env
+
+        if n==None:
+            self.env = gym.make(env,**env_kwargs)
+        else:
+            raise NotImplementedError('n requires implementation later')
+        super(Systems_gyms, self).__init__(action_space=self.env.action_space, observation_space=self.env.observation_space)
+
+    def reset(self):
+        return self.env.reset()
+        
+    def step(self,action):
+        '''Applies the action to the systems and returns the new observation'''
+        obs, reward, done, info = self.env.step(action)
+        return obs
+
 class System_SS(System): #simple state space systems
     def __init__(self,nx,nu=None,ny=None):
-        super(System_SS,self).__init__()
+        action_shape = tuple() if nu is None else (nu,)
+        observation_shape = tuple() if ny is None else (ny,)
+        action_space = Box(-float('inf'),float('inf'),shape=action_shape)
+        observation_space = Box(-float('inf'),float('inf'),shape=observation_shape)
+        super(System_SS,self).__init__(action_space,observation_space)
+
         assert nx is not None
         self.nx = nx
         self.nu = nu
@@ -161,7 +189,6 @@ class System_SS(System): #simple state space systems
 class System_Deriv(System_SS):
     def __init__(self,dt=None,nx=None,nu=None,ny=None,):
         assert dt is not None
-        assert nx is not None
         self.dt = dt
         super(System_Deriv,self).__init__(nx,nu,ny)
         
@@ -183,7 +210,12 @@ class System_Deriv(System_SS):
 
 class System_IO(System):
     def __init__(self,na,nb,nu=None,ny=None): #(u,y)
-        super(System_IO, self).__init__()
+        action_shape = tuple() if nu is None else (nu,) #repeated code
+        observation_shape = tuple() if ny is None else (ny,)
+        action_space = Box(-float('inf'), float('inf'), shape=action_shape)
+        observation_space = Box(-float('inf'), float('inf'), shape=observation_shape)
+        super(System_IO, self).__init__(action_space, observation_space)
+
         self.nb = nb #hist length of u
         self.na = na #hist length of y
         self.nu = nu
@@ -237,18 +269,29 @@ class System_IO(System):
 
 
 if __name__ == '__main__':
-    sys = deepSI.systems.nonlin_Ibased_normals_system()
-    exp = System_data(u=np.random.normal(scale=2,size=100))
-    print(sys.step(1))
-    sys_data = sys.apply_experiment(exp)
-    # sys_data.plot(show=True)
-    sys = deepSI.systems.sys_ss_test()
-    sys_data = sys.apply_experiment(exp)
-    sys_data.plot()
-
-    sys.save_system('../../testing/test.p')
-    del sys
-    sys = load_system('../../testing/test.p')
-
-    sys_data = sys.apply_experiment(exp)
+    # sys = Systems_gyms('MountainCarContinuous-v0')
+    sys = Systems_gyms('LunarLander-v2')
+    print(sys.reset())
+    # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve
+    print(sys)
+    exp = System_data(u=[sys.action_space.sample() for i in range(500)]) 
+    print(exp.u.dtype)
+    sys_data =sys.apply_experiment(exp)
+    print(sys_data)
     sys_data.plot(show=True)
+
+    # sys = deepSI.systems.nonlin_Ibased_normals_system()
+    # exp = System_data(u=np.random.normal(scale=2,size=100))
+    # print(sys.step(1))
+    # sys_data = sys.apply_experiment(exp)
+    # # sys_data.plot(show=True)
+    # sys = deepSI.systems.sys_ss_test()
+    # sys_data = sys.apply_experiment(exp)
+    # sys_data.plot()
+
+    # sys.save_system('../../testing/test.p')
+    # del sys
+    # sys = load_system('../../testing/test.p')
+
+    # sys_data = sys.apply_experiment(exp)
+    # sys_data.plot(show=True)

@@ -345,6 +345,10 @@ class System_data_norm(object):
         self.y0 = y0
         self.ystd = ystd
 
+    @property
+    def is_id(self):
+        return self.u0 is 0 and self.ustd is 1 and self.y0 is 0 and self.ystd is 1
+
     def make_training_data(self,sys_data):
         if isinstance(sys_data,(list,tuple)):
             out = [self.make_training_data(s) for s in sys_data]
@@ -370,10 +374,13 @@ class System_data_norm(object):
         
         assert sys_data.normed==False, 'System_data is already normalized'
         
+        if self.is_id:
+            return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
+                               cheat_n=sys_data.cheat_n,normed=True)
+
         if isinstance(sys_data,System_data):
             u_transformed = (sys_data.u-self.u0)/self.ustd if sys_data.u is not None else None
             y_transformed = (sys_data.y-self.y0)/self.ystd if sys_data.y is not None else None
-
             return System_data(u=u_transformed,x=sys_data.x,y=y_transformed, \
                 cheat_n=sys_data.cheat_n,normed=True)
         else:
@@ -388,10 +395,15 @@ class System_data_norm(object):
         elif isinstance(sys_data,System_data_list):
             return System_data_list([self.inverse_transform(s) for s in sys_data.sdl])
         assert sys_data.normed==True, 'System_data is already un-normalized'
+
+        if self.is_id:
+            return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
+                               cheat_n=sys_data.cheat_n,normed=False)
+
         if isinstance(sys_data,System_data):
             u_inv_transformed, y_inv_transformed = sys_data.u*self.ustd+self.u0, sys_data.y*self.ystd+self.y0
             return System_data(u=u_inv_transformed,x=sys_data.x,y=y_inv_transformed,
-            cheat_n=sys_data.cheat_n,normed=False)
+                               cheat_n=sys_data.cheat_n,normed=False)
         else:
             assert False
 
