@@ -50,9 +50,11 @@ class System(object):
         else:
             obs, k0 = self.reset(), 0
 
-        for action in U[k0:]:
+        for k in range(k0,len(U)):
             Y.append(obs)
-            obs = self.step(action)
+            if k<len(U)-1: #skip last step
+                action = U[k]
+                obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
     def init_state(self):
@@ -151,6 +153,7 @@ class Systems_gyms(System):
     def step(self,action):
         '''Applies the action to the systems and returns the new observation'''
         obs, reward, done, info = self.env.step(action)
+        self.done = done
         return obs
 
 class System_SS(System): #simple state space systems
@@ -228,6 +231,10 @@ class System_IO(System):
         self.yhist = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
         self.uhist = [0]*(self.nb-1) if self.nu is None else [[0]*self.nu for i in range(self.nb-1)]
         return 0
+
+    @property
+    def k0(self):
+        return max(self.na,self.nb)
 
     def init_state(self,sys_data):
         #sys_data already normed

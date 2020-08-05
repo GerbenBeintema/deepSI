@@ -85,7 +85,6 @@ class System_data(object):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
         uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
-        
         if force_multi_u and uhist.ndim==2: #(uhist, time_seq, nu)
             uhist = uhist[:,:,None]
             ufuture = ufuture[:,:,None]
@@ -102,11 +101,12 @@ class System_data(object):
         for k in range(nf,len(u)+1):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
+        ufuture, yfuture = np.array(ufuture),np.array(yfuture)
         if force_multi_u and ufuture.ndim==2: #(uhist, time_seq, nu)
             ufuture = ufuture[:,:,None]
         if force_multi_y and yfuture.ndim==2: #(yhist, time_seq, ny)
             yfuture = yfuture[:,:,None]
-        return np.array(ufuture), np.array(yfuture)
+        return ufuture, yfuture
 
     def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
         '''convertes data set to  a system of 
@@ -126,11 +126,12 @@ class System_data(object):
             hist.append(np.concatenate((u[k-nb-nf:k-nf].flat,y[k-na-nf:k-nf].flat)))
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
+        hist, ufuture, yfuture = np.array(hist),np.array(ufuture),np.array(yfuture)
         if force_multi_u and ufuture.ndim==2: #(uhist, time_seq, nu)
             ufuture = ufuture[:,:,None]
         if force_multi_y and yfuture.ndim==2: #(yhist, time_seq, ny)
             yfuture = yfuture[:,:,None]
-        return np.array(hist),np.array(ufuture),np.array(yfuture)
+        return hist, ufuture, yfuture
 
 
 
@@ -269,7 +270,7 @@ class System_data_list(object):
 
 
     def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
     def save(self,file):
@@ -336,6 +337,15 @@ class System_data_list(object):
 
     def down_sample_by_average(self,factor):
         return System_data_list([sd.down_sample_by_average(factor) for sd in self.sdl])
+
+    def append(self,other):
+        assert isinstance(other,System_data)
+        self.sdl.append(other)
+
+    def extend(self,other):
+        if isinstance(other,(list,tuple)):
+            other = System_data_list(other)
+        self.sdl.extend(other.sdl)
 
 class System_data_norm(object):
     '''Utility to normalize training data before fitting'''

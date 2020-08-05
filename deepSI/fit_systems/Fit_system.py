@@ -95,6 +95,7 @@ class System_PyTorch(System_fittable):
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
         data_full = self.make_training_data(sys_data, **Loss_kwargs)
         data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
+        print(len(data_full))
 
         if sim_val is not None:
             data_train = data_full
