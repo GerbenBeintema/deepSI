@@ -32,10 +32,10 @@ class System_IO_pytorch(System_PyTorch, System_IO):
         Loss = torch.zeros(1,dtype=yhist.dtype,device=yhist.device)[0]
         for unow, ynow in zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1)): #unow = (Nsamples, nu), ynow = (Nsamples, ny)
             g_in = torch.cat([torch.flatten(uhist, start_dim=1), torch.flatten(yhist, start_dim=1)],axis=1)
-            yout = self.gn(g_in                                                                                                     ) #(Nsamples, ny)
+            yout = self.gn(g_in) #(Nsamples, ny)
             Loss += torch.mean((yout - ynow)**2)**0.5
-            self.uhist = torch.cat((uhist[:,1:,:],unow[:,None,:]),dim=1)
-            self.yhist = torch.cat((yhist[:,1:,:],yout[:,None,:]),dim=1)
+            uhist = torch.cat((uhist[:,1:,:],unow[:,None,:]),dim=1)
+            yhist = torch.cat((yhist[:,1:,:],yout[:,None,:]),dim=1)
         Loss /= ufuture.shape[1]
         return Loss
 

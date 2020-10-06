@@ -1,5 +1,5 @@
 
-from deepSI.systems.System import System, System_IO, System_data, load_system
+from deepSI.systems.System import System, System_IO, System_data, load_system,System_BJ
 import numpy as np
 from deepSI.system_data.datasets import get_work_dirs
 import deepSI
@@ -11,12 +11,14 @@ import time
 class System_fittable(System):
     """docstring for System_fit"""
     def fit(self,sys_data,**kwargs):
-        if self.fitted==False:
+        if self.fitted==False and self.use_norm:
             self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
         self._fit(self.norm.transform(sys_data),**kwargs) #transfrom data to fittable data?
         self.fitted = True
+
+
 
 class System_IO_fit_sklearn(System_fittable, System_IO): #name?
     def __init__(self, na, nb, reg):
@@ -51,7 +53,7 @@ class System_PyTorch(System_fittable):
         raise NotImplementedError
 
 
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2):
+    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2, sim_val_fun='NRMS'):
         #todo implement verbose
 
         #1. init funcs already happened
@@ -64,7 +66,7 @@ class System_PyTorch(System_fittable):
             t_start_val = time.time()
             if sim_val is not None:
                 sim_val_data = self.apply_experiment(sim_val)
-                Loss_val = sim_val_data.NRMS(sim_val)
+                Loss_val = sim_val_data.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
                     Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
@@ -191,31 +193,87 @@ class System_PyTorch(System_fittable):
                 print('Error loading key',key)
 
 
+def System_BJ_fittable(System_BJ,System_PyTorch):
+    #make data
+    #call Loss
+    def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        #order: u,yhat,yreal
+        Loss = torch.zeros(1,dtype=yhist.dtype,device=yhist.device)[0]
+        yhisthat = yhist[:,yhist.shape[1]-self.nb:] #nb
+        yhistreal = yhist[:,yhist.shape[1]-self.nc:] #nc
+
+        for unow, ynow in zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1)): #unow = (Nsamples, nu), ynow = (Nsamples, ny)
+            g_in = torch.cat([torch.flatten(uhist, start_dim=1), 
+                            torch.flatten(yhisthat, start_dim=1), 
+                            torch.flatten(yhistreal, start_dim=1)],axis=1)
+            yout = self.gn(g_in) #(Nsamples, ny)
+            Loss += torch.mean((yout - ynow)**2)**0.5 #possible to skip here
+            uhist = torch.cat((uhist[:,1:,:],unow[:,None,:]),dim=1)
+            yhistreal = torch.cat((yhistreal[:,1:,:],ynow[:,None,:]),dim=1)
+            yhisthat = torch.cat((yhisthat[:,1:,:],yout[:,None,:]),dim=1)
+        Loss /= ufuture.shape[1]
+        return Loss
+
+    def make_training_data(self, sys_data, **Loss_kwargs):
+        assert sys_data.normed == True
+        nf = Loss_kwargs.get('nf',25)
+        return sys_data.to_hist_future_data(na=self.na,nb=max(self.nc,self.nb), nf=nf, force_multi_u=True, force_multi_y=True) #returns np.array(uhist),np.array(yhist),np.array(ufuture),np.array(yfuture)
+
+    def init_nets(self,nu,ny):
+        #returns parameters
+        raise NotImplementedError
+
+def System_BJ_full(System_BJ_fittable):
+    #y = B/F u + C/D v
+    #yhat = BD u + (C-D)*yreal + (1-CF)*yhat
+    #F = 1 + .. #nF
+    #C = 1 + ..
+    #D = 1 + ..
+    #B = 0 + ..
+    #
+    #C monic
+    #F monic
+    def __init__(self,nB,nF,nC,nD):
+        #monic?
+        #na = length of y hat = nC*nF - 1
+        #nb = length of u = nB*nD
+        #nc = length of y real = max(nC,nB)
+        super(System_BJ_full,self).__init__(nC*nF-1 , nB*nD,max(nC,nB))
+
+        
+
+
+
+
 import torch
 from torch import nn
 
-def fit_system_tuner(fit_system, sys_data, search_dict, verbose=1):
+def fit_system_tuner(fit_system, sys_data, search_dict, verbose=1, sim_val=None):
     import copy
     #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
-    def itter(itter_dict, k=0, dict_now=None, best_score=float('inf'), best_sys=None, best_dict=None):
+    def itter(itter_dict, depth=0, dict_now=None, best_score=float('inf'), best_sys=None, best_dict=None):
         if dict_now is None:
             dict_now = dict()
-        if k==len(itter_dict):
+        if depth==len(itter_dict):
             sys = fit_system(**dict_now)
             sys.fit(sys_data)
             try:
-                score = sys.apply_experiment(sys_data).NRMS(sys_data)
+                if sim_val is None:
+                    score = sys.apply_experiment(sys_data).NRMS(sys_data)
+                else:
+                    score = sys.apply_experiment(sim_val).NRMS(sim_val)
             except ValueError:
                 score = float('inf')
-            if verbose>0: print(score, dict_now)
+            if verbose>0: 
+                print(score, dict_now)
             if score<=best_score:
                 return score, sys, copy.deepcopy(dict_now)
             else:
                 return best_score, best_sys, best_dict
         else:
-            for item in itter_dict[k][1]:
-                dict_now[itter_dict[k][0]] = item
-                best_score, best_sys, best_dict = itter(itter_dict, k=k+1, dict_now=dict_now, best_score=best_score, best_sys=best_sys, best_dict=best_dict)
+            for item in itter_dict[depth][1]:
+                dict_now[itter_dict[depth][0]] = item
+                best_score, best_sys, best_dict = itter(itter_dict, depth=depth+1, dict_now=dict_now, best_score=best_score, best_sys=best_sys, best_dict=best_dict)
             return best_score, best_sys, best_dict
 
     itter_dict = [list(a) for a in search_dict.items()]

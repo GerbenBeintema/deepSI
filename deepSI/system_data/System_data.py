@@ -45,6 +45,21 @@ class System_data(object):
     @property
     def nu(self):
         return None if self.u.ndim==1 else self.u.shape[1]
+    def flatten(self):
+        ## will make the structure to (N,ny) and (N,nu)
+        if self.y is not None and self.y.ndim>2:
+            y = self.y.reshape((self.y.shape[0],-1))
+        else:
+            y = self.y
+        if self.u is not None and self.u.ndim>2:
+            u = self.u.reshape((self.u.shape[0],-1))
+        else:
+            u = self.u
+        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
+    def reshape_as(self, other):
+        y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:])
+        u = self.u.reshape((self.u.shape[0],)+other.u.shape[1:])
+        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
 
 
     ############################
@@ -146,7 +161,8 @@ class System_data(object):
         '''Very simple plotting function'''
         plt.ylabel('y' if self.y is not None else 'u')
         plt.xlabel('t')
-        plt.plot(self.y if self.y is not None else self.u)
+
+        plt.plot(self.y.reshape((self.y.shape[0],-1)) if self.y is not None else self.u)
         if show: plt.show()
 
     def BFR(self,real,multi_average=True):
@@ -157,7 +173,7 @@ class System_data(object):
 
     def NRMS(self,real,multi_average=True):
         RMS = self.RMS(real,multi_average=True) #always true
-        y_std = np.std(real.y,axis=0)
+        y_std = np.std(real.y,axis=0)+1e-15
         return np.mean(RMS/y_std) if multi_average else RMS/y_std
 
     def RMS(self,real, multi_average=True):
@@ -252,8 +268,10 @@ class System_data_list(object):
         return np.concatenate([sd.y for sd in self.sdl],axis=0)
     @property
     def u(self): #concatenate or list of lists
-        return np.concatenate([sd.u for sd in self.sdl],axis=0)
-
+        return np.concatenate([sd.u for sd in self.sdl],axis=0)    
+    def flatten(self):
+        return System_data_list([sdli.flatten() for sdli in self.sdl])
+    
     ## Transformations ##
     def to_IO_data(self,na=10,nb=10):
         #normed check?
@@ -369,9 +387,9 @@ class System_data_norm(object):
         #finds   self.y0,self.ystd,self.u0,self.ustd
         u, y = self.make_training_data(sys_data)
         self.u0 = np.mean(u,axis=0)
-        self.ustd = np.std(u,axis=0)
+        self.ustd = np.std(u,axis=0)+1e-15 #does this work with is_id?
         self.y0 = np.mean(y,axis=0)
-        self.ystd = np.std(y,axis=0)
+        self.ystd = np.std(y,axis=0)+1e-15
         
     def transform(self,sys_data):
         '''Transform the data by 
