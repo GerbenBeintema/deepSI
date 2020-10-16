@@ -19,3 +19,4 @@ from deepSI.systems.nonlindrag import nonlindrag_sys, CED_sim
 from deepSI.systems.Lorenz_attractor import Lorenz_attractor
 from deepSI.systems.Van_der_Pol_oscillator import Van_der_Pol_oscillator
 from deepSI.systems.double_well_system import double_well_system, double_well_video_system
+from deepSI.systems.ball_in_box_system import ball_in_box_system, ball_in_box_video_system

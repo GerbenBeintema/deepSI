@@ -10,9 +10,11 @@ import time
 
 class System_fittable(System):
     """docstring for System_fit"""
-    def fit(self,sys_data,**kwargs):
-        if self.fitted==False and self.use_norm:
-            self.norm.fit(sys_data)
+    def fit(self, sys_data, **kwargs):
+        if self.fitted==False:
+            if self.use_norm: #if the norm is not used you can also manually initialize it.
+                #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
+                self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
         self._fit(self.norm.transform(sys_data),**kwargs) #transfrom data to fittable data?
@@ -53,7 +55,7 @@ class System_PyTorch(System_fittable):
         raise NotImplementedError
 
 
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac = 0.2, sim_val_fun='NRMS'):
+    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac=0.2, sim_val_fun='NRMS'):
         #todo implement verbose
 
         #1. init funcs already happened
@@ -65,21 +67,23 @@ class System_PyTorch(System_fittable):
             global time_val
             t_start_val = time.time()
             if sim_val is not None:
-                sim_val_data = self.apply_experiment(sim_val)
-                Loss_val = sim_val_data.__getattribute__(sim_val_fun)(sim_val)
+                sim_val_predict = self.apply_experiment(sim_val)
+                Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
                     Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
             time_val += time.time() - t_start_val
             if append: self.Loss_val.append(Loss_val) 
             if self.bestfit>Loss_val:
-                if verbose: print('########## new best ###########')
+                if verbose: print(f'########## new best ########### {Loss_val}')
                 self.checkpoint_save_system()
                 self.bestfit = Loss_val
             return Loss_val
 
         if self.fitted==False:
-            self.norm.fit(sys_data)
+            if self.use_norm: #if the norm is not used you can also manually initialize it.
+                #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
+                self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
             self.paremters = list(self.init_nets(self.nu,self.ny))
@@ -97,7 +101,7 @@ class System_PyTorch(System_fittable):
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
         data_full = self.make_training_data(sys_data, **Loss_kwargs)
         data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
-        print(len(data_full))
+
 
         if sim_val is not None:
             data_train = data_full
@@ -106,7 +110,7 @@ class System_PyTorch(System_fittable):
             data_train = [dat[:split] for dat in data_full]
             data_val = [dat[split:] for dat in data_full]
 
-        
+
         global time_val
         time_val = time_back = time_loss = 0
         Loss_val = validation(append=False)

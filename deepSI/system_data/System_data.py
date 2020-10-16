@@ -2,6 +2,7 @@
 import deepSI
 import numpy as np
 from matplotlib import pyplot as plt
+from tqdm.auto import tqdm
 
 def load_system_data(file):
     outfile = dict(np.load(file,allow_pickle=True))
@@ -41,6 +42,9 @@ class System_data(object):
         return self.u.shape[0]
     @property
     def ny(self):
+        #None -> nothing
+        #number -> (ny,)
+        #tuple -> array?
         return (None if self.y.ndim==1 else self.y.shape[1]) if self.y is not None else 0
     @property
     def nu(self):
@@ -148,6 +152,26 @@ class System_data(object):
             yfuture = yfuture[:,:,None]
         return hist, ufuture, yfuture
 
+    def to_video(self, file_name='video.mp4', scale_factor=10, vmin=0, vmax=1):
+        import cv2
+        from PIL import Image
+
+        if not file_name.endswith('.mp4'):
+            file_name += '.mp4'
+
+        nx,ny = self.y.shape[1],self.y.shape[2] #resolution of simulation
+        nx_out,ny_out = round(nx*scale_factor),round(ny*scale_factor) #resolution of video produced
+
+        video = cv2.VideoWriter(file_name, 0, 60, (ny_out,nx_out))
+
+        resize = lambda x: np.array(Image.fromarray(x).resize((ny_out, nx_out)))
+        to_img = lambda x: resize((np.clip(x,vmin,vmax).copy()[:,:,None]*255*np.ones((1,1,3))).astype(np.uint8))
+        try: 
+            for yi in self.y:
+                video.write(to_img(yi))
+        finally:
+            cv2.destroyAllWindows()
+            video.release()
 
 
     def save(self,file):
@@ -172,8 +196,18 @@ class System_data(object):
         return 100*(1 - self.NRMS(real,multi_average=multi_average))
 
     def NRMS(self,real,multi_average=True):
-        RMS = self.RMS(real,multi_average=True) #always true
-        y_std = np.std(real.y,axis=0)+1e-15
+        RMS = self.RMS(real,multi_average=False) #RMS list
+        y_std = np.std(real.y,axis=0) #this breaks when real.y is constant but self is not
+        if y_std.ndim==0: #if there is only one dim than normal equation
+            return RMS/y_std
+
+        filt = y_std<1e-14 #filter constant stds
+        if np.all(filt):
+            raise ValueError('all signals are constant')
+        if np.any(filt) and multi_average:
+            #todo insert warning on exclusion
+            y_std = y_std[np.logical_not(filt)]
+            RMS = RMS[np.logical_not(filt)]
         return np.mean(RMS/y_std) if multi_average else RMS/y_std
 
     def RMS(self,real, multi_average=True):
@@ -181,8 +215,8 @@ class System_data(object):
         #Variance accounted for
         #y output system
         #yhat output model
-        y, yhat = real.y[self.cheat_n:],self.y[self.cheat_n:]
-        return np.mean((y-yhat)**2)**0.5
+        y, yhat = real.y[self.cheat_n:], self.y[self.cheat_n:]
+        return np.mean((y-yhat)**2)**0.5 if multi_average else np.mean((y-yhat)**2,axis=0)**0.5
 
     def VAF(self,real,multi_average=True):
         '''Variance accounted for'''

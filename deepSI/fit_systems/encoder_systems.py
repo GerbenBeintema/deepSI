@@ -64,6 +64,9 @@ class System_encoder(System_PyTorch):
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
 
+class System_encoder_no_input(System_encoder):
+    pass #later
+
 class System_encoder_RNN(System_PyTorch):
     """docstring for System_encoder_RNN"""
     def __init__(self, nx=10, na=20, nb=20):

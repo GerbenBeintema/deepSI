@@ -59,7 +59,7 @@ class System(object):
                 obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
-    def init_state(self):
+    def init_state(self,sys_data):
         '''sys_data is already normed'''
         return self.reset(), 0
 
@@ -92,7 +92,7 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data,nf=100):
+    def n_step_error(self,sys_data,nf=100,RMS=False):
         # 1. init a multi state
         # do the normal loop, 
         # how to deal with list sys_data?
@@ -106,8 +106,12 @@ class System(object):
         _,_,ufuture,yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf)
 
         Losses = []
-        for unow,ynow in zip(np.swapaxes(ufuture,0,1),np.swapaxes(yfuture,0,1)):
-            Losses.append(np.mean((ynow-obs)**2)**0.5)
+        for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
+            if RMS:
+                self.norm.ystd
+                Losses.append(np.mean((ynow-obs)**2*self.norm.ystd**2)**0.5)
+            else:
+                Losses.append(np.mean((ynow-obs)**2)**0.5)
             obs = self.step_multi(unow)
         return np.array(Losses)
 
@@ -170,7 +174,8 @@ class System_SS(System): #simple state space systems
         self.nx = nx
         self.nu = nu
         self.ny = ny
-        self.reset()
+
+        self.x = np.zeros((self.nx,))
 
     def reset(self):
         self.x = np.zeros((self.nx,))
@@ -183,6 +188,7 @@ class System_SS(System): #simple state space systems
     def step(self,action):
         self.x = self.f(self.x,action)
         return self.h(self.x)
+    # def step_multi(self,actions)
 
     def f(self,x,u):
         '''x[k+1] = f(x[k],u[k])'''
