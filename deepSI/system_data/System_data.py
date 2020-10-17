@@ -225,7 +225,7 @@ class System_data(object):
         # also known as R^2
         # y, yhat = real.y[self.cheat_n:],self.y[self.cheat_n:]
         # return 100*(1-(np.var(y-yhat)/np.var(y)))
-        return 100*(1-self.NRMS(real,multi_average=multi_average**2))
+        return 100*(1-self.NRMS(real,multi_average=multi_average)**2)
 
     def __sub__(self,other): #todo correct this
         if isinstance(other,(float,int,np.ndarray)):

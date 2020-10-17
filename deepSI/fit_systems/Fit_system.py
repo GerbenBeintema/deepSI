@@ -44,6 +44,8 @@ class System_PyTorch(System_fittable):
     def init_optimizer(self,parameters,**optimizer_kwargs):
         #return the optimizer with a optimizer.zero_grad and optimizer.step method
         if optimizer_kwargs.get('optimizer') is not None:
+            from copy import deepcopy
+            optimizer_kwargs = deepcopy(optimizer_kwargs) #do not modify the original kwargs, is this necessary
             optimizer = optimizer_kwargs['optimizer']
             del optimizer_kwargs['optimizer']
         else:
@@ -52,6 +54,7 @@ class System_PyTorch(System_fittable):
 
     def make_training_data(self,sys_data, **Loss_kwargs):
         assert sys_data.normed == True
+        #should be implemented in child
         raise NotImplementedError
 
 
@@ -100,12 +103,12 @@ class System_PyTorch(System_fittable):
 
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
         data_full = self.make_training_data(sys_data, **Loss_kwargs)
-        data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
+        data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full] #add cuda?
 
 
         if sim_val is not None:
             data_train = data_full
-        else:
+        else: #is not used that often, could use sklearn to split data
             split = int(len(data_full[0])*(1-val_frac))
             data_train = [dat[:split] for dat in data_full]
             data_val = [dat[split:] for dat in data_full]
@@ -113,7 +116,7 @@ class System_PyTorch(System_fittable):
 
         global time_val
         time_val = time_back = time_loss = 0
-        Loss_val = validation(append=False)
+        Loss_val = validation(append=False) #add to cpu/to cuda in validation?
         time_val = 0 #reset
         N_training_samples = len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
@@ -128,7 +131,7 @@ class System_PyTorch(System_fittable):
                 Loss_acc = 0
                 for i in range(batch_size, N_training_samples + 1, batch_size):
                     ids_batch = ids[i-batch_size:i]
-                    train_batch = [part[ids_batch] for part in data_train]
+                    train_batch = [part[ids_batch] for part in data_train] #add cuda?
                     start_t_loss = time.time()
                     Loss = self.CallLoss(*train_batch, **Loss_kwargs)
                     time_loss += time.time() - start_t_loss
