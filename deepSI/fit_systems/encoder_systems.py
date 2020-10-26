@@ -16,6 +16,7 @@ class System_encoder(System_PyTorch):
         self.n_nodes_per_layer = 64
         self.activation = nn.Tanh
 
+    #How to fit
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
@@ -38,6 +39,7 @@ class System_encoder(System_PyTorch):
             x = self.fn(fn_in)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
 
+    #How to use
     def init_state(self,sys_data): #put nf here for n-step error?
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist)

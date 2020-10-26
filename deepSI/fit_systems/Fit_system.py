@@ -71,6 +71,8 @@ class System_PyTorch(System_fittable):
             t_start_val = time.time()
             if sim_val is not None:
                 sim_val_predict = self.apply_experiment(sim_val)
+                #I can transform sim_val_predict and sim_val with self.norm for a controllable NRMS
+                
                 Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
@@ -92,7 +94,7 @@ class System_PyTorch(System_fittable):
             self.paremters = list(self.init_nets(self.nu,self.ny))
             self.optimizer = self.init_optimizer(self.paremters,**optimizer_kwargs)
             self.bestfit = float('inf')
-            self.Loss_val, self.Loss_train, self.batch_id, self.time = [],[],[],[]
+            self.Loss_val, self.Loss_train, self.batch_id, self.time = [], [], [], []
             self.batch_counter = 0
             extra_t = 0
             self.fitted = True
@@ -121,7 +123,7 @@ class System_PyTorch(System_fittable):
         N_training_samples = len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
-        print(f'N_training_samples={N_training_samples}, batch_size={batch_size}, N_batch_updates_per_epoch={N_batch_updates_per_epoch}')
+        if verbose>0: print(f'N_training_samples={N_training_samples}, batch_size={batch_size}, N_batch_updates_per_epoch={N_batch_updates_per_epoch}')
         ids = np.arange(0, N_training_samples, dtype=int)
         try:
             self.start_t = time.time()

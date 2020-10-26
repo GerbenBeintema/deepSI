@@ -127,7 +127,7 @@ class System_data(object):
             yfuture = yfuture[:,:,None]
         return ufuture, yfuture
 
-    def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
         '''convertes data set to  a system of 
         hist = [u[k-nb:k].flat,y[k-na:k].flat]
         yfuture = [y[k],....,y[k+nf-1]]
@@ -141,7 +141,7 @@ class System_data(object):
         hist = []
         ufuture = []
         yfuture = []
-        for k in range(max(nb,na)+nf,len(u)+1):
+        for k in range(max(nb,na)+nf,len(u)+1,dilation):
             hist.append(np.concatenate((u[k-nb-nf:k-nf].flat,y[k-na-nf:k-nf].flat)))
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
