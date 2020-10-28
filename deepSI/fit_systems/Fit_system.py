@@ -257,44 +257,100 @@ def System_BJ_full(System_BJ_fittable):
 import torch
 from torch import nn
 
-def fit_system_tuner(fit_system, sys_data, search_dict, verbose=1, sim_val=None):
-    import copy
-    #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
-    def itter(itter_dict, depth=0, dict_now=None, best_score=float('inf'), best_sys=None, best_dict=None):
-        if dict_now is None:
-            dict_now = dict()
-        if depth==len(itter_dict):
-            sys = fit_system(**dict_now)
-            sys.fit(sys_data)
-            try:
-                if sim_val is None:
-                    score = sys.apply_experiment(sys_data).NRMS(sys_data)
-                else:
-                    score = sys.apply_experiment(sim_val).NRMS(sim_val)
-            except ValueError:
-                score = float('inf')
-            if verbose>0: 
-                print(score, dict_now)
-            if score<=best_score:
-                return score, sys, copy.deepcopy(dict_now)
-            else:
-                return best_score, best_sys, best_dict
-        else:
-            for item in itter_dict[depth][1]:
-                dict_now[itter_dict[depth][0]] = item
-                best_score, best_sys, best_dict = itter(itter_dict, depth=depth+1, dict_now=dict_now, best_score=best_score, best_sys=best_sys, best_dict=best_dict)
-            return best_score, best_sys, best_dict
-
+def process_dict(search_dict):
+    #this is not foul proof so watch out. (e.g. passing lists as items when the whole list should be passed to the function)
     itter_dict = [list(a) for a in search_dict.items()]
     for k in range(len(itter_dict)):
         I = itter_dict[k][1]
         if isinstance(I,range):
             itter_dict[k][1] = list(I)
-        elif not isinstance(I,(tuple,list)):
-            itter_dict[k][1] = list([I])
-    best_score, best_sys, best_dict = itter(itter_dict)
-    if verbose>0: print('Result:', best_score, best_sys, best_dict)
-    return best_sys, best_score, best_dict
+        elif not isinstance(I,(tuple,list,np.ndarray)):
+            itter_dict[k][1] = [I]
+    return itter_dict
+
+
+def grid_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, verbose=2):
+    import copy
+    sim_val = sys_data if sim_val is None else sim_val
+    #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
+    def itter(sys_dict_choices, fit_dict_choices, sys_dict=None, fit_dict=None, bests=None, best_score=float('inf'), best_sys=None, best_sys_dict=None, best_fit_dict=None):
+        if sys_dict is None:
+            sys_dict,fit_dict = dict(), dict()
+        length_sys_dict, length_fit_dict = len(sys_dict), len(fit_dict)
+
+        if length_sys_dict!=len(sys_dict_choices):
+            key,items = sys_dict_choices[length_sys_dict][0], sys_dict_choices[length_sys_dict][1]
+            for item in items:
+                sys_dict[key] = item
+                best_score, best_sys, best_sys_dict, best_fit_dict = itter(sys_dict_choices, fit_dict_choices, sys_dict=sys_dict, fit_dict=fit_dict, best_score=best_score, best_sys=best_sys, best_sys_dict=best_sys_dict, best_fit_dict=best_fit_dict)
+            del sys_dict[key]
+            return best_score, best_sys, best_sys_dict, best_fit_dict
+        elif length_fit_dict!=len(fit_dict_choices):
+            key,items = fit_dict_choices[length_fit_dict][0], fit_dict_choices[length_fit_dict][1]
+            for item in items:
+                fit_dict[key] = item
+                best_score, best_sys, best_sys_dict, best_fit_dict = itter(fit_dict_choices, fit_dict_choices, sys_dict=sys_dict, fit_dict=fit_dict, best_score=best_score, best_sys=best_sys, best_sys_dict=best_sys_dict, best_fit_dict=best_fit_dict)
+            del fit_dict[key]
+            return best_score, best_sys, best_sys_dict, best_fit_dict
+        else:
+
+            try: #fit the system if possible
+                sys = fit_system(**sys_dict)
+                sys.fit(sys_data,**fit_dict)
+            except Exception as inst:
+                print('error',inst)
+                print('for sys_dict=', sys_dict)
+                print('for fit_dict=', fit_dict)
+            try:
+                score = sys.apply_experiment(sim_val).RMS(sim_val) if RMS is None else sys.apply_experiment(sim_val).NRMS(sim_val)
+            except ValueError:
+                score = float('inf')
+            if verbose>1: print(score, sys_dict, fit_dict)
+            if score<=best_score:
+                return score, sys, copy.deepcopy(sys_dict), copy.deepcopy(fit_dict)
+            else:
+                return best_score, best_sys, best_sys_dict, best_fit_dict
+
+    sys_dict_choices, fit_dict_choices = process_dict(sys_dict_choices), process_dict(fit_dict_choices)
+    best_score, best_sys, best_sys_dict, best_fit_dict = itter(sys_dict_choices, fit_dict_choices)
+    if verbose>0: print('Result:', best_score, best_sys, best_sys_dict, best_fit_dict)
+    return best_score, best_sys, best_sys_dict, best_fit_dict
+
+from random import choice
+def sample_dict(dict_now):
+    #dict = {'k':[1,2,3],'a':[True,False],}
+    #goes to a random choice from the given list
+    return dict([(key,choice(item)) for key,item in dict_now.items()])
+
+# I can multi process this function in its entirety in the future
+def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20):
+    sim_val = sys_data if sim_val is None else sim_val
+    def test(sys_dict, fit_dict):
+        sys = fit_system(**sys_dict)
+        try:
+            sys.fit(sys_data,**fit_dict)
+        except Exception as inst:
+            print('error',inst)
+            print('for sys_dict=', sys_dict)
+            print('for fit_dict=', fit_dict)
+        try:
+            score = sys.apply_experiment(sim_val).RMS(sim_val) if RMS is None else sys.apply_experiment(sim_val).NRMS(sim_val)
+        except ValueError:
+            score = float('inf')
+        return sys, score
+
+    all_results = []
+    sys_dict_choices, fit_dict_choices = dict(process_dict(sys_dict_choices)), dict(process_dict(fit_dict_choices))
+    for trial in tqdm(range(budget)):
+        sys_dict, fit_dict = sample_dict(sys_dict_choices), sample_dict(fit_dict_choices)
+        sys, score = test(sys_dict, fit_dict)
+        all_results.append(dict(sys_dict=sys_dict,fit_dict=fit_dict,sys=sys,score=score))
+    return all_results
+
+
+#GP search may be possible
+
+
 
 if __name__ == '__main__':
     from sklearn import linear_model 
@@ -302,9 +358,24 @@ if __name__ == '__main__':
     class System_IO_fit_linear(System_IO_fit_sklearn):
         def __init__(self,na,nb):
             super(System_IO_fit_linear,self).__init__(na,nb,linear_model.LinearRegression())
+    # class System_IO_fit_linear(System_IO_fit_sklearn):
+    #     def __init__(self,na,nb,alpha=0.1):
+    #         super(System_IO_fit_linear,self).__init__(na,nb,linear_model.Lasso(alpha=alpha))
 
     train, test = deepSI.datasets.Cascaded_Tanks()
-    sys = deepSI.fit_systems.System_IO_pytorch(na=5,nb=5)
+    # sys = deepSI.fit_systems.System_IO_pytorch(na=5,nb=5)
+
+    # all_results = random_search(fit_system=deepSI.fit_systems.System_IO_pytorch, sys_data=train, sys_dict_choices=dict(na=[1,2,3,4,5],nb=[1,2,3,4]),fit_dict_choices=dict(sim_val=[train],verbose=[1]),budget=5)
+    # print(all_results)
+
+    # result = grid_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=range(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, verbose=1)
+    result = random_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=np.arange(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, budget=200)
+    #0.30908989649451607 {'na': 6, 'nb': 8, 'alpha': 0.0004804870439655134}
+    #0.29513191231139657
+
+    # fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20
+    print(min(result,key=lambda x: x['score']))
+    print(result)
     # sys = System_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))
@@ -312,21 +383,21 @@ if __name__ == '__main__':
     # sys = System_IO_fit_linear(7,3)
     # sys = System_encoder(nx=8,na=20,nb=20)
     # sys_data = System_data(u=np.random.normal(size=100),y=np.random.normal(size=100))
-    sys.fit(train,epochs=1000,Loss_kwargs=dict(nf=15),batch_size=8,sim_val=None,optimizer_kwargs=dict(optimizer=optim.Adam,lr=1e-3))
-    print(sys.optimizer)
+    # sys.fit(train,epochs=1000,Loss_kwargs=dict(nf=15),batch_size=8,sim_val=None,optimizer_kwargs=dict(optimizer=optim.Adam,lr=1e-3))
+    # print(sys.optimizer)
     # sys.save_system('../../testing/test-fit.p')
     # del sys
     # sys = load_system('../../testing/test-fit.p')
 
-    sys_data_predict = sys.apply_experiment(test)
-    print(sys_data_predict.NRMS(test))
-    plt.plot(sys.n_step_error(test))
-    plt.show()
+    # sys_data_predict = sys.apply_experiment(test)
+    # print(sys_data_predict.NRMS(test))
+    # plt.plot(sys.n_step_error(test))
+    # plt.show()
 
     # sys_data_predict2 = sys.apply_experiment(sys_data)
 
-    test.plot()
-    sys_data_predict.plot(show=True)
+    # test.plot()
+    # sys_data_predict.plot(show=True)
     # plt.plot(test.u)
     # plt.show()
     # sys_data_predict2.plot(show=True)

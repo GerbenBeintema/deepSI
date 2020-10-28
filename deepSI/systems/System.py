@@ -3,22 +3,23 @@ import deepSI
 import numpy as np
 from matplotlib import pyplot as plt
 import pickle
+from secrets import token_urlsafe
 
 def load_system(file):
     """This is not a safe function, only use on trusted files"""
     return pickle.load( open(file,'rb') )
 
 class System(object):
-    action_space, observation_space = None, None #backwards  
+    # action_space, observation_space = None, None #backwards  
     def __init__(self,action_space=None, observation_space=None):
         #implement action_space observation space later
         self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
         self.fitted = False
-        self.name = self.__class__.__name__
+        self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
+        self.name = self.__class__.__name__+'_'+self.unique_code
         self.seed = 42
         self.use_norm = True #can be changed later 
-        # self.random = np.random.RandomState(seed=42)
 
     @property
     def random(self): #gets created ones called, this is to make pickle more stable between different version of numpy
@@ -250,7 +251,7 @@ class System_IO(System):
         self.yhist = list(sys_data.y[k0-self.na:k0])
         self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
         #when taking an action uhist gets appended to create the current state
-        return self.yhist[-1], k0
+        return sys_data.y[k0-1], k0
 
     def init_state_multi(self,sys_data,nf=100):
         k0 = max(self.na,self.nb)

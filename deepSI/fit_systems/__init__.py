@@ -1,4 +1,4 @@
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_PyTorch
+from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, random_search, grid_search, System_PyTorch
 from deepSI.fit_systems.linear_fit_systems import System_IO_fit_linear
 from deepSI.fit_systems.encoder_systems import System_encoder_RNN, System_encoder
 from deepSI.fit_systems.IO_systems import System_IO_SISO_pytorch, System_IO_pytorch

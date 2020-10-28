@@ -1,5 +1,5 @@
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, fit_system_tuner, System_PyTorch
+from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, random_search, grid_search, System_PyTorch
 import torch
 from torch import nn
 
@@ -51,6 +51,11 @@ class System_encoder(System_PyTorch):
         self.state = self.encoder(hist)
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
+
+    def reset(self): #to be able to use encoder network as a data generator
+        self.state = torch.randn(1,self.nx)
+        y_predict = self.hn(self.state).detach().numpy()[0,:]
+        return (y_predict[0] if self.ny is None else y_predict)
 
     def step(self,action):
         action = torch.tensor(action,dtype=torch.float32) #number

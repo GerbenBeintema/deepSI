@@ -176,7 +176,7 @@ class System_data(object):
 
     def save(self,file):
         '''Saves data'''
-        np.savez(name, u=self.u, x=self.x, y=self.y, cheat_n=self.cheat_n, normed=self.normed)
+        np.savez(file, u=self.u, x=self.x, y=self.y, cheat_n=self.cheat_n, normed=self.normed)
 
     def __repr__(self):
         return f'System_data of length: {self.N_samples} nu={self.nu} ny={self.ny} normed={self.normed}'
@@ -328,7 +328,7 @@ class System_data_list(object):
     def save(self,file):
         '''Saves data'''
         out = [dict(u=sd.u, x=sd.x, y=sd.y, cheat_n=sd.cheat_n, normed=sd.normed) for sd in self.sdl]
-        np.savez(name, sdl=out)
+        np.savez(file, sdl=out)
 
     def __repr__(self):
         return f'System_data_list with {len(self.sdl)} series and total length {self.N_samples}, nu={self.nu}, ny={self.ny}, normed={self.normed} lengths={[sd.N_samples for sd in self.sdl]}'

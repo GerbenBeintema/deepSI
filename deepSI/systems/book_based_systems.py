@@ -75,7 +75,7 @@ if __name__=='__main__':
         sys_data = sys.apply_experiment(exp)
 
         SYS = deepSI.fit_systems.System_IO_fit_linear
-        sys_fit, score, kwargs = deepSI.fit_systems.fit_system_tuner(SYS, sys_data, dict(na=range(0,10),nb=range(1,10)))
+        sys_fit, score, kwargs, _ = deepSI.fit_systems.grid_search(SYS, sys_data, dict(na=range(0,10),nb=range(1,10)))
         na,nb = kwargs['na'], kwargs['nb']
 
         sys_data_predict = sys_fit.apply_experiment(sys_data)
