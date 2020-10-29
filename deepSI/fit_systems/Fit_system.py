@@ -127,7 +127,7 @@ class System_PyTorch(System_fittable):
         ids = np.arange(0, N_training_samples, dtype=int)
         try:
             self.start_t = time.time()
-            for epoch in tqdm(range(epochs)):
+            for epoch in (tqdm(range(epochs)) if verbose>0 else range(epochs)):
                 np.random.shuffle(ids)
 
                 Loss_acc = 0
@@ -259,23 +259,27 @@ from torch import nn
 
 def process_dict(search_dict):
     #this is not foul proof so watch out. (e.g. passing lists as items when the whole list should be passed to the function)
-    itter_dict = [list(a) for a in search_dict.items()]
-    for k in range(len(itter_dict)):
-        I = itter_dict[k][1]
-        if isinstance(I,range):
-            itter_dict[k][1] = list(I)
-        elif not isinstance(I,(tuple,list,np.ndarray)):
-            itter_dict[k][1] = [I]
-    return itter_dict
+    new_dict = {}
+    for key,item in search_dict.items():
+        if isinstance(item,range):
+            new_dict[key] = list(item)
+        elif isinstance(item,dict):
+            new_dict[key] = process_dict(item)
+        elif isinstance(item,(tuple,list,np.ndarray)):
+            new_dict[key] = item
+        else:
+            new_dict[key] = [item]
+    return new_dict
 
 
 def grid_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, verbose=2):
     import copy
     sim_val = sys_data if sim_val is None else sim_val
     #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
+
     def itter(sys_dict_choices, fit_dict_choices, sys_dict=None, fit_dict=None, bests=None, best_score=float('inf'), best_sys=None, best_sys_dict=None, best_fit_dict=None):
         if sys_dict is None:
-            sys_dict,fit_dict = dict(), dict()
+            sys_dict, fit_dict = dict(), dict()
         length_sys_dict, length_fit_dict = len(sys_dict), len(fit_dict)
 
         if length_sys_dict!=len(sys_dict_choices):
@@ -289,29 +293,31 @@ def grid_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, 
             key,items = fit_dict_choices[length_fit_dict][0], fit_dict_choices[length_fit_dict][1]
             for item in items:
                 fit_dict[key] = item
-                best_score, best_sys, best_sys_dict, best_fit_dict = itter(fit_dict_choices, fit_dict_choices, sys_dict=sys_dict, fit_dict=fit_dict, best_score=best_score, best_sys=best_sys, best_sys_dict=best_sys_dict, best_fit_dict=best_fit_dict)
+                best_score, best_sys, best_sys_dict, best_fit_dict = itter(sys_dict_choices, fit_dict_choices, sys_dict=sys_dict, fit_dict=fit_dict, best_score=best_score, best_sys=best_sys, best_sys_dict=best_sys_dict, best_fit_dict=best_fit_dict)
             del fit_dict[key]
             return best_score, best_sys, best_sys_dict, best_fit_dict
         else:
 
             try: #fit the system if possible
+                # print(sys_dict,fit_dict,sys_dict_choices)
                 sys = fit_system(**sys_dict)
                 sys.fit(sys_data,**fit_dict)
+                try:
+                    score = sys.apply_experiment(sim_val).RMS(sim_val) if RMS is None else sys.apply_experiment(sim_val).NRMS(sim_val)
+                except ValueError:
+                    score = float('inf')
             except Exception as inst:
-                print('error',inst)
-                print('for sys_dict=', sys_dict)
-                print('for fit_dict=', fit_dict)
-            try:
-                score = sys.apply_experiment(sim_val).RMS(sim_val) if RMS is None else sys.apply_experiment(sim_val).NRMS(sim_val)
-            except ValueError:
+                if verbose>1:
+                    print('error',inst,'for sys_dict=', sys_dict, 'for fit_dict=', fit_dict)
                 score = float('inf')
+
             if verbose>1: print(score, sys_dict, fit_dict)
-            if score<=best_score:
+            if score<best_score:
                 return score, sys, copy.deepcopy(sys_dict), copy.deepcopy(fit_dict)
             else:
                 return best_score, best_sys, best_sys_dict, best_fit_dict
 
-    sys_dict_choices, fit_dict_choices = process_dict(sys_dict_choices), process_dict(fit_dict_choices)
+    sys_dict_choices, fit_dict_choices = list(process_dict(sys_dict_choices).items()), list(process_dict(fit_dict_choices).items())
     best_score, best_sys, best_sys_dict, best_fit_dict = itter(sys_dict_choices, fit_dict_choices)
     if verbose>0: print('Result:', best_score, best_sys, best_sys_dict, best_fit_dict)
     return best_score, best_sys, best_sys_dict, best_fit_dict
@@ -320,7 +326,7 @@ from random import choice
 def sample_dict(dict_now):
     #dict = {'k':[1,2,3],'a':[True,False],}
     #goes to a random choice from the given list
-    return dict([(key,choice(item)) for key,item in dict_now.items()])
+    return dict([(key,sample_dict(item) if isinstance(item,dict) else choice(item)) for key,item in dict_now.items()])
 
 # I can multi process this function in its entirety in the future
 def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20):
@@ -340,7 +346,7 @@ def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}
         return sys, score
 
     all_results = []
-    sys_dict_choices, fit_dict_choices = dict(process_dict(sys_dict_choices)), dict(process_dict(fit_dict_choices))
+    sys_dict_choices, fit_dict_choices = process_dict(sys_dict_choices), process_dict(fit_dict_choices)
     for trial in tqdm(range(budget)):
         sys_dict, fit_dict = sample_dict(sys_dict_choices), sample_dict(fit_dict_choices)
         sys, score = test(sys_dict, fit_dict)
@@ -365,17 +371,28 @@ if __name__ == '__main__':
     train, test = deepSI.datasets.Cascaded_Tanks()
     # sys = deepSI.fit_systems.System_IO_pytorch(na=5,nb=5)
 
-    # all_results = random_search(fit_system=deepSI.fit_systems.System_IO_pytorch, sys_data=train, sys_dict_choices=dict(na=[1,2,3,4,5],nb=[1,2,3,4]),fit_dict_choices=dict(sim_val=[train],verbose=[1]),budget=5)
+    #self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac=0.2, sim_val_fun='NRMS'
+    fit_dict_choices=dict(Loss_kwargs=dict(nf=[5,10,20,30]),verbose=0)
+    # fit_dict_choices = process_dict(fit_dict_choices)
+    # print(fit_dict_choices)
+    # print(sample_dict(fit_dict_choices))
+
+    # result = random_search(deepSI.fit_systems.System_IO_pytorch, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
+    results = grid_search(deepSI.fit_systems.statespace_linear_system, train, sys_dict_choices=dict(nx=[1,2,3,4,5,6,7]), fit_dict_choices=dict(SS_A_stability=[False,True],SS_f=[8,10,15,20,25,40]), sim_val=test, RMS=False, verbose=2)
+
+        # result = random_search(deepSI.fit_systems.System_IO_pytorch, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
+
+    # all_results = random_search(fit_system=deepSI.fit_systems.System_IO_pytorch, sys_data=train, sys_dict_choices=dict(na=[1,2,3,4,5],nb=[1,2,3,4]), fit_dict_choices=dict(sim_val=[train],verbose=[1]),budget=5)
     # print(all_results)
 
     # result = grid_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=range(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, verbose=1)
-    result = random_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=np.arange(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, budget=200)
+    # result = random_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=np.arange(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, budget=200)
     #0.30908989649451607 {'na': 6, 'nb': 8, 'alpha': 0.0004804870439655134}
     #0.29513191231139657
 
     # fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20
-    print(min(result,key=lambda x: x['score']))
-    print(result)
+    # print(min(result,key=lambda x: x['score']))
+    print(results)
     # sys = System_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))

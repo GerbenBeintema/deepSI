@@ -2,3 +2,4 @@ from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable
 from deepSI.fit_systems.linear_fit_systems import System_IO_fit_linear
 from deepSI.fit_systems.encoder_systems import System_encoder_RNN, System_encoder
 from deepSI.fit_systems.IO_systems import System_IO_SISO_pytorch, System_IO_pytorch
+from deepSI.fit_systems.SS_linear_systems import statespace_linear_system

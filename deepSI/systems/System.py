@@ -127,7 +127,12 @@ class System(object):
         pickle.dump(self, open(file,'wb'))
 
     def __repr__(self):
-        return f'System: {self.name}, action_space={self.action_space}, observation_space={self.observation_space}'
+        simple_action = (self.action_space is None) or (isinstance(self.action_space,gym.spaces.Box) and self.action_space.shape==tuple())
+        simple_observation_space = (self.observation_space is None) or (isinstance(self.observation_space,gym.spaces.Box) and self.observation_space.shape==tuple())
+        if simple_action and simple_observation_space:
+            return f'System: {self.name}'
+        else:
+            return f'System: {self.name}, action_space={self.action_space}, observation_space={self.observation_space}'
 
     def get_train_data(self):
         exp = System_data(u=self.random.uniform(-2,2,size=10**4))

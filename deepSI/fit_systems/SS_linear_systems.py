@@ -8,7 +8,7 @@ import math
 import scipy as sc
 from numpy.linalg import pinv
 
-assert False, 'Implementation still failing'
+# assert False, 'Implementation still failing'
 
 
 #adapted from https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/sippy/OLSims_methods.py
@@ -247,8 +247,6 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
 
 class statespace_linear_system(System_SS,System_fittable):
     def __init__(self,seed=None,A=None,B=None,C=None,D=None,nx=2):
-        self.na = 0
-        self.nb = 0
         self.ny = None
         self.nu = None
         self.A, self.B, self.C, self.D = A, B, C, D
@@ -262,8 +260,11 @@ class statespace_linear_system(System_SS,System_fittable):
     def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
         assert isinstance(sys_data,System_data), 'todo for multiple data sets'
 
-        y = sys_data.y.T #work with (features,time)
-        u = sys_data.u.T
+
+        y = sys_data.y.T if sys_data.y.ndim==2 else sys_data.y.T[None,:] #work with (features,time)
+        u = sys_data.u.T if sys_data.u.ndim==2 else sys_data.u.T[None,:] #work with (features,time)
+        self.ny, self.nu = y.shape[0], u.shape[0]
+
         # SS_f = 20 #future steps?
         SS_fixed_order = self.nx
         id_method = 'N4SID' #'N4SID' or 'MOESP' or 'CVA'
@@ -271,12 +272,14 @@ class statespace_linear_system(System_SS,System_fittable):
         SS_max_order=np.NaN
         SS_D_required=False
         tsample = 1.
+
+        #fit
         A, B, C, D, Vn, Q, R, S, K = OLSims(y, u, SS_f, id_method, SS_threshold, \
                                             SS_max_order, SS_fixed_order, \
                                             SS_D_required, SS_A_stability)
         self.model = SS_model(A, B, C, D, K, Q, R, S, tsample, Vn) #useless?, wait....
         self.A, self.B, self.C, self.D = A, B, C, D
-        sys_data_sim = self.apply_experiment(self.norm.inverse_transform(sys_data)) #multiple sys_data todo
+        # sys_data_sim = self.apply_experiment(self.norm.inverse_transform(sys_data)) #multiple sys_data todo
         X = []
         x = np.zeros((self.nx,))
         for u in sys_data.u:
@@ -303,16 +306,16 @@ class statespace_linear_system(System_SS,System_fittable):
         # u = np.array(u) 
         # if u.ndim==0:
         #     u = u[None]
-        out = np.dot(self.C, x) #+ np.dot(self.D, u)
-        return out[0] if self.ny==1 else out
+        yhat = np.dot(self.C, x) #+ np.dot(self.D, u)
+        return yhat[0] if self.ny==1 or self.ny==None else yhat
 
 
 
 if __name__=='__main__':
-    A = np.array([[0.89, 0.], [0., 0.45]]) #(2,2)
-    B = np.array([[0.3], [2.5]]) #(2,1)
-    C = np.array([[0.7, 1.]]) #(1,2)
-    D = np.array([[0.0]]) #(1,1)
+    A = np.array([[0.89, 0.], [0., 0.45]]) #(2,2) x<-x
+    B = np.array([[0.3], [2.5]]) #(2,1) x<-u
+    C = np.array([[0.7, 1.]]) #(1,2) y<-u
+    D = np.array([[0.0]]) #(1,1) 
     sys = statespace_linear_system(A=A,B=B,C=C,D=D)
     exp = System_data(u=np.random.normal(size=1000)[:,None])
     sys_data = sys.apply_experiment(exp)
@@ -329,14 +332,10 @@ if __name__=='__main__':
     # sys_data_fitted.plot()
     # print(sys_data_fitted.NMSE(sys_data))
 
-    # sys = uxyeye.systems.nonlin_Ibased_normals_system()
-    # train_data = sys.get_train_data(N_samples=10**5)
-    # sys_data = sys.get_test_data()
-    # sys_fit.fit(train_data)
-    # sys_data_fitted = sys_fit.simulation(sys_data)
-    # sys_data.plot(show=False)
-    # sys_data_fitted.plot(show=False)
-    # (sys_data_fitted-sys_data).plot()
-    # print(sys_data_fitted.NMSE(sys_data))
-    # print(sys_data_fitted.BFR(sys_data))
+    sys = deepSI.systems.nonlin_Ibased_normals_system()
+    train_data = sys.get_train_data()
+    sys_data = sys.get_test_data()
 
+    best_score, best_sys, best_sys_dict, best_fit_dict = deepSI.fit_systems.grid_search(statespace_linear_system, train_data, sys_dict_choices=dict(nx=[3,4,5,6]), fit_dict_choices=dict(SS_A_stability=[True,False],SS_f=[3,4,5,8,10]), sim_val=sys_data, RMS=False, verbose=2)
+
+    print(best_score, best_sys, best_sys_dict, best_fit_dict)
