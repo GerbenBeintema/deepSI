@@ -2,3 +2,4 @@
 /deepSI.egg-info/
 __pycache__/
 /build/
+.ipynb_checkpoints/
