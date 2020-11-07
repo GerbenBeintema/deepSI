@@ -7,17 +7,17 @@ from secrets import token_urlsafe
 
 def load_system(file):
     """This is not a safe function, only use on trusted files"""
-    return pickle.load( open(file,'rb') )
+    return pickle.load(open(file,'rb'))
 
 class System(object):
     # action_space, observation_space = None, None #backwards  
-    def __init__(self,action_space=None, observation_space=None):
+    def __init__(self, action_space=None, observation_space=None):
         #implement action_space observation space later
         self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
         self.fitted = False
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
-        self.name = self.__class__.__name__+'_'+self.unique_code
+        self.name = self.__class__.__name__ + '_' + self.unique_code
         self.seed = 42
         self.use_norm = True #can be changed later 
 

@@ -94,13 +94,13 @@ class System_PyTorch(System_fittable):
             self.paremters = list(self.init_nets(self.nu,self.ny))
             self.optimizer = self.init_optimizer(self.paremters,**optimizer_kwargs)
             self.bestfit = float('inf')
-            self.Loss_val, self.Loss_train, self.batch_id, self.time = [], [], [], []
+            self.Loss_val, self.Loss_train, self.batch_id, self.time = np.array([]), np.array([]), np.array([]), np.array([])
             self.batch_counter = 0
             extra_t = 0
             self.fitted = True
         else:
             self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
-            extra_t = 0 if len(self.time)==0 else self.time[-1]
+            extra_t = 0 if len(self.time)==0 else self.time[-1] #correct time counting after reset
 
 
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
@@ -115,8 +115,9 @@ class System_PyTorch(System_fittable):
             data_train = [dat[:split] for dat in data_full]
             data_val = [dat[split:] for dat in data_full]
 
+        self.Loss_val, self.Loss_train, self.batch_id, self.time = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time)
 
-        global time_val
+        global time_val, time_loss, time_back
         time_val = time_back = time_loss = 0
         Loss_val = validation(append=False) #add to cpu/to cuda in validation?
         time_val = 0 #reset
@@ -134,17 +135,20 @@ class System_PyTorch(System_fittable):
                 for i in range(batch_size, N_training_samples + 1, batch_size):
                     ids_batch = ids[i-batch_size:i]
                     train_batch = [part[ids_batch] for part in data_train] #add cuda?
-                    start_t_loss = time.time()
-                    Loss = self.CallLoss(*train_batch, **Loss_kwargs)
-                    time_loss += time.time() - start_t_loss
 
-                    self.optimizer.zero_grad()
+                    def closure(backward=True):
+                        global time_loss, time_back
+                        start_t_loss = time.time()
+                        Loss = self.CallLoss(*train_batch, **Loss_kwargs)
+                        time_loss += time.time() - start_t_loss
+                        if backward:
+                            self.optimizer.zero_grad()
+                            start_t_back = time.time()
+                            Loss.backward()
+                            time_back += time.time() - start_t_back
+                        return Loss
 
-                    start_t_back = time.time()
-                    Loss.backward()
-                    time_back += time.time() - start_t_back
-
-                    self.optimizer.step()
+                    Loss = self.optimizer.step(closure)
                     Loss_acc += Loss.item()
                 self.batch_counter += N_batch_updates_per_epoch
                 Loss_acc /= N_batch_updates_per_epoch
@@ -159,6 +163,7 @@ class System_PyTorch(System_fittable):
                 # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
+        self.Loss_val, self.Loss_train, self.batch_id, self.time = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time)
         self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system()
 
@@ -183,11 +188,13 @@ class System_PyTorch(System_fittable):
         out = np.load(os.path.join(directory,self.name+name+'.npz'))
         out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
         self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
-        self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val.tolist(), self.Loss_train.tolist(), self.batch_id.tolist(), self.time.tolist()
+        # self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val, self.Loss_train, self.batch_id, self.time
         
     def _save_system_torch(self,file):
         save_dict = {}
         for d in dir(self):
+            if d in ['random']: #exclude random
+                continue
             attribute = self.__getattribute__(d)
             if isinstance(attribute,(nn.Module,optim.Optimizer)):
                 save_dict[d] = attribute.state_dict()
@@ -329,7 +336,7 @@ def sample_dict(dict_now):
     return dict([(key,sample_dict(item) if isinstance(item,dict) else choice(item)) for key,item in dict_now.items()])
 
 # I can multi process this function in its entirety in the future
-def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20):
+def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20,verbose=2):
     sim_val = sys_data if sim_val is None else sim_val
     def test(sys_dict, fit_dict):
         sys = fit_system(**sys_dict)
@@ -347,10 +354,15 @@ def random_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}
 
     all_results = []
     sys_dict_choices, fit_dict_choices = process_dict(sys_dict_choices), process_dict(fit_dict_choices)
-    for trial in tqdm(range(budget)):
-        sys_dict, fit_dict = sample_dict(sys_dict_choices), sample_dict(fit_dict_choices)
-        sys, score = test(sys_dict, fit_dict)
-        all_results.append(dict(sys_dict=sys_dict,fit_dict=fit_dict,sys=sys,score=score))
+    try:
+        for trial in tqdm(range(budget)):
+            sys_dict, fit_dict = sample_dict(sys_dict_choices), sample_dict(fit_dict_choices)
+            if verbose>1: print('starting...', sys_dict, fit_dict)
+            sys, score = test(sys_dict, fit_dict)
+            if verbose>1: print('result:', score ,'for', sys_dict, fit_dict)
+            all_results.append(dict(sys_dict=sys_dict,fit_dict=fit_dict,sys=sys,score=score))
+    except KeyboardInterrupt:
+        print('stopping early due to KeyboardInterrupt')
     return all_results
 
 

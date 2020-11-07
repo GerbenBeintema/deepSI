@@ -33,7 +33,6 @@ class ball_in_box_system(System_Deriv): #discrate system single system
         ux,uy = np.clip(u,-1,1)*self.Fmax
         # print(u)
         x,y,vx,vy = x
-        bar = 500
         dvxdt = (1/x**2-1/(1-x)**2)/200+ux-self.gamma*vx
         dvydt = (1/y**2-1/(1-y)**2)/200+uy-self.gamma*vy
         return [vx,vy,dvxdt,dvydt]
@@ -50,9 +49,9 @@ class ball_in_box_video_system(ball_in_box_system): #discrate system single syst
     Fmax < a
     Fmin > -a
     """
-    def __init__(self, Fmax=0.25, Nresist=0.7):
+    def __init__(self, Fmax=0.25):
         self.ny_vid, self.nx_vid = 25, 25
-        super(ball_in_box_video_system, self).__init__(Fmax=Fmax,Nresist=Nresist)
+        super(ball_in_box_video_system, self).__init__(Fmax=Fmax)
         self.observation_space = Box(0.,1.,shape=(self.nx_vid,self.ny_vid))
         
 

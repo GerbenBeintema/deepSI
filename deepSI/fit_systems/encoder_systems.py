@@ -16,7 +16,7 @@ class System_encoder(System_PyTorch):
         self.n_nodes_per_layer = 64
         self.activation = nn.Tanh
 
-    #How to fit
+    ########## How to fit #############
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
@@ -26,8 +26,8 @@ class System_encoder(System_PyTorch):
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
         self.encoder = self.net(n_in=self.nb*nu+self.na*ny, n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.fn =      self.net(n_in=self.nx+nu,      n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.hn =      self.net(n_in=self.nx,         n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
+        self.fn =      self.net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
+        self.hn =      self.net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
     def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
@@ -39,7 +39,7 @@ class System_encoder(System_PyTorch):
             x = self.fn(fn_in)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
 
-    #How to use
+    ########## How to use ##############
     def init_state(self,sys_data): #put nf here for n-step error?
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist)
@@ -156,5 +156,5 @@ if __name__ == '__main__':
     train.plot()
     train_predict.plot(show=True)
     from matplotlib import pyplot as plt
-    plt.plot(sys.n_step_error(train))
+    plt.plot(sys.n_step_error(train,nf=20))
     plt.show()
