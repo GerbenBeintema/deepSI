@@ -19,7 +19,7 @@ Quick start
 a quick example
 
 
-.. console::
+.. doctest::
     >>> import deepSI
     >>> import numpy as np
     >>> from matplotlib import pyplot as plt

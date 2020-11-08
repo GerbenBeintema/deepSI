@@ -1280,7 +1280,7 @@ def internet_traffic(dir_placement=None,force_download=False,split_data=True):
         
 
 if __name__=='__main__':
-    # uxyeye.data_sets.clear_cache()
+
     destill()
     destill_all() #returns list with all the noise levels
     glassfurnace()

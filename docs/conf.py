@@ -75,9 +75,19 @@ html_theme = "sphinx_rtd_theme"
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-autodoc_member_order = 'bysource'
-if _sphinx_version_info >= (1,8):
-    autodoc_default_options = {'members':None, 'special-members':None, 'show-inheritance':None}
-else:
-    autodoc_default_flags = ['members', 'special-members', 'show-inheritance']
+# autodoc_member_order = 'bysource'
+autodoc_default_options = {
+    'members': None,
+    'special-members': None,
+    'member-order': 'bysource',
+    'private-members': None,
+    'undoc-members': None,
+    'imported-members': None,
+    'exclude-members': '__weakref__, __dict__'
+}
+# if _sphinx_version_info >= (1,8):
+#     autodoc_default_options = {'members':None, 'special-members':None, 'show-inheritance':None}
+# else:
+#     autodoc_default_flags = ['members', 'special-members', 'show-inheritance']
 autodoc_inherit_docstrings = False # i.e. don't document implementations of abstract methods (if the implementation does not have a docstring)
+

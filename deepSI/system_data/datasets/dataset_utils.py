@@ -1,7 +1,5 @@
 
 
-# import uxyeye
-
 import urllib.request
 import os
 import os.path
@@ -9,9 +7,31 @@ from pathlib import Path
 from sys import platform
 
 def get_work_dirs():
+    '''A utility function which gets the utility directories for each OS
+
+    It creates a working directory called deepSI 
+
+        in LOCALAPPDATA for windows
+
+        in ~/.deepSI/ for unix like
+
+        in ~/Library/Application Support/deepSI/ for darwin
+
+    it creates two directories inside of the deepSI directory
+
+        data_sets : cache location of the downloaded data sets
+
+        checkpoints : used during training of pytorch models
+
+    Returns
+    -------
+    dict(base=base_dir, data_sets=data_sets_dir, checkpoints=checkpoints_dir)
+    '''
+
     def mkdir(directory):
         if os.path.isdir(directory) is False:
             os.mkdir(directory)
+
     from sys import platform
     if platform == "darwin": #not tested but here it goes
         base_dir = os.path.expanduser('~/Library/Application Support/deepSI/')
@@ -27,6 +47,7 @@ def get_work_dirs():
     return dict(base=base_dir, data_sets=data_sets_dir, checkpoints=checkpoints_dir)
 
 def clear_cache():
+    '''Delete all cached downloads'''
     import shutil
     temp_dir = get_work_dirs()['data_sets']
     for l in ['EMPS','CED','F16','WienHammer','BoucWen','ParWHF','WienerHammerBenchMark','Silverbox','Cascaded_Tanks']:
@@ -38,7 +59,14 @@ def clear_cache():
         shutil.rmtree(os.path.join(temp_dir,'DaISy_data'))
     except FileNotFoundError:
         pass
-   
+
+def clear_checkpoints():
+    '''Delete all saved pytorch checkpoints'''
+    checkpoints_dir = get_work_dirs()['checkpoints']
+    try:
+        shutil.rmtree(checkpoints_dir)
+    except FileNotFoundError:
+        pass
 
 import progressbar
 class MyProgressBar():
@@ -60,11 +88,11 @@ class MyProgressBar():
 
 
 def cashed_download(url,name_dir,dir_placement=None,download_size=None,force_download=False,zipped=True):
-    #url is the file to be downloaded
-    #name_dir is the directory name where the file and the contents of the file will be saved
-    #dir_placement is an optinal argument that gives the location of the downloaded file 
-    #if it is none it will download to the temp dir
-    #if dir_name is None it will be saved in the temp directory of the system
+    '''url is the file to be downloaded
+    name_dir is the directory name where the file and the contents of the file will be saved
+    dir_placement is an optinal argument that gives the location of the downloaded file 
+    if it is none it will download to the temp dir
+    if dir_name is None it will be saved in the temp directory of the system'''
 
     #finding/making directories
     if dir_placement is None:
@@ -128,10 +156,6 @@ if __name__ == '__main__':
     # filename = './file.zip'
     # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/EMPS/EMPS.zip'
     # urllib.request.urlretrieve(url, filename)
-
-    # import uxyeye
-    # out = uxyeye.data_sets.WienerHammerBenchMark()
-    # print(out)
 
     # resp = urllib.request.urlopen(url)
     # respHtml = resp.read()

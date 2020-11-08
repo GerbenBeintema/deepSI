@@ -1,7 +1,6 @@
 
 from deepSI.systems.System import System_data, System, System_IO, System_SS
 import numpy as np
-import uxyeye
 import deepSI
 
 class nonlin_Ibased_normals_system(System_IO):

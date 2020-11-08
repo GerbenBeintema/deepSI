@@ -55,9 +55,6 @@ if __name__=='__main__':
     val_multi, val_sinesweep = datasets.BoucWen(dir_placement=None, force_download=False, split_data=False).sdl
     val_multi_reproduce = sys.apply_experiment(val_multi)
     # factor = 20
-    # exp_multi = uxyeye.Experiment(u=(val_multi.u[:,None]*np.ones((1,factor))).flatten())
-    # val_multi_reproduce = sys.apply_experiment(exp_multi, x0=None, ypreend=None, k0=0, save_x=True)
-    # val_multi_reproduce = val_multi_reproduce.down_sample_by_average(factor)
     val_multi.plot()
     val_multi_reproduce.plot(show=True)
     print('difference:',(val_multi_reproduce[200:]).NRMS(val_multi[200:]))

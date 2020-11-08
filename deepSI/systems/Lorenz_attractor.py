@@ -104,7 +104,6 @@ if __name__=='__main__':
     # self.b, self.a = signal.butter(order,band,analog=False,fs=1/self.dt)
     # u0 = np.random.normal(scale=80,size=4000)
     # u = signal.lfilter(self.b,self.a,u0)
-    # exp = uxyeye.Experiment(u=u)
     # from scipy.fftpack import *
     # exp.plot()
 

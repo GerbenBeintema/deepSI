@@ -27,8 +27,6 @@ class NarendraLiBenchmark(System_SS): #https://arxiv.org/pdf/2003.14162.pdf
     def get_test_data(self):
         exp = System_data(u=self.random.uniform(low=-2.5,high=2.5,size=(2000,)))
         return self.apply_experiment(exp)
-        # exp = uxyeye.experiments.multi_sine(n=(10,25),A=(1,1),phase=(np.pi/2,np.pi/2),c=0,N_samples=5000)
-        # return self.apply_experiment(exp)
 
 if __name__ == '__main__':
     from deepSI import fit_systems
