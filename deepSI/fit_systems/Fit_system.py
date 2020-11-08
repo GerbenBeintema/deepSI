@@ -282,7 +282,7 @@ def process_dict(search_dict):
 def grid_search(fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, verbose=2):
     import copy
     sim_val = sys_data if sim_val is None else sim_val
-    #example use: print(hyper_parameter_tunner(System_IO_fit_linear,dict(na=[1,2,3],nb=[1,2,3]),sys_data))
+    #example use: print(grid_search(System_IO_fit_linear,sys_data,sys_dict_choices=dict(na=[1,2,3],nb=[1,2,3]),fit_dict_choices=dict()))
 
     def itter(sys_dict_choices, fit_dict_choices, sys_dict=None, fit_dict=None, bests=None, best_score=float('inf'), best_sys=None, best_sys_dict=None, best_fit_dict=None):
         if sys_dict is None:

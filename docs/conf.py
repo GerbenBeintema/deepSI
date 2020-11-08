@@ -10,6 +10,11 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+try:
+  from sphinx import version_info as _sphinx_version_info
+except ImportError:
+  _sphinx_version_info = ()
+
 import os
 import sys
 import sphinx_rtd_theme
@@ -43,6 +48,9 @@ extensions = [
     'sphinx_rtd_theme',
 ]
 
+pygments_style = 'sphinx'
+modindex_common_prefix = [ 'deepSI.' ]
+
 source_suffix = '.rst'
 
 
@@ -66,3 +74,10 @@ html_theme = "sphinx_rtd_theme"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+autodoc_member_order = 'bysource'
+if _sphinx_version_info >= (1,8):
+    autodoc_default_options = {'members':None, 'special-members':None, 'show-inheritance':None}
+else:
+    autodoc_default_flags = ['members', 'special-members', 'show-inheritance']
+autodoc_inherit_docstrings = False # i.e. don't document implementations of abstract methods (if the implementation does not have a docstring)

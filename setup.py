@@ -7,7 +7,7 @@ setup(name='deepSI',
       author_email = 'g.i.beintema@tue.nl',
       license = 'BSD 3-Clause License',
       python_requires = '>=3.6',
-      install_requires=['numpy','matplotlib', 'tqdm', 'progressbar','torch','scikit-learn', 'gym']
+      install_requires=['numpy','matplotlib', 'scipy', 'tqdm', 'progressbar','torch','scikit-learn', 'gym']
      )
 
   # extras_require = dict(

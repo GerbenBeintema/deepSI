@@ -7,9 +7,12 @@ Welcome to deepSI's documentation!
 ==================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
 
+   intro
+   tutorial
+   examples
+   deepSI
 
 
 Indices and tables
