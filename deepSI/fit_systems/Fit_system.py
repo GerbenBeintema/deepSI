@@ -117,7 +117,7 @@ class System_PyTorch(System_fittable):
 
         self.Loss_val, self.Loss_train, self.batch_id, self.time = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time)
 
-        global time_val, time_loss, time_back
+        global time_val, time_loss, time_back #time keeping
         time_val = time_back = time_loss = 0
         Loss_val = validation(append=False) #add to cpu/to cuda in validation?
         time_val = 0 #reset

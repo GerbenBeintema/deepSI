@@ -180,7 +180,7 @@ def BoucWen(dir_placement=None, force_download=False, split_data=True):
 
 
 def ParWHF(dir_placement=None,force_download=False, split_data=True):
-    '''Parallel wiener ha'''
+    '''Parallel Wienner-Hammerstein'''
     url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/PARWH/ParWHFiles.zip'
     download_size=58203304
     save_dir = cashed_download(url,'ParWHF',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
