@@ -5,4 +5,4 @@ from deepSI.system_data.datasets.nonlinearbenchmark import \
 from deepSI.system_data.datasets.misc_data_sets import sun_spot_data
 
 from deepSI.system_data.datasets.dataset_utils import clear_cache, cashed_download, get_work_dirs
-import deepSI.system_data.datasets.SISTA_Database as SISTA_Database
+import deepSI.system_data.datasets.SISTA_Database

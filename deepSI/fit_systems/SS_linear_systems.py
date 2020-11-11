@@ -8,8 +8,6 @@ import math
 import scipy as sc
 from numpy.linalg import pinv
 
-# assert False, 'Implementation still failing'
-
 
 #adapted from https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/sippy/OLSims_methods.py
 
