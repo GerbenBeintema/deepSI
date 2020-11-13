@@ -83,7 +83,7 @@ autodoc_default_options = {
     'private-members': None,
     'undoc-members': None,
     'imported-members': None,
-    'exclude-members': '__weakref__, __dict__'
+    'exclude-members': '__weakref__, __dict__, __repr__'
 }
 # if _sphinx_version_info >= (1,8):
 #     autodoc_default_options = {'members':None, 'special-members':None, 'show-inheritance':None}

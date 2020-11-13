@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from tqdm.auto import tqdm
 
 def load_system_data(file):
+    '''Load System_data from .npz file'''
     outfile = dict(np.load(file,allow_pickle=True))
     def get_sys_data(data):
         for k in data:
@@ -17,8 +18,50 @@ def load_system_data(file):
         return get_sys_data(outfile)
 
 class System_data(object):
-    """sys_data.u will always"""
+    '''System Data to be used 
+
+    Attributes
+    ----------
+    u : array or None
+        The u input signal, first dimension is time. 
+    y : array or None
+        The y output signal, first dimension is time. 
+    x : array or None
+        The x internal state signal, first dimension is time. (often unused)
+    nu : None, Number, Tuple
+        Number of input dimensions. 
+
+        None -> self.u.shape == (N)
+        Number -> self.u.shape == (N,nu)
+    ny : None, Number, Tuple
+        Number of input dimensions. 
+        None -> self.u.shape == (N)
+        Number -> self.u.shape == (N,ny)
+    cheat_n : int 
+        Number of samples copied when simulation was applied. This number of samples will not be used to calculate RMS and such.
+    multi_u : bool
+        Check for multi dimensional u, used to check SISO. 
+    multi_y : bool
+        Check for multi dimensional y, used to check SISO. 
+    normed : bool
+        Check if this data set is normed (i.e. was used as norm.transform(sys_data)) mostly used for debugging. 
+    '''
     def __init__(self, u=None, y=None, x=None, cheat_n=0, normed=False):
+        '''Create System data to be used in fitting, plotted and 
+
+        Parameters
+        ----------
+        u : array or list or None
+            Input signal with an array where the first dimension is time
+        y : array or list or None
+            output signal with an array where the first dimension is time
+        x : array or list or None
+            internal state signal with an array where the first dimension is time
+        cheat_n : int
+            Number of samples copied when simulation was applied. This number of samples will not be used to calculate RMS and such.
+        normed : bool
+            Check if this data set is normed (i.e. was used as norm.transform(sys_data)) mostly used for debugging. 
+        '''
         super(System_data, self).__init__()
         assert (y is not None) or (u is not None), 'either y or u requires to be not None or'
         N_samples = len(u) if u is not None else len(y)
@@ -42,15 +85,14 @@ class System_data(object):
         return self.u.shape[0]
     @property
     def ny(self):
-        #None -> nothing
-        #number -> (ny,)
-        #tuple -> array?
+        '''Number of output dimensions. None or number'''
         return (None if self.y.ndim==1 else self.y.shape[1]) if self.y is not None else 0
     @property
     def nu(self):
+        '''Number of input dimensions. None or number'''
         return None if self.u.ndim==1 else self.u.shape[1]
     def flatten(self):
-        ## will make the structure to (N,ny) and (N,nu)
+        """Flatten both u and y to (N,nu) and (N,ny) returns a new System_data"""
         if self.y is not None and self.y.ndim>2:
             y = self.y.reshape((self.y.shape[0],-1))
         else:
@@ -61,6 +103,7 @@ class System_data(object):
             u = self.u
         return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
     def reshape_as(self, other):
+        """Inverse of .flatten and will reshape both u and y to (N,) + other.u.shape[1:] and (N,) + other.y.shape[1:]"""
         y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:])
         u = self.u.reshape((self.u.shape[0],)+other.u.shape[1:])
         return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
@@ -70,10 +113,22 @@ class System_data(object):
     ###### Transformations #####
     ############################
     def to_IO_data(self,na=10,nb=10):
-        '''Input output data structure will return 
-            hist, Y
-            hist = [[u[k-nb:k].flat,y[k-na:k].flat]]_k
-            Y = y[k]'''
+        '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
+
+        Parameters
+        ----------
+        na : int
+            y history considered
+        nb : int
+            u history considered
+
+        Returns
+        -------
+        hist : ndarray of (Samples, na*ny + nb*nu)
+            array of combination of historical inputs and output as [u[k-nb:k].flat,y[k-na:k].flat] for many k
+        Y    : ndarray (Samples, features) or (Samples)
+            array of single step ahead [y]
+        '''
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         Y = []
@@ -83,15 +138,29 @@ class System_data(object):
         return np.array(hist), np.array(Y)
 
     def to_hist_future_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
-        '''convertes data set to  a system of 
-        yhist = [y[k-na],....,y[k-1]]
-        uhist = [u[k-nb],....,u[k-1]]
-        yfuture = [y[k],....,y[k+nf-1]]
-        ufuture = [u[k],....,u[k+nf-1]]
-        nf = n_future
-        returns yhist,uhist,yfuture,ufuture
-        
-        made for simulation error and multi in and output data sets
+        '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
+
+        Made for simulation error and multi step error methods
+
+        Parameters
+        ----------
+        na : int
+            y history considered
+        nb : int
+            u history considered
+        nf : int
+            future inputs considered
+
+        Returns
+        -------
+        uhist : ndarray (samples, nb, nu) or (sample, nb) if nu=None
+            array of [u[k-nb],....,u[k-1]]
+        yhist : ndarray (samples, na, nu) or (sample, na) if nu=None
+            array of [y[k-nb],....,y[k-1]]
+        ufuture : ndarray (samples, nf, nu) or (sample, nf) if nu=None
+            array of [u[k],....,u[k+nf-1]]
+        yfuture : ndarray (samples, nf, ny) or (sample, nf) if ny=None
+            array of [y[k],....,y[k+nf-1]]
         '''
         u, y = np.copy(self.u), np.copy(self.y)
         yhist = []
@@ -128,14 +197,32 @@ class System_data(object):
         return ufuture, yfuture
 
     def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
-        '''convertes data set to  a system of 
-        hist = [u[k-nb:k].flat,y[k-na:k].flat]
-        yfuture = [y[k],....,y[k+nf-1]]
-        ufuture = [u[k],....,u[k+nf-1]]
-        nf = n_future
-        returns yhist,uhist,yfuture,ufuture
-        
-        made for simulation error and multi in and output data sets
+        '''Transforms the system data to encoder structure as structure (hist,ufuture,yfuture) of 
+
+
+        Parameters
+        ----------
+        na : int
+            y history considered
+        nb : int
+            u history considered
+        nf : int
+            future inputs considered
+        dilation : int
+            skipping possible k for smaller data set.
+        force_multi_u : bool
+            converts to ufuture to #(samples, time_seq, nu) always
+        force_multi_y : bool
+            converts to yfuture to #(samples, time_seq, ny) always
+
+        Returns
+        -------
+        hist : ndarray (samples, ny*na + nu*nb)
+            array of concat of u[k-nb-nf:k-nf].flat and y[k-na-nf:k-nf].flat
+        ufuture : ndarray (samples, nf, nu) or (sample, nf) if nu=None
+            array of [u[k],....,u[k+nf-1]]
+        yfuture :  ndarray (samples, nf, ny) or (sample, nf) if ny=None
+            array of [y[k],....,y[k+nf-1]]
         '''
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
@@ -153,6 +240,7 @@ class System_data(object):
         return hist, ufuture, yfuture
 
     def to_video(self, file_name='video.mp4', scale_factor=10, vmin=0, vmax=1):
+        '''Used cv2 to create a video from y of shape y.shape = (frames, ny1, ny2)'''
         import cv2
         from PIL import Image
 
@@ -175,7 +263,7 @@ class System_data(object):
 
 
     def save(self,file):
-        '''Saves data'''
+        '''Saves data with savez, see also load_system_data'''
         np.savez(file, u=self.u, x=self.x, y=self.y, cheat_n=self.cheat_n, normed=self.normed)
 
     def __repr__(self):
@@ -190,12 +278,13 @@ class System_data(object):
         if show: plt.show()
 
     def BFR(self,real,multi_average=True):
-        '''Best Fit Rate'''
+        '''Best Fit Rate in percent i.e. 100*(1 - np.sum((y-yhat)**2)**0.5/np.std(y)) (100 = best possible fit)'''
         # y, yhat = real.y[self.cheat_n:], self.y[self.cheat_n:]
         # return 100*(1 - np.sum((y-yhat)**2)**0.5/np.sum((y-np.mean(y))**2)**0.5)
         return 100*(1 - self.NRMS(real,multi_average=multi_average))
 
     def NRMS(self,real,multi_average=True):
+        '''Normalized root mean square i.e. np.sum((y-yhat)**2)**0.5/np.std(y) (0 = best fit possible)'''
         RMS = self.RMS(real,multi_average=False) #RMS list
         y_std = np.std(real.y,axis=0) #this breaks when real.y is constant but self is not
         if y_std.ndim==0: #if there is only one dim than normal equation
@@ -219,23 +308,22 @@ class System_data(object):
         return np.mean((y-yhat)**2)**0.5 if multi_average else np.mean((y-yhat)**2,axis=0)**0.5
 
     def VAF(self,real,multi_average=True):
-        '''Variance accounted for'''
-        # y output system
-        # yhat output model
-        # also known as R^2
-        # y, yhat = real.y[self.cheat_n:],self.y[self.cheat_n:]
-        # return 100*(1-(np.var(y-yhat)/np.var(y)))
+        '''Variance accounted also known as R^2 
+
+        calculated as 100*(1 - np.sum((y-yhat)**2)/np.std(y)**2) (100 = best possible fit)'''
         return 100*(1-self.NRMS(real,multi_average=multi_average)**2)
 
-    def __sub__(self,other): #todo correct this
-        if isinstance(other,(float,int,np.ndarray)):
-            return System_data(u=self.u, x=self.x, y=self.y-other, cheat_n=self.cheat_n)
-        elif isinstance(other,System_data):
+    def __sub__(self,other): 
+        '''Calculate the difference between y two System_data a number or array'''
+        if isinstance(other,System_data):
             assert len(self.y)==len(other.y), 'both arguments need to be the same length'
             return System_data(u=self.u, x=self.x, y=self.y-other.y, cheat_n=self.cheat_n)
+        else:
+            return System_data(u=self.u, x=self.x, y=self.y-other, cheat_n=self.cheat_n)
+
 
     def train_test_split(self,split_fraction=0.25):
-        '''return 2 data sets of length n*(1-split_fraction) and n*split_fraction respectively (left, right) split'''
+        '''returns 2 data sets of length n*(1-split_fraction) and n*split_fraction respectively (left, right) split'''
         n_samples = self.u[self.cheat_n:].shape[0]
         split_n = int(n_samples*(1 - split_fraction))
         ul,ur,yl,yr = self.u[self.cheat_n:split_n], self.u[self.cheat_n+split_n:], \
@@ -249,6 +337,7 @@ class System_data(object):
         return left_data, right_data
 
     def __getitem__(self,arg):
+        '''Slice the System_data in time index'''
         assert isinstance(arg,slice),'Please use a slice (e.g. sys_data[20:100]) or use sys_data.u or sys_data.y'
         start, stop, step = arg.indices(self.u.shape[0])
         cheat_n = max(0,self.cheat_n-start)
@@ -258,9 +347,17 @@ class System_data(object):
         return System_data(u=unew, y=ynew, x=xnew, cheat_n=cheat_n, normed=self.normed)
     
     def __len__(self):
+        '''Number of samples len(system_data) = self.N_samples'''
         return self.N_samples
 
     def down_sample_by_average(self,factor):
+        """Down sample method
+
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
         assert isinstance(factor, int) 
         L = self.N_samples
         n = (L//factor)*factor
@@ -275,7 +372,23 @@ class System_data(object):
             y = np.stack([np.mean(self.y[:n,i].reshape((-1,factor)),axis=1) for i in range(self.y.shape[1])],axis=1)
         return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n,normed=self.normed)
 
-class System_data_list(object):
+class System_data_list(System_data):
+    '''A list of System_data, has most methods of System_data in a list form with only some exceptions listed below
+
+    Attributes
+    ----------
+    sdl : list of System_data
+    y : array
+        concatenated y of system_data contained in sdl
+    u : array
+        concatenated u of system_data contained in sdl
+
+    Methods
+    -------
+    append(System_data) adds element to sdl
+    extend(list) adds elements to sdl
+    __getitem__(number) get (ith system data, time slice) 
+    '''
     def __init__(self,sys_data_list):
         assert len(sys_data_list)>0, 'At least one data set should be provided'
         ny = sys_data_list[0].ny
@@ -371,7 +484,7 @@ class System_data_list(object):
         return left, right
 
     def __getitem__(self,arg): #by data set or by time?
-        '''[ith data set, time]'''
+        '''get (ith system data, time slice) '''
         if isinstance(arg,tuple) and len(arg)>1: #
             sdl_sub = self.sdl[arg[0]]
             if isinstance(sdl_sub,System_data):
@@ -400,7 +513,19 @@ class System_data_list(object):
         self.sdl.extend(other.sdl)
 
 class System_data_norm(object):
-    '''Utility to normalize training data before fitting'''
+    '''A utility to normalize system_data before fitting or usage
+
+    Attributes
+    ----------
+    u0 : float or array
+        average u to be subtracted
+    ustd : float or array
+        standard divination of u to be divided by
+    y0 : float or array
+        average y to be subtracted
+    ystd : float or array
+        standard divination of y to be divided by
+    '''
     def __init__(self, u0=0, ustd=1, y0=0, ystd=1):
         self.u0 = u0
         self.ustd = ustd
@@ -418,7 +543,7 @@ class System_data_norm(object):
         return sys_data.u, sys_data.y
 
     def fit(self,sys_data):
-        #finds   self.y0,self.ystd,self.u0,self.ustd
+        '''set the values of u0, ustd, y0 and ystd using sys_data (can be a list) given'''
         u, y = self.make_training_data(sys_data)
         self.u0 = np.mean(u,axis=0)
         self.ustd = np.std(u,axis=0)+1e-15 #does this work with is_id?
@@ -428,56 +553,74 @@ class System_data_norm(object):
     def transform(self,sys_data):
         '''Transform the data by 
            u <- (sys_data.u-self.u0)/self.ustd
-           y <- (sys_data.y-self.y0)/self.ystd'''
+           y <- (sys_data.y-self.y0)/self.ystd
+
+        Parameters
+        ----------
+        sys_data : System_data
+            sys_data to be transformed
+
+        Returns
+        -------
+        System_data or System_data_list if a list was given
+        '''
         if isinstance(sys_data,(list,tuple)):
-            return [self.transform(s) for s in sys_data] #conversion?
-        elif isinstance(sys_data,System_data_list):
-            return System_data_list([self.transform(s) for s in sys_data.sdl])
+            assert sys_data[0].normed==False, 'System_data is already normalized'
+            return System_data_list([self.transform(s) for s in sys_data]) #conversion?
+
         
-        assert sys_data.normed==False, 'System_data is already normalized'
+        if isinstance(sys_data,System_data_list):
+            assert sys_data.normed==False, 'System_data is already normalized'
+            return System_data_list([self.transform(s) for s in sys_data.sdl])
         
         if self.is_id:
             return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
                                cheat_n=sys_data.cheat_n,normed=True)
 
         if isinstance(sys_data,System_data):
+            assert sys_data.normed==False, 'System_data is already normalized'
             u_transformed = (sys_data.u-self.u0)/self.ustd if sys_data.u is not None else None
             y_transformed = (sys_data.y-self.y0)/self.ystd if sys_data.y is not None else None
             return System_data(u=u_transformed,x=sys_data.x,y=y_transformed, \
                 cheat_n=sys_data.cheat_n,normed=True)
         else:
-            assert False
+            raise NotImplementedError(f'type={type(sys_data)} cannot yet be transformed by norm')
 
     def inverse_transform(self,sys_data):
         '''Inverse Transform the data by 
            u <- sys_data.u*self.ustd+self.u0
-           y <- sys_data.y*self.ystd+self.y0'''
-        if isinstance(sys_data,(list,tuple)):
-            return [self.inverse_transform(s) for s in sys_data]
-        elif isinstance(sys_data,System_data_list):
-            return System_data_list([self.inverse_transform(s) for s in sys_data.sdl])
-        assert sys_data.normed==True, 'System_data is already un-normalized'
+           y <- sys_data.y*self.ystd+self.y0
 
+        Parameters
+        ----------
+        sys_data : System_data
+
+        Returns
+        -------
+        System_data or System_data_list if a list was given
+        '''
+
+        if isinstance(sys_data,(list,tuple)):
+            return System_data_list([self.inverse_transform(s) for s in sys_data])
+        elif isinstance(sys_data,System_data_list):
+            assert sys_data.normed==True, 'System_data is already un-normalized'
+            return System_data_list([self.inverse_transform(s) for s in sys_data.sdl])
+        
         if self.is_id:
             return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
                                cheat_n=sys_data.cheat_n,normed=False)
 
         if isinstance(sys_data,System_data):
-            u_inv_transformed, y_inv_transformed = sys_data.u*self.ustd+self.u0, sys_data.y*self.ystd+self.y0
+            assert sys_data.normed==True, 'System_data is already un-normalized'
+            u_inv_transformed = sys_data.u*self.ustd + self.u0 if sys_data.u is not None else None
+            y_inv_transformed = sys_data.y*self.ystd + self.y0 if sys_data.y is not None else None
             return System_data(u=u_inv_transformed,x=sys_data.x,y=y_inv_transformed,
                                cheat_n=sys_data.cheat_n,normed=False)
         else:
-            assert False
-
-    def save_system(self):
-        #pickle is the easiest
-        raise NotImplementedError
-
-    def load_system(self):
-        raise NotImplementedError
+            raise NotImplementedError(f'type={type(sys_data)} cannot yet be inverse_transform by norm')
 
     def __repr__(self):
-        return f'norm: u0={self.u0},ustd={self.ustd},y0={self.y0},ystd={self.ystd}'
+        return f'System_data_norm: (u0={self.u0}, ustd={self.ustd}, y0={self.y0}, ystd={self.ystd}, norm={self.norm})'
 
 
 if __name__=='__main__':
