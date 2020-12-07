@@ -22,21 +22,21 @@ class System_data(object):
 
     Attributes
     ----------
-    u : array or None
+    u : array
         The u input signal, first dimension is time. 
     y : array or None
-        The y output signal, first dimension is time. 
+        The y output signal, first dimension is time. It can be not present.
     x : array or None
         The x internal state signal, first dimension is time. (often unused)
     nu : None, Number, Tuple
         Number of input dimensions. 
-
         None -> self.u.shape == (N)
         Number -> self.u.shape == (N,nu)
+        Tuple -> self.u.shape == (N,...)
     ny : None, Number, Tuple
         Number of input dimensions. 
         None -> self.u.shape == (N)
-        Number -> self.u.shape == (N,ny)
+        Tuple -> self.y.shape == (N,...)
     cheat_n : int 
         Number of samples copied when simulation was applied. This number of samples will not be used to calculate RMS and such.
     multi_u : bool
@@ -83,14 +83,24 @@ class System_data(object):
     @property
     def N_samples(self):
         return self.u.shape[0]
+
     @property
     def ny(self):
-        '''Number of output dimensions. None or number'''
-        return (None if self.y.ndim==1 else self.y.shape[1]) if self.y is not None else 0
+        '''Number of output dimensions. None or number or tuple'''
+        if self.y is None:
+            return 0
+        elif self.y.ndim==1:
+            return None
+        else:
+            return self.y.shape[1] if self.y.ndim==2 else self.y.shape[1:]
     @property
     def nu(self):
-        '''Number of input dimensions. None or number'''
-        return None if self.u.ndim==1 else self.u.shape[1]
+        '''Number of input dimensions. None or number or tuple'''
+        if self.u.ndim==1:
+            return None
+        else:
+            return self.u.shape[1] if self.u.ndim==2 else self.u.shape[1:]
+
     def flatten(self):
         """Flatten both u and y to (N,nu) and (N,ny) returns a new System_data"""
         if self.y is not None and self.y.ndim>2:
@@ -102,6 +112,7 @@ class System_data(object):
         else:
             u = self.u
         return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
+
     def reshape_as(self, other):
         """Inverse of .flatten and will reshape both u and y to (N,) + other.u.shape[1:] and (N,) + other.y.shape[1:]"""
         y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:])
@@ -112,7 +123,7 @@ class System_data(object):
     ############################
     ###### Transformations #####
     ############################
-    def to_IO_data(self,na=10,nb=10):
+    def to_IO_data(self,na=10,nb=10,dilation=1):
         '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
 
         Parameters
@@ -132,12 +143,12 @@ class System_data(object):
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         Y = []
-        for k in range(max(na,nb),len(u)):
+        for k in range(max(na,nb),len(u),dilation):
             hist.append(np.concatenate((u[k-nb:k].flat,y[k-na:k].flat))) #size = nb*nu + na*ny
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -167,7 +178,7 @@ class System_data(object):
         uhist = []
         ufuture = []
         yfuture = []
-        for k in range(max(nb,na)+nf,len(u)+1):
+        for k in range(max(nb,na)+nf,len(u)+1,dilation):
             yhist.append(y[k-na-nf:k-nf])
             uhist.append(u[k-nb-nf:k-nf])
             yfuture.append(y[k-nf:k])
@@ -182,11 +193,11 @@ class System_data(object):
         return uhist, yhist, ufuture, yfuture
 
 
-    def to_ss_data(self,nf=20,force_multi_u=False,force_multi_y=False):
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False):
         u, y = np.copy(self.u), np.copy(self.y)
         ufuture = []
         yfuture = []
-        for k in range(nf,len(u)+1):
+        for k in range(nf,len(u)+1,dilation):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
         ufuture, yfuture = np.array(ufuture),np.array(yfuture)
@@ -199,7 +210,6 @@ class System_data(object):
     def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
         '''Transforms the system data to encoder structure as structure (hist,ufuture,yfuture) of 
 
-
         Parameters
         ----------
         na : int
@@ -209,7 +219,7 @@ class System_data(object):
         nf : int
             future inputs considered
         dilation : int
-            skipping possible k for smaller data set.
+            skipping data for smaller data set.
         force_multi_u : bool
             converts to ufuture to #(samples, time_seq, nu) always
         force_multi_y : bool
@@ -310,7 +320,7 @@ class System_data(object):
     def VAF(self,real,multi_average=True):
         '''Variance accounted also known as R^2 
 
-        calculated as 100*(1 - np.sum((y-yhat)**2)/np.std(y)**2) (100 = best possible fit)'''
+        calculated as 100*(1 - np.mean((y-yhat)**2)/np.std(y)**2) (100 = best possible fit)'''
         return 100*(1-self.NRMS(real,multi_average=multi_average)**2)
 
     def __sub__(self,other): 
@@ -372,6 +382,22 @@ class System_data(object):
             y = np.stack([np.mean(self.y[:n,i].reshape((-1,factor)),axis=1) for i in range(self.y.shape[1])],axis=1)
         return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n,normed=self.normed)
 
+    #scipy.signal.decimate lookup
+    #other downsample methods
+    def down_sample_by_decimate(self,factor):
+        """Down sample method
+
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
+        from scipy.signal import decimate
+        u = decimate(self.u.T,factor).T
+        y = decimate(self.y.T,factor).T
+        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n,normed=self.normed) #todo add x
+
+
 class System_data_list(System_data):
     '''A list of System_data, has most methods of System_data in a list form with only some exceptions listed below
 
@@ -420,22 +446,22 @@ class System_data_list(System_data):
         return System_data_list([sdli.flatten() for sdli in self.sdl])
     
     ## Transformations ##
-    def to_IO_data(self,na=10,nb=10):
+    def to_IO_data(self,na=10,nb=10,dilation=1):
         #normed check?
-        out = [sys_data.to_IO_data(na=na,nb=nb) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=1) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
-    def to_ss_data(self,nf=20,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_ss_data(nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
 
-    def to_encoder_data(self,na=10,nb=10,nf=5,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
 
     def save(self,file):
@@ -624,13 +650,19 @@ class System_data_norm(object):
 
 
 if __name__=='__main__':
+    # tests
+
+    np.random.seed(42)
     sys_data = System_data(u=np.random.normal(scale=2,size=(100,2)),y=np.random.normal(scale=1.5,size=(100,2)))
     sys_data2 = System_data(u=np.random.normal(size=(100,2)),y=np.random.normal(size=(100,2)))
     sys_data3 = System_data(u=np.random.normal(size=(100,2)),y=np.random.normal(size=(100,2)))
+
     print(sys_data.NRMS(sys_data2,multi_average=False))
-    print(sys_data.to_encoder_data(10,10,10)[0].shape)
-    print(len(sys_data2[10:20]))
+    print([a.shape for a in sys_data.to_encoder_data(5,7,10)])
+    print(sys_data2[10:20])
+
     sdl = System_data_list([sys_data,sys_data2,sys_data3])
+
     print(sdl.to_encoder_data(9)[0].shape)
     print(len(sdl),sdl.N_samples)
     # sdl.plot(show=True)
@@ -639,21 +671,16 @@ if __name__=='__main__':
     print(sdl.VAF(sdl))
     norm = System_data_norm()
     norm.fit(sdl)
-    sdl2 = norm.transform(sdl)
-    sdl3 = norm.inverse_transform(sdl2)
-    print(sdl2.NRMS(sdl))
-    print(sdl3.NRMS(sdl))
-    print(np.std(sdl2.y,axis=0))
-    print('yshape=',sdl2.y.shape)
+    sdl_transformed = norm.transform(sdl)
+    sys_data_transformed = norm.transform(sys_data)
+    sys_data12_transformed = norm.transform((sys_data,sys_data2))
+    print('transformed:',sdl_transformed,sys_data_transformed,sys_data12_transformed)
 
-    # class Test_class(object):
-    #     def __init__(self):
-    #         pass
-    #     def __getitem__(self,arg):
-    #         print(arg)
-    # T = Test_class()
-    # T[1]
+    sdl3 = norm.inverse_transform(sdl_transformed)
+    print(sdl_transformed.NRMS(sdl))
+    print(sdl3.NRMS(sdl))
+    print(np.std(sdl_transformed.y,axis=0))
+    print('yshape=',sdl_transformed.y.shape)
+
     print(sdl[1:2,:-10])
     print(len(sdl))
-    # sys_data.plot()
-    # plt.show()

@@ -20,7 +20,8 @@ class System_encoder(System_PyTorch):
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,force_multi_u=True,force_multi_y=True) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
+        dilation = Loss_kwargs.get('dilation',1)
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
@@ -42,12 +43,12 @@ class System_encoder(System_PyTorch):
     ########## How to use ##############
     def init_state(self,sys_data): #put nf here for n-step error?
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist)
+        self.state = self.encoder(hist) #detach here?
         y_predict = self.hn(self.state).detach().numpy()[0,:]
         return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
 
-    def init_state_multi(self,sys_data,nf=100):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf)[0],dtype=torch.float32) #(1,)
+    def init_state_multi(self,sys_data,nf=100,dilation=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist)
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
@@ -76,9 +77,8 @@ class System_encoder_no_input(System_encoder):
 
 class System_encoder_RNN(System_PyTorch):
     """docstring for System_encoder_RNN"""
-    def __init__(self, nx=10, na=20, nb=20):
+    def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
         super(System_encoder_RNN, self).__init__(None,None)
-        self.nx = nx
         self.na = na
         self.nb = nb
         from deepSI.utils import simple_res_net, feed_forward_nn
@@ -87,8 +87,9 @@ class System_encoder_RNN(System_PyTorch):
         self.n_nodes_per_layer = 64
         self.activation = nn.Tanh
 
-        self.num_layers = 2
-        self.hidden_size = 8
+        #RNN parameters
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
 
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
@@ -101,7 +102,7 @@ class System_encoder_RNN(System_PyTorch):
         ny = 1
         nu = 1
 
-        self.rnn = nn.RNN(input_size=nu,hidden_size=self.hidden_size,num_layers=self.num_layers,batch_first=True) #batch_first?
+        self.rnn = nn.RNN(input_size=nu,hidden_size=self.hidden_size,num_layers=self.num_layers,batch_first=True) #batch_first yes
         # output, h_n = self.RNN(input,h_0) #input = (batch, seq_len, input_size), 
         #h_0 = (num_layers, batch, hidden_size)
         #outputs = (batch, seq_len, hidden_size) #last layer
@@ -113,11 +114,12 @@ class System_encoder_RNN(System_PyTorch):
         return list(self.encoder.parameters()) + list(self.rnn.parameters()) + list(self.hn.parameters())
 
     def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
-        x = self.encoder(hist) #(batch_size,self.num_layers*self.hidden_size) -> (num_layers, batch, hidden_size)
-        h_0 = x.view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
+        x = self.encoder(hist) # (s, nhist = nb + na) -> (s, hidden_size*num_layers)
+        h_0 = x.view(-1, self.num_layers, self.hidden_size).permute(1,0,2)   # to (num_layers, s, hidden_size)
 
         # ufuture (batch, seq_len)
-        output, h_n = self.rnn(ufuture[:,:-1,None], h_0)
+        output, h_n = self.rnn(ufuture[:,:-1,None], h_0) #do not use the last u
+        #print(output.shape) #has shape (s, seq_len-1, hidden_size)
         output = torch.cat((h_0[-1][:,None,:],output),dim=1)
         #outputs = (batch, seq_len, hidden_size) -> (batch*seq_len, hidden_size)
         h_in = output.reshape(-1,self.hidden_size)
@@ -129,8 +131,8 @@ class System_encoder_RNN(System_PyTorch):
         self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
         return self.hn(self.state[-1,:,:])[0,0].item(), max(self.na,self.nb) #some error is being made here
 
-    def init_state_multi(self,sys_data,nf=100):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf)[0],dtype=torch.float32) #(1,)
+    def init_state_multi(self,sys_data,nf=100,dilation=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
         return self.hn(self.state[-1,:,:])[:,0].detach().numpy(), max(self.na,self.nb)
 

@@ -60,11 +60,11 @@ class System(object):
                 obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
 
-    def init_state(self,sys_data):
+    def init_state(self, sys_data):
         '''sys_data is already normed'''
         return self.reset(), 0
 
-    def init_state_multi(self, n):
+    def init_state_multi(self, sys_data, dilation=1):
         '''sys_data is already normed'''
         raise NotImplementedError('init_state_multi should be implemented in child')
 
@@ -93,7 +93,7 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data,nf=100,RMS=False):
+    def n_step_error(self,sys_data,nf=100,dilation=1,RMS=False):
         # 1. init a multi state
         # do the normal loop, 
         # how to deal with list sys_data?
@@ -103,13 +103,12 @@ class System(object):
             sys_data = System_data_list(sys_data)
             # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf)
-        _,_,ufuture,yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf)
+        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf,dilation=dilation)
 
         Losses = []
         for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
-            if RMS:
-                self.norm.ystd
+            if RMS: #todo check this
                 Losses.append(np.mean((ynow-obs)**2*self.norm.ystd**2)**0.5)
             else:
                 Losses.append(np.mean((ynow-obs)**2)**0.5)
@@ -258,10 +257,10 @@ class System_IO(System):
         #when taking an action uhist gets appended to create the current state
         return sys_data.y[k0-1], k0
 
-    def init_state_multi(self,sys_data,nf=100):
+    def init_state_multi(self,sys_data,nf=100,dilation=1):
         k0 = max(self.na,self.nb)
-        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = 
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = 
         return self.yhist[:,-1], k0
 
     def step(self,action):
@@ -275,7 +274,7 @@ class System_IO(System):
 
     def step_multi(self,actions):
         self.uhist = np.append(self.uhist,actions[:,None],axis=1)
-        uy = np.concatenate([self.uhist,self.yhist],axis=1)
+        uy = np.concatenate([self.uhist.reshape(self.uhist.shape[0],-1),self.yhist.reshape(self.uhist.shape[0],-1)],axis=1) ######todo MIMO
         yout = self.multi_IO_step(uy)
         self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
         self.uhist = self.uhist[:,1:]
