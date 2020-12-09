@@ -380,13 +380,12 @@ class System_data(object):
             y = np.mean(self.y[:n].reshape((-1,factor)),axis=1)
         else:
             y = np.stack([np.mean(self.y[:n,i].reshape((-1,factor)),axis=1) for i in range(self.y.shape[1])],axis=1)
-        return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n,normed=self.normed)
+        return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n//factor,normed=self.normed)
 
     #scipy.signal.decimate lookup
     #other downsample methods
     def down_sample_by_decimate(self,factor):
         """Down sample method
-
         Parameters
         ----------
         factor : int
@@ -396,6 +395,23 @@ class System_data(object):
         u = decimate(self.u.T,factor).T
         y = decimate(self.y.T,factor).T
         return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n,normed=self.normed) #todo add x
+
+
+    def down_sample_by_MIMO(self,factor):
+        """Down sample method
+
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
+        N = self.u.shape[0]
+        u = self.u[:N-(N%factor)] # up scaling will be problematic
+        y = self.y[:N-(N%factor):factor]
+        u = u.reshape(u.shape[0]//factor,-1)
+        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n//factor,normed=self.normed) #todo add x
+
+
 
 
 class System_data_list(System_data):
