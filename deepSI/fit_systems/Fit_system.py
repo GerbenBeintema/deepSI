@@ -17,7 +17,7 @@ class System_fittable(System):
                 self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
-        self._fit(self.norm.transform(sys_data),**kwargs) #transfrom data to fittable data?
+        self._fit(self.norm.transform(sys_data),**kwargs) #transform data to fittable data?
         self.fitted = True
 
 
