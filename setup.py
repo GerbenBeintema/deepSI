@@ -1,5 +1,9 @@
 from setuptools import setup
 
+with open('requirements.txt') as f:
+    install_requires = [line for line in f]
+
+
 setup(name = 'deepSI',
       version = '0.2.1',
       description = 'Dynamical system identification',
@@ -7,7 +11,7 @@ setup(name = 'deepSI',
       author_email = 'g.i.beintema@tue.nl',
       license = 'BSD 3-Clause License',
       python_requires = '>=3.6',
-      install_requires = ['numpy','matplotlib', 'scipy', 'tqdm', 'progressbar','torch','scikit-learn', 'gym']
+      install_requires = install_requires,
       extras_require = dict(
         docs = ['sphinx>=1.6','sphinx-rtd-theme>=0.5']
         )

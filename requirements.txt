@@ -1,0 +1,8 @@
+numpy
+matplotlib
+scipy
+tqdm
+progressbar
+torch
+scikit-learn
+gym
