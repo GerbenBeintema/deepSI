@@ -1,4 +1,4 @@
-from deepSI.systems.System import System, System_SS, System_data
+from deepSI.systems.System import System, System_ss, System_data
 from deepSI.fit_systems import System_fittable
 import deepSI
 import numpy as np
@@ -243,7 +243,7 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
         y[:, i] = np.dot(C, x[:, i]) + np.dot(D, u[:, i])
     return x, y
 
-class statespace_linear_system(System_SS,System_fittable):
+class SS_linear(System_ss, System_fittable):
     def __init__(self,seed=None,A=None,B=None,C=None,D=None,nx=2):
         self.ny = None
         self.nu = None
@@ -253,7 +253,7 @@ class statespace_linear_system(System_SS,System_fittable):
             nx = A.shape[0]
             self.ny = C.shape[0]
             self.nu = B.shape[1]
-        super(statespace_linear_system, self).__init__(nx=nx)
+        super(SS_linear, self).__init__(nx=nx)
 
     def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
         assert isinstance(sys_data,System_data), 'todo for multiple data sets'
@@ -314,13 +314,13 @@ if __name__=='__main__':
     B = np.array([[0.3], [2.5]]) #(2,1) x<-u
     C = np.array([[0.7, 1.]]) #(1,2) y<-u
     D = np.array([[0.0]]) #(1,1) 
-    sys = statespace_linear_system(A=A,B=B,C=C,D=D)
+    sys = SS_linear(A=A,B=B,C=C,D=D)
     exp = System_data(u=np.random.normal(size=1000)[:,None])
     sys_data = sys.apply_experiment(exp)
     # sys_data.plot(show=True)
 
 
-    sys_fit = statespace_linear_system()
+    sys_fit = SS_linear()
     sys_fit.fit(sys_data)
     sys_data_predict = sys_fit.apply_experiment(sys_data)
     print(sys_data_predict.NRMS(sys_data))
@@ -334,6 +334,6 @@ if __name__=='__main__':
     train_data = sys.get_train_data()
     sys_data = sys.get_test_data()
 
-    best_score, best_sys, best_sys_dict, best_fit_dict = deepSI.fit_systems.grid_search(statespace_linear_system, train_data, sys_dict_choices=dict(nx=[3,4,5,6]), fit_dict_choices=dict(SS_A_stability=[True,False],SS_f=[3,4,5,8,10]), sim_val=sys_data, RMS=False, verbose=2)
+    best_score, best_sys, best_sys_dict, best_fit_dict = deepSI.fit_systems.grid_search(SS_linear, train_data, sys_dict_choices=dict(nx=[3,4,5,6]), fit_dict_choices=dict(SS_A_stability=[True,False],SS_f=[3,4,5,8,10]), sim_val=sys_data, RMS=False, verbose=2)
 
     print(best_score, best_sys, best_sys_dict, best_fit_dict)

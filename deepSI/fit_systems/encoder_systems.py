@@ -1,9 +1,9 @@
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, random_search, grid_search, System_PyTorch
+from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_pytorch
 import torch
 from torch import nn
 
-class System_encoder(System_PyTorch):
+class System_encoder(System_pytorch):
     """docstring for System_encoder"""
     def __init__(self, nx=10, na=20, nb=20):
         super(System_encoder, self).__init__()
@@ -75,7 +75,7 @@ class System_encoder(System_PyTorch):
 class System_encoder_no_input(System_encoder):
     pass #later
 
-class System_encoder_RNN(System_PyTorch):
+class System_encoder_RNN(System_pytorch):
     """docstring for System_encoder_RNN"""
     def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
         super(System_encoder_RNN, self).__init__(None,None)
@@ -148,8 +148,8 @@ class System_encoder_RNN(System_PyTorch):
 
 if __name__ == '__main__':
     sys = System_encoder()
-    from deepSI.system_data.datasets.SISTA_Database import powerplant
-    from deepSI.system_data.datasets import Silverbox
+    from deepSI.datasets.SISTA_Database import powerplant
+    from deepSI.datasets import Silverbox
     train, test = powerplant()
     train,test = train[:150], test[:50]
     print(train, test)

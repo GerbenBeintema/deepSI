@@ -3,7 +3,7 @@
 
 # from deepSI import System_data, System_data_list
 from deepSI.system_data.System_data import System_data, System_data_list
-from deepSI.system_data.datasets.dataset_utils import get_work_dirs, cashed_download
+from deepSI.datasets.dataset_utils import get_work_dirs, cashed_download
 
 import os
 import numpy as np

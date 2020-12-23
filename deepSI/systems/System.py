@@ -167,13 +167,13 @@ class Systems_gyms(System):
         self.done = done
         return obs
 
-class System_SS(System): #simple state space systems
+class System_ss(System): #simple state space systems
     def __init__(self,nx,nu=None,ny=None):
         action_shape = tuple() if nu is None else (nu,)
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'),float('inf'),shape=action_shape)
         observation_space = Box(-float('inf'),float('inf'),shape=observation_shape)
-        super(System_SS,self).__init__(action_space,observation_space)
+        super(System_ss,self).__init__(action_space,observation_space)
 
         assert nx is not None
         self.nx = nx
@@ -202,7 +202,7 @@ class System_SS(System): #simple state space systems
         '''y[k] = h(x[k])'''
         raise NotImplementedError('f and h should be implemented in child')
 
-class System_Deriv(System_SS):
+class System_Deriv(System_ss):
     def __init__(self,dt=None,nx=None,nu=None,ny=None):
         assert dt is not None
         self.dt = dt
@@ -224,13 +224,13 @@ class System_Deriv(System_SS):
         raise NotImplementedError('self.deriv should be implemented in child')
 
 
-class System_IO(System):
+class System_io(System):
     def __init__(self,na,nb,nu=None,ny=None): #(u,y)
         action_shape = tuple() if nu is None else (nu,) #repeated code
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'), float('inf'), shape=action_shape)
         observation_space = Box(-float('inf'), float('inf'), shape=observation_shape)
-        super(System_IO, self).__init__(action_space, observation_space)
+        super(System_io, self).__init__(action_space, observation_space)
 
         self.nb = nb #hist length of u
         self.na = na #hist length of y
@@ -286,7 +286,7 @@ class System_IO(System):
     def multi_IO_step(self,uy):
         return self.IO_step(uy)
 
-class System_BJ(System):
+class System_bj(System):
     #yhat_{t} = f(u_{t-nb:t-1},yhat_{t-na:t-1},y_{t-nc:t-1})
     def __init__(self,na,nb,nc):
         #na = length of y hat

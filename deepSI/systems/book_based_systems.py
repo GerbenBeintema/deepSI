@@ -1,9 +1,9 @@
 
-from deepSI.systems.System import System_data, System, System_IO, System_SS
+from deepSI.systems.System import System_data, System, System_io, System_ss
 import numpy as np
 import deepSI
 
-class nonlin_Ibased_normals_system(System_IO):
+class nonlin_Ibased_normals_system(System_io):
     def __init__(self):
         super(nonlin_Ibased_normals_system, self).__init__(na=2,nb=2)
 
@@ -13,7 +13,7 @@ class nonlin_Ibased_normals_system(System_IO):
                + ukm1 + 0.2 * ukm2 + 0.1 * ukm1 * ukm2
         return ystar
 
-class Hammerstein_sys_ID_book(System_IO):
+class Hammerstein_sys_ID_book(System_io):
     def __init__(self):
         super(Hammerstein_sys_ID_book, self).__init__(na=2,nb=2)
 
@@ -23,7 +23,7 @@ class Hammerstein_sys_ID_book(System_IO):
                 +1.7826*ykm1 - 0.8187*ykm2
         return ystar
 
-class Wiener_sys_ID_book(System_IO):
+class Wiener_sys_ID_book(System_io):
     def __init__(self):
         super(Wiener_sys_ID_book, self).__init__(na=2,nb=2)
 
@@ -33,7 +33,7 @@ class Wiener_sys_ID_book(System_IO):
                 + 1.7826*ykm1 - 0.8187*ykm2 
         return ystar
 
-class WienerV2_sys_ID_book(System_IO):
+class WienerV2_sys_ID_book(System_io):
     def __init__(self):
         super(WienerV2_sys_ID_book, self).__init__(na=2,nb=2)
 
@@ -43,7 +43,7 @@ class WienerV2_sys_ID_book(System_IO):
                 + 1.7826*ykm1 - 0.8187*ykm2 
         return ystar
 
-class NDE_squared_sys_ID_book(System_IO):
+class NDE_squared_sys_ID_book(System_io):
     def __init__(self):
         super(NDE_squared_sys_ID_book, self).__init__(na=2,nb=2)
 
@@ -54,7 +54,7 @@ class NDE_squared_sys_ID_book(System_IO):
                 +1.68364*ykm1 - 0.70468*ykm2
         return ystar
 
-class dynamic_nonlin_sys_ID_book(System_IO):
+class dynamic_nonlin_sys_ID_book(System_io):
     def __init__(self):
         super(dynamic_nonlin_sys_ID_book, self).__init__(na=2,nb=3)
 

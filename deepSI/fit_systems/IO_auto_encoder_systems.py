@@ -1,13 +1,13 @@
 
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, random_search, grid_search, System_PyTorch
+from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_pytorch
 from deepSI.system_data import System_data
 import torch
 from torch import nn
 import numpy as np
 
 
-class System_IO_auto_encoder(System_PyTorch):
+class System_IO_auto_encoder(System_pytorch):
     """docstring for System_encoder"""
     def __init__(self, nz=4, na=5, nb=5):
         super(System_IO_auto_encoder, self).__init__()

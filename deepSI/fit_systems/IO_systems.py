@@ -1,12 +1,12 @@
 
-from deepSI.fit_systems.Fit_system import System_IO_fit_sklearn, System_fittable, random_search, grid_search, System_PyTorch
-from deepSI.systems.System import System_IO
+from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_pytorch
+from deepSI.systems.System import System_io
 import deepSI
 import torch
 from torch import nn
 
 
-class System_IO_pytorch(System_PyTorch, System_IO):
+class System_IO_pytorch(System_pytorch, System_io):
     def __init__(self,na=5,nb=5):
         super(System_IO_pytorch,self).__init__(na=na,nb=nb)
         
@@ -58,7 +58,7 @@ class System_IO_pytorch(System_PyTorch, System_IO):
                 return yout
 
 
-class System_IO_SISO_pytorch(System_PyTorch, System_IO):
+class System_IO_SISO_pytorch(System_pytorch, System_io):
     def __init__(self,na,nb):
         super(System_IO_SISO_pytorch, self).__init__(na,nb)
 

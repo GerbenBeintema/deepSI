@@ -1,9 +1,9 @@
 
-from deepSI.systems.System import System_SS, System_data
+from deepSI.systems.System import System_ss, System_data
 from deepSI import fit_systems
 import numpy as np
 
-class double_bath_system(System_SS):
+class double_bath_system(System_ss):
     def __init__(self,k1=0.5,k2=0.4,k3=0.2,k4=0.3,sigmaw=0.,sigmav=0.,):
         self.sigmav=sigmav
         super(double_bath_system, self).__init__(nx=2)

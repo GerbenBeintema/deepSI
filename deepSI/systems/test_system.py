@@ -1,10 +1,10 @@
 
 import deepSI
-from deepSI.systems.System import System_SS, System_data
+from deepSI.systems.System import System_ss, System_data
 import numpy as np
 
 
-class test_system(System_SS): #discrate system single system
+class test_system(System_ss): #discrate system single system
     """docstring for test_system"""
     def __init__(self):
         '''Noise, system setting and x0 settings'''
@@ -20,7 +20,7 @@ class test_system(System_SS): #discrate system single system
         x1,x2 = x
         return x1
 
-class  linear_gaussian_system(System_SS): #https://arxiv.org/pdf/2003.14162.pdf
+class  linear_gaussian_system(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
     """xk+1 = [[0.7,0.8],[0,0.1]] xk + [-1,0.1]*uk + nuk
        yk = xk[0] + wk
        nuk = N(0,0.5) x 2

@@ -1,8 +1,8 @@
-from deepSI.systems.System import System_IO, System_data
+from deepSI.systems.System import System_io, System_data
 import numpy as np
 import deepSI
 
-class example_2_non_lin(System_IO):
+class example_2_non_lin(System_io):
     def __init__(self):
         super(example_2_non_lin, self).__init__(na=2,nb=1)
 

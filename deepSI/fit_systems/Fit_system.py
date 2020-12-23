@@ -1,7 +1,7 @@
 
-from deepSI.systems.System import System, System_IO, System_data, load_system,System_BJ
+from deepSI.systems.System import System, System_io, System_data, load_system, System_bj
 import numpy as np
-from deepSI.system_data.datasets import get_work_dirs
+from deepSI.datasets import get_work_dirs
 import deepSI
 import torch
 from torch import nn, optim
@@ -17,26 +17,11 @@ class System_fittable(System):
                 self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
-        self._fit(self.norm.transform(sys_data),**kwargs) #transform data to fittable data?
+        self._fit(self.norm.transform(sys_data), **kwargs) #transform data to fittable data?
         self.fitted = True
 
 
-
-class System_IO_fit_sklearn(System_fittable, System_IO): #name?
-    def __init__(self, na, nb, reg):
-        super(System_IO_fit_sklearn, self).__init__(na, nb)
-        self.reg = reg
-
-    def _fit(self,sys_data):
-        #sys_data #is already normed fitted on 
-        hist,y = sys_data.to_IO_data(na=self.na,nb=self.nb)
-        self.reg.fit(hist,y)
-
-    def IO_step(self,uy):
-        return self.reg.predict([uy])[0] if uy.ndim==1 else self.reg.predict(uy)
-
-
-class System_PyTorch(System_fittable):
+class System_pytorch(System_fittable):
     def init_nets(self,nu,ny):
         #returns parameters
         raise NotImplementedError
@@ -209,7 +194,7 @@ class System_PyTorch(System_fittable):
                 print('Error loading key',key)
 
 
-def System_BJ_fittable(System_BJ,System_PyTorch):
+def System_bj_fittable(System_bj,System_pytorch):
     #make data
     #call Loss
     def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
@@ -239,7 +224,7 @@ def System_BJ_fittable(System_BJ,System_PyTorch):
         #returns parameters
         raise NotImplementedError
 
-def System_BJ_full(System_BJ_fittable):
+def System_BJ_full(System_bj_fittable):
     #y = B/F u + C/D v
     #yhat = BD u + (C-D)*yreal + (1-CF)*yhat
     #F = 1 + .. #nF

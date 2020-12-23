@@ -1,7 +1,7 @@
-from deepSI.systems.System import System_SS, System_IO
+from deepSI.systems.System import System_ss, System_io
 import numpy as np
 
-class sys_ss_test(System_SS): #discrate system single system
+class sys_ss_test(System_ss): #discrate system single system
     """docstring for test_system"""
     def __init__(self,seed=None):
         '''Noise, system setting and x0 settings'''

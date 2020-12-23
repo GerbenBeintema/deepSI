@@ -13,7 +13,7 @@ import tempfile
 import os.path
 from pathlib import Path
 
-from deepSI.system_data.datasets.dataset_utils import *
+from deepSI.datasets.dataset_utils import *
 
 
 def EMPS(dir_placement=None,vir_as_u=True,force_download=False,split_data=True):
