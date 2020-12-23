@@ -1,1 +1,1 @@
-from deepSI.controllers.Controller import Controller, controller_PID
+from deepSI.controllers.controller import Controller, Controller_pid

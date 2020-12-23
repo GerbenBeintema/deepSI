@@ -3,10 +3,10 @@ from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_s
 import torch
 from torch import nn
 
-class System_encoder(System_torch):
-    """docstring for System_encoder"""
+class SS_encoder(System_torch):
+    """docstring for SS_encoder"""
     def __init__(self, nx=10, na=20, nb=20):
-        super(System_encoder, self).__init__()
+        super(SS_encoder, self).__init__()
         self.nx, self.na, self.nb = nx, na, nb
         self.k0 = max(self.na,self.nb)
         
@@ -72,13 +72,13 @@ class System_encoder(System_torch):
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
 
-class System_encoder_no_input(System_encoder):
+class System_encoder_no_input(SS_encoder):
     pass #later
 
-class System_encoder_RNN(System_torch):
-    """docstring for System_encoder_RNN"""
+class SS_encoder_rnn(System_torch):
+    """docstring for SS_encoder_rnn"""
     def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
-        super(System_encoder_RNN, self).__init__(None,None)
+        super(SS_encoder_rnn, self).__init__(None,None)
         self.na = na
         self.nb = nb
         from deepSI.utils import simple_res_net, feed_forward_nn
@@ -147,11 +147,11 @@ class System_encoder_RNN(System_torch):
         return self.hn(output[:,0,:])[:,0].detach().numpy()
 
 if __name__ == '__main__':
-    sys = System_encoder()
-    from deepSI.datasets.SISTA_Database import powerplant
+    sys = SS_encoder()
+    from deepSI.datasets.sista_database import powerplant
     from deepSI.datasets import Silverbox
     train, test = powerplant()
-    train,test = train[:150], test[:50]
+    train, test = train[:150], test[:50]
     print(train, test)
     sys.fit(train, sim_val=test,epochs=50)
     train_predict = sys.apply_experiment(train)

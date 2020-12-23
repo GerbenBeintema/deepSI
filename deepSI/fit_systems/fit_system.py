@@ -390,12 +390,12 @@ if __name__ == '__main__':
     # fit_system, sys_data, sys_dict_choices={}, fit_dict_choices={}, sim_val=None, RMS=False, budget=20
     # print(min(result,key=lambda x: x['score']))
     print(results)
-    # sys = System_encoder(nx=8, na=50, nb=50)
+    # sys = SS_encoder(nx=8, na=50, nb=50)
     # sys0 = deepSI.systems.sys_ss_test()
     # sys_data = sys0.apply_experiment(System_data(u=np.random.normal(size=10000)))
 
     # sys = System_IO_fit_linear(7,3)
-    # sys = System_encoder(nx=8,na=20,nb=20)
+    # sys = SS_encoder(nx=8,na=20,nb=20)
     # sys_data = System_data(u=np.random.normal(size=100),y=np.random.normal(size=100))
     # sys.fit(train,epochs=1000,Loss_kwargs=dict(nf=15),batch_size=8,sim_val=None,optimizer_kwargs=dict(optimizer=optim.Adam,lr=1e-3))
     # print(sys.optimizer)

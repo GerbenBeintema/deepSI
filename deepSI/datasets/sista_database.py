@@ -2,7 +2,7 @@
 #https://homes.esat.kuleuven.be/~tokka/daisydata.html
 
 # from deepSI import System_data, System_data_list
-from deepSI.system_data.System_data import System_data, System_data_list
+from deepSI.system_data.system_data import System_data, System_data_list
 from deepSI.datasets.dataset_utils import get_work_dirs, cashed_download
 
 import os
@@ -13,7 +13,7 @@ import os.path
 
 
 
-def DaISy_download(url,dir_placement=None,download_size=None,force_download=False):    
+def daisydata_download(url,dir_placement=None,download_size=None,force_download=False):    
     dir_name = 'DaISy_data'
     save_dir = cashed_download(url,dir_name,dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     file = os.path.join(save_dir,url.split('/')[-1][:-3])
@@ -72,7 +72,7 @@ def destill(dir_placement=None,force_download=False,split_data=True,noise=10):
         Y_dest_n30=Y(:,10:12);
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/destill.dat.gz'
-    destill = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    destill = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     U=destill[:,:20]
     Y=destill[:,20:]
     U_dest=U[:,:5]
@@ -136,7 +136,7 @@ def glassfurnace(dir_placement=None,force_download=False,split_data=True):
         Y=glassfurnace(:,5:10);
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/glassfurnace.dat.gz'
-    glassfurnace = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    glassfurnace = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     U=glassfurnace[:,1:4]
     Y=glassfurnace[:,4:10]
     data = System_data(u=U,y=Y)
@@ -184,7 +184,7 @@ def powerplant(dir_placement=None,force_download=False,split_data=True):
         Yr=powerplant(:,9:11);
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/powerplant.dat.gz'
-    powerplant = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    powerplant = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     U=powerplant[:,0:5]
     Y=powerplant[:,5:8]
     Yr=powerplant[:,8:11]
@@ -236,7 +236,7 @@ def evaporator(dir_placement=None,force_download=False,split_data=True):
     Where:
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/evaporator.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1:4],y=data[:,4:7])
     return data.train_test_split() if split_data else data
 
@@ -283,7 +283,7 @@ def pHdata(dir_placement=None,force_download=False,split_data=True):
         Process industry systems
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/pHdata.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1:3],y=data[:,3])
     return data.train_test_split() if split_data else data
 
@@ -334,7 +334,7 @@ def pHdata(dir_placement=None,force_download=False,split_data=True):
 #         u3y2=distill_col(:,7);
 #     '''
 #     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/distill2.dat.gz'
-#     data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+#     data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
 
 
 
@@ -378,7 +378,7 @@ def dryer2(dir_placement=None,force_download=False,split_data=True):
             Y=dryer(:,5:7);
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/dryer2.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1:4],y=data[:,4:7])
     return data.train_test_split() if split_data else data
 
@@ -445,7 +445,7 @@ def exchanger(dir_placement=None,force_download=False,split_data=True):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/exchanger.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1],y=data[:,2])
     return data.train_test_split() if split_data else data
 
@@ -519,7 +519,7 @@ def winding(dir_placement=None,force_download=False,split_data=True):
         Industrial test setup
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/winding.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0:5],y=data[:,5:7])
     return data.train_test_split() if split_data else data
 
@@ -565,7 +565,7 @@ def cstr(dir_placement=None,force_download=False,split_data=True):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/cstr.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1],y=data[:,2:4])
     return data.train_test_split() if split_data else data
 
@@ -620,7 +620,7 @@ def steamgen(dir_placement=None,force_download=False,split_data=True):
         ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/espinosa/datasets/powplant.dat
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/process_industry/steamgen.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,1:5],y=data[:,5:])
     return data.train_test_split() if split_data else data
 
@@ -658,7 +658,7 @@ def ballbeam(dir_placement=None,force_download=False,split_data=True):
         Y=ballbeam(:,2);
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/ballbeam.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0],y=data[:,1])
     return data.train_test_split() if split_data else data
 
@@ -701,7 +701,7 @@ def dryer(dir_placement=None,force_download=False,split_data=True):
     Where:
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/dryer.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0],y=data[:,1])
     return data.train_test_split() if split_data else data
 
@@ -753,7 +753,7 @@ def CD_player_arm(dir_placement=None,force_download=False,split_data=True,data_s
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/CD_player_arm.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data0 = System_data(u=data[:,0],y=data[:,2])
     data1 = System_data(u=data[:,1],y=data[:,3])
     data_sets = System_data_list([data0,data1])
@@ -801,7 +801,7 @@ def flutter(dir_placement=None,force_download=False,split_data=True):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/flutter.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0],y=data[:,1])
     return data.train_test_split() if split_data else data
 
@@ -848,7 +848,7 @@ def robot_arm(dir_placement=None,force_download=False,split_data=True):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/robot_arm.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0],y=data[:,1])
     return data.train_test_split() if split_data else data
 
@@ -904,7 +904,7 @@ def flexible_structure(dir_placement=None,force_download=False,split_data=True):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/mechanical/flexible_structure.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0],y=data[:,1])
     return data.train_test_split() if split_data else data
 
@@ -948,7 +948,7 @@ def foetal_ecg(dir_placement=None,force_download=False,split_data=True):
         4
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/biomedical/foetal_ecg.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=None,y=data[:,1:9])
     return data.train_test_split() if split_data else data
 
@@ -1001,7 +1001,7 @@ def foetal_ecg(dir_placement=None,force_download=False,split_data=True):
 #         Biomedical systems
 #     '''
 #     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/biomedical/tongue.dat.gz'
-#     data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+#     data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
 
 
 
@@ -1058,7 +1058,7 @@ def erie(dir_placement=None,force_download=False,split_data=True,noise=10):
 
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/environmental/erie.dat.gz'
-    erie = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    erie = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     U=erie[:,:20]
     Y=erie[:,20:]
     U_erie=U[:,:5]
@@ -1121,7 +1121,7 @@ def thermic_res_wall(dir_placement=None,force_download=False,split_data=True):
     Where:
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/thermic/thermic_res_wall.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0:2],y=data[:,2])
     return data.train_test_split() if split_data else data
 
@@ -1165,7 +1165,7 @@ def heating_system(dir_placement=None,force_download=False,split_data=True):
     Where:
     '''
     url = 'ftp://ftp.esat.kuleuven.ac.be/pub/SISTA/data/thermic/heating_system.dat.gz'
-    data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+    data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
     data = System_data(u=data[:,0:2],y=data[:,2])
     return data.train_test_split() if split_data else data
 
@@ -1228,7 +1228,7 @@ def heating_system(dir_placement=None,force_download=False,split_data=True):
 #     print(matfile.keys())
 
 #     # url = 'url'
-#     # data = DaISy_download(url,dir_placement=dir_placement,force_download=force_download)
+#     # data = daisydata_download(url,dir_placement=dir_placement,force_download=force_download)
 
 
 def internet_traffic(dir_placement=None,force_download=False,split_data=True):

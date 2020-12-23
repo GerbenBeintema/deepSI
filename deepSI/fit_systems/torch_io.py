@@ -90,7 +90,7 @@ class Torch_io_siso(System_torch, System_io):
 
 if __name__ == '__main__':
     sys = Torch_io()
-    train, test = deepSI.datasets.SISTA_Database.winding()
+    train, test = deepSI.datasets.sista_database.winding()
     print(train.nu,test.ny)
     sys.fit(train,sim_val=test,batch_size=16)
     sys.save_system('../../testing/torchIO.system')

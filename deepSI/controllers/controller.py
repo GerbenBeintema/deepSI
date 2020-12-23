@@ -10,9 +10,9 @@ class Controller(object):
     def __call__(self,y):
         raise NotImplementedError
 
-class controller_PID(Controller):
+class Controller_pid(Controller):
     def __init__(self,kP,kD=0,kI=0):
-        super(controller_PID,self).__init__()
+        super(Controller_pid,self).__init__()
         self.kD = kD
         self.kP = kP
         self.kI = kI
@@ -38,7 +38,7 @@ class controller_PID(Controller):
         return u
 
 if __name__=='__main__':
-    controller = controller_PID(30,1000,0)
+    controller = Controller_pid(30,1000,0)
     controller.N_samples = 200
     # controller.r = np.sin(np.arange(controller.N_samples)/10)/2
     controller.r = (np.arange(controller.N_samples)>20)/5

@@ -12,7 +12,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 def linear_SI_benchmark():
-    sys_data_train, sys_data_test = deepSI.datasets.SISTA_Database.evaporator() #downloads and splits data into 75% train and 25% test
+    sys_data_train, sys_data_test = deepSI.datasets.sista_database.evaporator() #downloads and splits data into 75% train and 25% test
     #data sets consist of 3 inputs and 3 outputs and has 6k samples
 
     #create linear fit systems

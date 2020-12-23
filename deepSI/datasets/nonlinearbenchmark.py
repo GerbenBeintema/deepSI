@@ -5,7 +5,7 @@
 # A. Janot, M. Gautier and M. Brunot, Data Set and Reference Models of EMPS, 2019 Workshop on Nonlinear System Identification Benchmarks, Eindhoven, The Netherlands, April 10-12, 2019.
 
 import deepSI
-from deepSI.system_data.System_data import System_data, System_data_list
+from deepSI.system_data.system_data import System_data, System_data_list
 import os
 from scipy.io import loadmat
 

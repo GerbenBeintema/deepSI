@@ -4,4 +4,4 @@ Datasets
 
 .. automodule:: deepSI.datasets
 
-.. automodule:: deepSI.datasets.SISTA_Database
+.. automodule:: deepSI.datasets.sista_database

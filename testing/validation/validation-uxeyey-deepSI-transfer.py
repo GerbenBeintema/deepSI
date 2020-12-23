@@ -33,7 +33,7 @@ sys_uxyeye = uxyeye.fit_systems.statespace_encoder_system_base(na=50,nb=50,nx=8,
 # In[5]:
 
 
-sys_deepSI = deepSI.fit_systems.fit_system.System_encoder(nx=8,na=50,nb=50)
+sys_deepSI = deepSI.fit_systems.fit_system.SS_encoder(nx=8,na=50,nb=50)
 
 
 # In[12]:

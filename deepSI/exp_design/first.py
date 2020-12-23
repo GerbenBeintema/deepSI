@@ -1,8 +1,8 @@
 
 from deepSI.system_data import System_data, System_data_list, System_data_norm
 from deepSI.systems.System import System, Systems_gyms
-from deepSI.fit_systems.IO_systems import Torch_io
-from deepSI.fit_systems.encoder_systems import System_encoder
+from deepSI.fit_systems.torch_io import Torch_io
+from deepSI.fit_systems.encoder_systems import SS_encoder
 import numpy as np
 from tqdm.auto import tqdm
 from matplotlib import pyplot as plt
@@ -73,6 +73,6 @@ if __name__ == '__main__':
     # print(np.append(x,1))
     # print(x)
     sys = Systems_gyms('MountainCarContinuous-v0')
-    exp_gen = Exp_design_var_addive(sys, System_encoder, 3)
+    exp_gen = Exp_design_var_addive(sys, SS_encoder, 3)
     exp_gen.run()
 

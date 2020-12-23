@@ -7,10 +7,10 @@ from torch import nn
 import numpy as np
 
 
-class System_IO_auto_encoder(System_torch):
-    """docstring for System_encoder"""
+class IO_autoencoder(System_torch):
+    """docstring for SS_encoder"""
     def __init__(self, nz=4, na=5, nb=5):
-        super(System_IO_auto_encoder, self).__init__()
+        super(IO_autoencoder, self).__init__()
         self.nz, self.na, self.nb = nz, na, nb
         self.k0 = max(self.na,self.nb)
         
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     x = torch.randn(7,2,3)
     print(x.flatten(start_dim=1).shape)
     print(x.shape)
-    sys = System_IO_auto_encoder()
+    sys = IO_autoencoder()
     sys_data = System_data(u=np.random.normal(size=(1000,2)),y=np.random.normal(size=(1000,7)))
     sys.fit(sys_data,batch_size=64,verbose=2)
     sys_data_sim = sys.apply_experiment(sys_data)

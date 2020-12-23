@@ -1,6 +1,6 @@
 
 
-from deepSI.system_data.System_data import System_data, System_data_list
+from deepSI.system_data.system_data import System_data, System_data_list
 from deepSI.datasets.dataset_utils import *
 import numpy as np
 

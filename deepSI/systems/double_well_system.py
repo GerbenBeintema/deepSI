@@ -105,7 +105,7 @@ if __name__=='__main__':
             video.release()
 
 
-    #System_encoder
+    #SS_encoder
     # fit_sys = deepSI.fit_systems.Torch_io(na=4,nb=2)
     to_vid(train,'train_real.mp4')
     
@@ -113,7 +113,7 @@ if __name__=='__main__':
 
 
     if True:
-        fit_sys = deepSI.fit_systems.System_encoder(nx=5, na=12, nb=12)
+        fit_sys = deepSI.fit_systems.SS_encoder(nx=5, na=12, nb=12)
         fit_sys.fit(train[1000:].flatten(),verbose=2,epochs=15*60, Loss_kwargs=dict(nf=50),sim_val=train[:1000].flatten(),sim_val_fun='RMS')
         fit_sys.save_system('encoder_visual_sys')
     else:
