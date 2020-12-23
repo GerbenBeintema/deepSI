@@ -30,8 +30,8 @@ class System_IO_auto_encoder(System_PyTorch):
         nu = nu if nu is not None else 1
         #g_n decoder, g_inv_n encoder 
         self.g_n =         self.net(n_in=self.nz,                     n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.f_n =         self.net(n_in=self +self.nb*nu,  n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.g_inv_n =     self.net(n_in=ny,                  n_out=self.nz,         n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
+        self.f_n =         self.net(n_in=self.nz*self.na + self.nb*nu,n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
+        self.g_inv_n =     self.net(n_in=ny,                          n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.g_n.parameters()) + list(self.f_n.parameters()) + list(self.g_inv_n.parameters())
 
     def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
