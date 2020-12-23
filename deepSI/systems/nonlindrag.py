@@ -1,10 +1,10 @@
 
 import deepSI
-from deepSI.systems.System import System_ss, System_data, System_Deriv
+from deepSI.systems.System import System_ss, System_data, System_deriv
 import numpy as np
 
 
-class nonlindrag_sys(System_Deriv):
+class nonlindrag_sys(System_deriv):
     def __init__(self,dt=1, Fdrag = lambda v: -0.1*v):
         super(nonlindrag_sys,self).__init__(dt=dt,nx=1)
         self.Fdrag = Fdrag

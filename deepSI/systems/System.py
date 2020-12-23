@@ -202,11 +202,11 @@ class System_ss(System): #simple state space systems
         '''y[k] = h(x[k])'''
         raise NotImplementedError('f and h should be implemented in child')
 
-class System_Deriv(System_ss):
+class System_deriv(System_ss):
     def __init__(self,dt=None,nx=None,nu=None,ny=None):
         assert dt is not None
         self.dt = dt
-        super(System_Deriv,self).__init__(nx,nu,ny)
+        super(System_deriv,self).__init__(nx,nu,ny)
         
 
     def f(self,x,u):

@@ -1,7 +1,7 @@
 
 
 import deepSI
-from deepSI.systems.System import System, System_Deriv, System_data
+from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 from gym.spaces import Box
 

@@ -1,9 +1,9 @@
 
 import deepSI
-from deepSI.systems.System import System, System_Deriv, System_data
+from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 
-class Van_der_Pol_oscillator(System_Deriv):
+class Van_der_Pol_oscillator(System_deriv):
     """docstring for Van_der_Pol_oscillator"""
     def __init__(self, dt=0.2,mu=2.5):
         self.mu = mu

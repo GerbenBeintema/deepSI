@@ -1,6 +1,6 @@
 
 
-from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_torch
+from deepSI.fit_systems.fit_system import System_fittable, System_torch
 from deepSI.system_data import System_data
 import torch
 from torch import nn

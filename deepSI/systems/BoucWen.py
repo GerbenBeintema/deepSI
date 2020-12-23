@@ -1,9 +1,9 @@
 
-from deepSI import System_Deriv, System_data
+from deepSI import System_deriv, System_data
 from deepSI.system_data import datasets
 import numpy as np
 
-class BoucWen(System_Deriv):
+class BoucWen(System_deriv):
     def __init__(self,seed=None,dt=1/750,integration_factor=20):
         super(BoucWen,self).__init__(dt=dt/integration_factor,nx=3)
         self.mL = 2

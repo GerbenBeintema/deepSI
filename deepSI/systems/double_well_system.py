@@ -2,12 +2,12 @@
 
 
 import deepSI
-from deepSI.systems.System import System, System_Deriv, System_data
+from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 from gym.spaces import Box
 
 
-class double_well_system(System_Deriv): #discrate system single system
+class double_well_system(System_deriv): #discrate system single system
     """docstring for double_well_system
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)

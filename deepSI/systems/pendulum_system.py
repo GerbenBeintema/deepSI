@@ -1,10 +1,10 @@
 
 import deepSI
-from deepSI.systems.System import System, System_Deriv, System_data
+from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 
 
-class pendulum_system(System_Deriv): #discrate system single system
+class pendulum_system(System_deriv): #discrate system single system
     """docstring for pendulum_system
 
     th,omega = x

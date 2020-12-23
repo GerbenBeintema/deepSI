@@ -3,11 +3,11 @@
 # identification with neural networks
 
 import deepSI
-from deepSI.systems.System import System, System_Deriv, System_data
+from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 
 
-class Lorenz_attractor(System_Deriv): #discrate system single system
+class Lorenz_attractor(System_deriv): #discrate system single system
     """
     Description:
         lorenz attractor learning envoriement
