@@ -106,7 +106,7 @@ if __name__=='__main__':
 
 
     #System_encoder
-    # fit_sys = deepSI.fit_systems.System_IO_pytorch(na=4,nb=2)
+    # fit_sys = deepSI.fit_systems.Torch_io(na=4,nb=2)
     to_vid(train,'train_real.mp4')
     
 

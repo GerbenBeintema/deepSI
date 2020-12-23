@@ -21,7 +21,7 @@ class System_fittable(System):
         self.fitted = True
 
 
-class System_pytorch(System_fittable):
+class System_torch(System_fittable):
     def init_nets(self,nu,ny):
         #returns parameters
         raise NotImplementedError
@@ -194,7 +194,7 @@ class System_pytorch(System_fittable):
                 print('Error loading key',key)
 
 
-def System_bj_fittable(System_bj,System_pytorch):
+def System_bj_fittable(System_bj,System_torch):
     #make data
     #call Loss
     def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
@@ -366,7 +366,7 @@ if __name__ == '__main__':
     #         super(System_IO_fit_linear,self).__init__(na,nb,linear_model.Lasso(alpha=alpha))
 
     train, test = deepSI.datasets.Cascaded_Tanks()
-    # sys = deepSI.fit_systems.System_IO_pytorch(na=5,nb=5)
+    # sys = deepSI.fit_systems.Torch_io(na=5,nb=5)
 
     #self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac=0.2, sim_val_fun='NRMS'
     fit_dict_choices=dict(Loss_kwargs=dict(nf=[5,10,20,30]),verbose=0)
@@ -374,12 +374,12 @@ if __name__ == '__main__':
     # print(fit_dict_choices)
     # print(sample_dict(fit_dict_choices))
 
-    # result = random_search(deepSI.fit_systems.System_IO_pytorch, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
+    # result = random_search(deepSI.fit_systems.Torch_io, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
     results = grid_search(deepSI.fit_systems.statespace_linear_system, train, sys_dict_choices=dict(nx=[1,2,3,4,5,6,7]), fit_dict_choices=dict(SS_A_stability=[False,True],SS_f=[8,10,15,20,25,40]), sim_val=test, RMS=False, verbose=2)
 
-        # result = random_search(deepSI.fit_systems.System_IO_pytorch, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
+        # result = random_search(deepSI.fit_systems.Torch_io, train, sys_dict_choices=dict(na=[1,2,4,8],nb=[1,2,4,8]), fit_dict_choices=dict(epochs=10,sim_val=train,verbose=0,Loss_kwargs=dict(nf=20)), sim_val=test, budget=20)
 
-    # all_results = random_search(fit_system=deepSI.fit_systems.System_IO_pytorch, sys_data=train, sys_dict_choices=dict(na=[1,2,3,4,5],nb=[1,2,3,4]), fit_dict_choices=dict(sim_val=[train],verbose=[1]),budget=5)
+    # all_results = random_search(fit_system=deepSI.fit_systems.Torch_io, sys_data=train, sys_dict_choices=dict(na=[1,2,3,4,5],nb=[1,2,3,4]), fit_dict_choices=dict(sim_val=[train],verbose=[1]),budget=5)
     # print(all_results)
 
     # result = grid_search(System_IO_fit_linear, train, sys_dict_choices=dict(na=range(1,10),nb=range(1,10)), fit_dict_choices={}, sim_val=test, RMS=False, verbose=1)

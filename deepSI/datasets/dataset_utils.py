@@ -21,7 +21,7 @@ def get_work_dirs():
 
         data_sets : cache location of the downloaded data sets
 
-        checkpoints : used during training of pytorch models
+        checkpoints : used during training of torch models
 
     Returns
     -------
@@ -61,7 +61,7 @@ def clear_cache():
         pass
 
 def clear_checkpoints():
-    '''Delete all saved pytorch checkpoints'''
+    '''Delete all saved torch checkpoints'''
     checkpoints_dir = get_work_dirs()['checkpoints']
     try:
         shutil.rmtree(checkpoints_dir)

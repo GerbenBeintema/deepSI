@@ -1,14 +1,14 @@
 
-from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_pytorch
+from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_torch
 from deepSI.systems.System import System_io
 import deepSI
 import torch
 from torch import nn
 
 
-class System_IO_pytorch(System_pytorch, System_io):
+class Torch_io(System_torch, System_io):
     def __init__(self,na=5,nb=5):
-        super(System_IO_pytorch,self).__init__(na=na,nb=nb)
+        super(Torch_io,self).__init__(na=na,nb=nb)
         
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.net = simple_res_net
@@ -21,7 +21,6 @@ class System_IO_pytorch(System_pytorch, System_io):
         nf = Loss_kwargs.get('nf',25)
         return sys_data.to_hist_future_data(na=self.na,nb=self.nb, nf=nf, force_multi_u=True, force_multi_y=True) #returns np.array(uhist),np.array(yhist),np.array(ufuture),np.array(yfuture)
     
-
     def init_nets(self, nu, ny): # a bit weird
         self.ny_real = ny
         self.nu, self.ny = nu if nu is not None else 1, ny if ny is not None else 1 #multi y multi u
@@ -58,9 +57,9 @@ class System_IO_pytorch(System_pytorch, System_io):
                 return yout
 
 
-class System_IO_SISO_pytorch(System_pytorch, System_io):
+class Torch_io_siso(System_torch, System_io):
     def __init__(self,na,nb):
-        super(System_IO_SISO_pytorch, self).__init__(na,nb)
+        super(Torch_io_siso, self).__init__(na,nb)
 
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
@@ -90,12 +89,12 @@ class System_IO_SISO_pytorch(System_pytorch, System_io):
 
 
 if __name__ == '__main__':
-    sys = System_IO_pytorch()
+    sys = Torch_io()
     train, test = deepSI.datasets.SISTA_Database.winding()
     print(train.nu,test.ny)
     sys.fit(train,sim_val=test,batch_size=16)
-    sys.save_system('../../testing/pytorchIO.system')
-    sys = deepSI.load_system('../../testing/pytorchIO.system')
+    sys.save_system('../../testing/torchIO.system')
+    sys = deepSI.load_system('../../testing/torchIO.system')
     test_predict = sys.apply_experiment(test)
     test.plot()
     test_predict.plot(show=True)

@@ -1,7 +1,7 @@
 
 from deepSI.system_data import System_data, System_data_list, System_data_norm
 from deepSI.systems.System import System, Systems_gyms
-from deepSI.fit_systems.IO_systems import System_IO_pytorch
+from deepSI.fit_systems.IO_systems import Torch_io
 from deepSI.fit_systems.encoder_systems import System_encoder
 import numpy as np
 from tqdm.auto import tqdm

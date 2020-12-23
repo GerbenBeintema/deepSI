@@ -1,9 +1,9 @@
 
-from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_pytorch
+from deepSI.fit_systems.fit_system import System_fittable, random_search, grid_search, System_torch
 import torch
 from torch import nn
 
-class System_encoder(System_pytorch):
+class System_encoder(System_torch):
     """docstring for System_encoder"""
     def __init__(self, nx=10, na=20, nb=20):
         super(System_encoder, self).__init__()
@@ -75,7 +75,7 @@ class System_encoder(System_pytorch):
 class System_encoder_no_input(System_encoder):
     pass #later
 
-class System_encoder_RNN(System_pytorch):
+class System_encoder_RNN(System_torch):
     """docstring for System_encoder_RNN"""
     def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
         super(System_encoder_RNN, self).__init__(None,None)

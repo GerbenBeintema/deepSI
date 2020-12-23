@@ -9,7 +9,7 @@ Install anaconda python 3.8>=version>=3.6
 
 .. code:: sh
 
-    conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch 
+    conda install torch torchvision torchaudio cudatoolkit=10.2 -c torch 
     pip install -e .
 
 
