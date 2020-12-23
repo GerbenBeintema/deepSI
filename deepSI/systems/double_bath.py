@@ -3,10 +3,10 @@ from deepSI.systems.System import System_ss, System_data
 from deepSI import fit_systems
 import numpy as np
 
-class double_bath_system(System_ss):
+class Double_bath(System_ss):
     def __init__(self,k1=0.5,k2=0.4,k3=0.2,k4=0.3,sigmaw=0.,sigmav=0.,):
         self.sigmav=sigmav
-        super(double_bath_system, self).__init__(nx=2)
+        super(Double_bath, self).__init__(nx=2)
         self.k1=k1
         self.k2=k2
         self.k3=k3
@@ -47,7 +47,7 @@ class double_bath_system(System_ss):
         return self.apply_experiment(exp)
 
 if __name__ == '__main__':
-    sys = double_bath_system()
+    sys = Double_bath()
     sys_data = sys.get_train_data()
 
     SYS = fit_systems.System_IO_fit_linear

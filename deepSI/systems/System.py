@@ -413,7 +413,7 @@ if __name__ == '__main__':
     # print(sys.step(1))
     # sys_data = sys.apply_experiment(exp)
     # # sys_data.plot(show=True)
-    # sys = deepSI.systems.sys_ss_test()
+    # sys = deepSI.systems.SS_test()
     # sys_data = sys.apply_experiment(exp)
     # sys_data.plot()
 

@@ -1,6 +1,7 @@
 
-from deepSI import System_deriv, System_data
-from deepSI.system_data import datasets
+from deepSI.systems.System import System_deriv
+from deepSI import datasets
+from deepSI.system_data import System_data
 import numpy as np
 
 class BoucWen(System_deriv):

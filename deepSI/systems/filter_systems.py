@@ -28,10 +28,10 @@ class Filter_system(System):
         exp = System_data(u=np.random.normal(size=1000))
         return self.apply_experiment(exp)
 
-class cheby1(Filter_system):
-    """docstring for cheby1"""
+class Cheby1(Filter_system):
+    """docstring for Cheby1"""
     def __init__(self, order=4, rp=5, Wn=0.1,btype='low', analog=False):
-        super(cheby1, self).__init__()
+        super(Cheby1, self).__init__()
         from scipy import signal
         self.b, self.a = signal.cheby1(order,rp,Wn,btype,analog=analog) 
         self.a /= 1.05
@@ -43,10 +43,10 @@ class cheby1(Filter_system):
         self.name = 'cheby1'
         self.settings = {**self.settings,**dict(name=self.name,order=order,rp=rp,Wn=Wn,btype=btype,analog=analog)} #todo seed?
 
-class butter(Filter_system):
-    """todo: fix cheby1"""
+class Butter(Filter_system):
+    """todo: fix butter"""
     def __init__(self, order=4, Wn=0.1, btype='low', analog=False):
-        super(butter, self).__init__()
+        super(Butter, self).__init__()
         from scipy import signal
         self.b, self.a = signal.butter(order,Wn,btype,analog=analog)
         self.a /= 1.05

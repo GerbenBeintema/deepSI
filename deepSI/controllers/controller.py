@@ -42,7 +42,7 @@ if __name__=='__main__':
     controller.N_samples = 200
     # controller.r = np.sin(np.arange(controller.N_samples)/10)/2
     controller.r = (np.arange(controller.N_samples)>20)/5
-    sys = deepSI.systems.pendulum_system()
+    sys = deepSI.systems.Pendulum()
     data = sys.apply_controller(controller,N_samples=controller.N_samples)
     plt.plot(data.y)
     plt.plot(controller.r)

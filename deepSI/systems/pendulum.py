@@ -4,8 +4,8 @@ from deepSI.systems.System import System, System_deriv, System_data
 import numpy as np
 
 
-class pendulum_system(System_deriv): #discrate system single system
-    """docstring for pendulum_system
+class Pendulum(System_deriv): #discrate system single system
+    """docstring for Pendulum
 
     th,omega = x
     dth/dt = omega
@@ -14,12 +14,11 @@ class pendulum_system(System_deriv): #discrate system single system
     I = m L^2, 
     domega/dt = u -  g/L sin(th) - Fc omega
 
-
     """
     def __init__(self, dt=None, omega0 = 1, Fc=0.1,lin=False,):
         '''Noise, system setting and x0 settings'''
         dt = min(Fc/5,1/omega0/5) if dt is None else dt
-        super(pendulum_system, self).__init__(dt=dt,nx=2)
+        super(Pendulum, self).__init__(dt=dt,nx=2)
         self.omega0 = omega0 #tau = 1/omega = 1
         self.Fc = Fc #tau = 10
         self.lin = lin
@@ -40,7 +39,7 @@ class pendulum_system(System_deriv): #discrate system single system
 
 if __name__=='__main__':
     from matplotlib import pyplot as plt
-    sys = pendulum_system()
+    sys = Pendulum()
     train = sys.get_train_data()
     test = sys.get_test_data()
     # fit_sys = deepSI.fit_systems.NN_ARX_multi(nf=60)

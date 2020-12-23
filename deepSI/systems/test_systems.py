@@ -4,11 +4,11 @@ from deepSI.systems.System import System_ss, System_data
 import numpy as np
 
 
-class test_system(System_ss): #discrate system single system
-    """docstring for test_system"""
+class Test_ss_linear1(System_ss): #discrate system single system
+    """docstring for Test_ss_linear1"""
     def __init__(self):
         '''Noise, system setting and x0 settings'''
-        super(test_system, self).__init__(nx=2)
+        super(Test_ss_linear1, self).__init__(nx=2)
 
     def f(self,x,u):
         x1,x2 = x
@@ -20,14 +20,14 @@ class test_system(System_ss): #discrate system single system
         x1,x2 = x
         return x1
 
-class  linear_gaussian_system(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
+class  Test_ss_linear2(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
     """xk+1 = [[0.7,0.8],[0,0.1]] xk + [-1,0.1]*uk + nuk
        yk = xk[0] + wk
        nuk = N(0,0.5) x 2
        wk = N(0,1)"""
     def __init__(self):
         '''Noise, system setting and x0 settings'''
-        super(linear_gaussian_system, self).__init__(nx=2)
+        super(Test_ss_linear2, self).__init__(nx=2)
 
     def f(self,x,u):
         x1,x2 = x
@@ -41,6 +41,6 @@ class  linear_gaussian_system(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
 
 
 if __name__=='__main__':
-    lingaus = linear_gaussian_system()
+    lingaus = Test_ss_linear2()
     lingaus.get_test_data().plot(show=True)
 
