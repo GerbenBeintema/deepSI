@@ -2,13 +2,13 @@
 
 
 import deepSI
-from deepSI.systems.System import System, System_deriv, System_data
+from deepSI.systems.system import System, System_deriv, System_data
 import numpy as np
 from gym.spaces import Box
 
 
-class double_well_system(System_deriv): #discrate system single system
-    """docstring for double_well_system
+class Double_potential_well(System_deriv): #discrate system single system
+    """docstring for Double_potential_well
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)
     v' = -(x-a) if x>0 else (x+a) + u #+ resistance 
@@ -22,7 +22,7 @@ class double_well_system(System_deriv): #discrate system single system
         self.Fmax = Fmax
         self.gamma = 1/(Nresist*2*np.pi)
         dt = 2*np.pi/20 #20 points in the sin
-        super(double_well_system, self).__init__(dt=dt,nx=2)
+        super(Double_potential_well, self).__init__(dt=dt,nx=2)
         self.action_space = Box(-float(-1),float(1),shape=tuple())
 
     def reset(self):
@@ -41,8 +41,8 @@ class double_well_system(System_deriv): #discrate system single system
     def h(self,x):
         return x[0] #return position
 
-class double_well_video_system(double_well_system): #discrate system single system
-    """docstring for double_well_system
+class Double_potential_well_video(Double_potential_well): #discrate system single system
+    """docstring for Double_potential_well_video
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)
     v' = -(x-a) if x>0 else (x+a) + u #+ resistance 
@@ -52,7 +52,7 @@ class double_well_video_system(double_well_system): #discrate system single syst
     """
     def __init__(self, a=1, Fmax=0.25,Nresist=0.7):
         self.ny_vid, self.nx_vid = 30, 10
-        super(double_well_video_system, self).__init__(a=a,Fmax=Fmax,Nresist=Nresist)
+        super(Double_potential_well_video, self).__init__(a=a,Fmax=Fmax,Nresist=Nresist)
         self.observation_space = Box(0.,1.,shape=(20,100))
         
 

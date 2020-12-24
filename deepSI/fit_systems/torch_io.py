@@ -1,13 +1,13 @@
 
 from deepSI.fit_systems.fit_system import System_fittable, System_torch
-from deepSI.systems.System import System_io
+from deepSI.systems.system import System_io
 import deepSI
 import torch
 from torch import nn
 
 
 class Torch_io(System_torch, System_io):
-    def __init__(self,na=5,nb=5):
+    def __init__(self, na=5, nb=5):
         super(Torch_io,self).__init__(na=na,nb=nb)
         
         from deepSI.utils import simple_res_net, feed_forward_nn
@@ -27,7 +27,7 @@ class Torch_io(System_torch, System_io):
         self.gn = self.net(n_in=self.nb*self.nu+self.na*self.ny, n_out=self.ny, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.gn.parameters())
 
-    def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         Loss = torch.zeros(1,dtype=yhist.dtype,device=yhist.device)[0]
         for unow, ynow in zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1)): #unow = (Nsamples, nu), ynow = (Nsamples, ny)
             g_in = torch.cat([torch.flatten(uhist, start_dim=1), torch.flatten(yhist, start_dim=1)],axis=1)
@@ -38,7 +38,7 @@ class Torch_io(System_torch, System_io):
         Loss /= ufuture.shape[1]
         return Loss
 
-    def multi_IO_step(self,uy):
+    def multi_io_step(self,uy):
         # uy #(N_samples, uy len)
         with torch.no_grad():
             yout = self.gn(torch.tensor(uy,dtype=torch.float32)).detach().numpy()
@@ -47,7 +47,7 @@ class Torch_io(System_torch, System_io):
             else:
                 return yout
 
-    def IO_step(self,uy):
+    def io_step(self,uy):
         # uy #(uy len)
         with torch.no_grad():
             yout = self.gn(torch.tensor(uy[None,:],dtype=torch.float32))[0].detach().numpy()
@@ -76,10 +76,10 @@ class Torch_io_siso(System_torch, System_io):
         self.net = nn.Sequential(*IN)
         return self.net.parameters()
 
-    def CallLoss(self,hist,Y, **kwargs):
+    def loss(self,hist,Y, **kwargs):
         return torch.mean((self.net(hist)[:,0]-Y)**2)
 
-    def IO_step(self,uy):
+    def io_step(self,uy):
         uy = torch.tensor(uy,dtype=torch.float32)
         if uy.ndim==1:
             uy = uy[None,:]

@@ -1,5 +1,5 @@
 
-from deepSI.systems.System import System_ss, System_data
+from deepSI.systems.system import System_ss, System_data
 from deepSI import fit_systems
 import numpy as np
 

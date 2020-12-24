@@ -1,4 +1,4 @@
-from deepSI.systems.System import System, System_ss, System_data
+from deepSI.systems.system import System, System_ss, System_data
 from deepSI.fit_systems import System_fittable
 import deepSI
 import numpy as np
@@ -330,7 +330,7 @@ if __name__=='__main__':
     # sys_data_fitted.plot()
     # print(sys_data_fitted.NMSE(sys_data))
 
-    sys = deepSI.systems.nonlin_Ibased_normals_system()
+    sys = deepSI.systems.Nonlin_io_normals()
     train_data = sys.get_train_data()
     sys_data = sys.get_test_data()
 

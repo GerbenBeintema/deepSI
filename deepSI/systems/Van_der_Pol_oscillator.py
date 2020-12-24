@@ -1,13 +1,13 @@
 
 import deepSI
-from deepSI.systems.System import System, System_deriv, System_data
+from deepSI.systems.system import System, System_deriv, System_data
 import numpy as np
 
-class Van_der_Pol_oscillator(System_deriv):
-    """docstring for Van_der_Pol_oscillator"""
+class Van_der_pol_oscillator(System_deriv):
+    """docstring for Van_der_pol_oscillator"""
     def __init__(self, dt=0.2,mu=2.5):
         self.mu = mu
-        super(Van_der_Pol_oscillator, self).__init__(nx=2,dt=dt)
+        super(Van_der_pol_oscillator, self).__init__(nx=2,dt=dt)
 
     def reset(self):
         x = np.random.uniform(low=[-3,-3],high=[3,3],size=(2,))
@@ -27,6 +27,6 @@ class Van_der_Pol_oscillator(System_deriv):
 
 
 if __name__ == '__main__':
-    sys = Van_der_Pol_oscillator()
+    sys = Van_der_pol_oscillator()
     sys_data = sys.apply_experiment(System_data(u=0*np.sin(np.linspace(0,2*np.pi*20,num=10000))))
     sys_data[:1000].plot(show=True)

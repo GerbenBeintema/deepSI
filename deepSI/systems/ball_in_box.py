@@ -3,12 +3,12 @@
 
 
 import deepSI
-from deepSI.systems.System import System, System_deriv, System_data
+from deepSI.systems.system import System, System_deriv, System_data
 import numpy as np
 from gym.spaces import Box
 
 
-class ball_in_box_system(System_deriv): #discrate system single system
+class Ball_in_box(System_deriv): #discrate system single system
     """docstring for double_well_system
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)
@@ -22,7 +22,7 @@ class ball_in_box_system(System_deriv): #discrate system single system
         self.Fmax = Fmax
         dt = 2*np.pi/20 #20 points in the sin
         self.gamma = Fmax*dt/0.1 # ux*dt/gamma = X=0.1
-        super(ball_in_box_system, self).__init__(dt=dt,nx=2)
+        super(Ball_in_box, self).__init__(dt=dt,nx=2)
         self.action_space = Box(float(-1),float(1),shape=(2,))
 
     def reset(self):
@@ -40,7 +40,7 @@ class ball_in_box_system(System_deriv): #discrate system single system
     def h(self,x):
         return x[0],x[1] #return position
 
-class ball_in_box_video_system(ball_in_box_system): #discrate system single system
+class Ball_in_box(Ball_in_box): #discrate system single system
     """docstring for double_well_system
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)
@@ -51,7 +51,7 @@ class ball_in_box_video_system(ball_in_box_system): #discrate system single syst
     """
     def __init__(self, Fmax=0.25):
         self.ny_vid, self.nx_vid = 25, 25
-        super(ball_in_box_video_system, self).__init__(Fmax=Fmax)
+        super(Ball_in_box, self).__init__(Fmax=Fmax)
         self.observation_space = Box(0.,1.,shape=(self.nx_vid,self.ny_vid))
         
 
@@ -65,7 +65,7 @@ class ball_in_box_video_system(ball_in_box_system): #discrate system single syst
         return A #return position
 
 if __name__ == '__main__':
-    sys = ball_in_box_video_system() 
+    sys = Ball_in_box() 
     exp = System_data(u=[sys.action_space.sample() for i in range(1000)])
     print(sys.action_space.low)
     sys_data = sys.apply_experiment(exp)

@@ -1,6 +1,6 @@
 
 import deepSI
-from deepSI.systems.System import System_ss, System_data
+from deepSI.systems.system import System_ss, System_data
 import numpy as np
 
 

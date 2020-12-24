@@ -1,5 +1,5 @@
 
-from deepSI.systems.System import System, System_io, System_data, load_system, System_bj
+from deepSI.systems.system import System, System_io, System_data, load_system, System_bj
 import numpy as np
 from deepSI.datasets import get_work_dirs
 import deepSI
@@ -61,7 +61,7 @@ class System_torch(System_fittable):
                 Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
-                    Loss_val = self.CallLoss(*data_val,**Loss_kwargs).item()
+                    Loss_val = self.loss(*data_val,**Loss_kwargs).item()
             time_val += time.time() - t_start_val
             if append: self.Loss_val.append(Loss_val) 
             if self.bestfit>Loss_val:
@@ -124,7 +124,7 @@ class System_torch(System_fittable):
                     def closure(backward=True):
                         global time_loss, time_back
                         start_t_loss = time.time()
-                        Loss = self.CallLoss(*train_batch, **Loss_kwargs)
+                        Loss = self.loss(*train_batch, **Loss_kwargs)
                         time_loss += time.time() - start_t_loss
                         if backward:
                             self.optimizer.zero_grad()
@@ -143,7 +143,7 @@ class System_torch(System_fittable):
                 Loss_val = validation()
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
-                    # print('train Loss:',self.CallLoss(*data_train, **Loss_kwargs).item(), 'val:',self.CallLoss(*data_val, **Loss_kwargs).item() )
+                    # print('train Loss:',self.loss(*data_train, **Loss_kwargs).item(), 'val:',self.loss(*data_val, **Loss_kwargs).item() )
                     print(f'Epoch: {epoch+1:4} Training loss: {self.Loss_train[-1]:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
                 # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
@@ -152,7 +152,7 @@ class System_torch(System_fittable):
         self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system()
 
-    def CallLoss(*args,**kwargs):
+    def loss(*args,**kwargs):
         #kwargs are the settings
         #args is the data
         raise NotImplementedError

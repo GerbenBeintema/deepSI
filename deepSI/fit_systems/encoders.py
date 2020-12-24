@@ -31,7 +31,7 @@ class SS_encoder(System_torch):
         self.hn =      self.net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
-    def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
+    def loss(self, hist, ufuture, yfuture, **Loss_kwargs):
         x = self.encoder(hist)
         y_predict = []
         for u in torch.transpose(ufuture,0,1):
@@ -72,9 +72,6 @@ class SS_encoder(System_torch):
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
 
-class System_encoder_no_input(SS_encoder):
-    pass #later
-
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
     def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
@@ -113,7 +110,7 @@ class SS_encoder_rnn(System_torch):
         self.hn =      self.net(n_in=self.hidden_size,n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.encoder.parameters()) + list(self.rnn.parameters()) + list(self.hn.parameters())
 
-    def CallLoss(self, hist, ufuture, yfuture, **Loss_kwargs):
+    def loss(self, hist, ufuture, yfuture, **Loss_kwargs):
         x = self.encoder(hist) # (s, nhist = nb + na) -> (s, hidden_size*num_layers)
         h_0 = x.view(-1, self.num_layers, self.hidden_size).permute(1,0,2)   # to (num_layers, s, hidden_size)
 

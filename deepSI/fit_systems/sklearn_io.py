@@ -1,6 +1,6 @@
 
 from deepSI.fit_systems.fit_system import System_fittable
-from deepSI.systems.System import System, System_io, System_data, load_system
+from deepSI.systems.system import System, System_io, System_data, load_system
 
 class Sklearn_io(System_fittable, System_io):
     def __init__(self, na, nb, reg):
@@ -12,7 +12,7 @@ class Sklearn_io(System_fittable, System_io):
         hist, y = sys_data.to_IO_data(na=self.na,nb=self.nb)
         self.reg.fit(hist, y)
 
-    def IO_step(self,uy):
+    def io_step(self,uy):
         return self.reg.predict([uy])[0] if uy.ndim==1 else self.reg.predict(uy)
 
 from sklearn import linear_model 
@@ -24,7 +24,7 @@ class Sklearn_io_linear(Sklearn_io):
 if __name__ == '__main__':
     import numpy as np
     from matplotlib import pyplot as plt
-    sys = deepSI.systems.Wiener_sys_ID_book()
+    sys = deepSI.systems.Wiener_sysid_book()
     sys_data = sys.apply_experiment(System_data(u=np.random.normal(scale=0.1,size=400)))
     sys = Sklearn_io_linear(na=2,nb=1)
     sys.fit(sys_data)

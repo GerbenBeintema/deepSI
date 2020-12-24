@@ -1,4 +1,4 @@
-from deepSI.systems.System import System, System_io, System_data
+from deepSI.systems.system import System, System_io, System_data
 import numpy as np
 import deepSI
 

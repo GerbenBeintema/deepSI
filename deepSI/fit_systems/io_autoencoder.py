@@ -34,7 +34,7 @@ class IO_autoencoder(System_torch):
         self.g_inv_n =     self.net(n_in=ny,                          n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         return list(self.g_n.parameters()) + list(self.f_n.parameters()) + list(self.g_inv_n.parameters())
 
-    def CallLoss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         #uhist (s, nb, nu)
         #yhist (s, na, ny)
         #ufuture (s, nf=1, nu) (not used)

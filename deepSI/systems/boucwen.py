@@ -1,12 +1,12 @@
 
-from deepSI.systems.System import System_deriv
+from deepSI.systems.system import System_deriv
 from deepSI import datasets
 from deepSI.system_data import System_data
 import numpy as np
 
-class BoucWen(System_deriv):
+class Bouc_wen(System_deriv):
     def __init__(self,seed=None,dt=1/750,integration_factor=20):
-        super(BoucWen,self).__init__(dt=dt/integration_factor,nx=3)
+        super(Bouc_wen,self).__init__(dt=dt/integration_factor,nx=3)
         self.mL = 2
         self.cL = 10
         self.kL = 5*10**4
@@ -39,7 +39,7 @@ class BoucWen(System_deriv):
         exp.y,ytijd = None,exp.y
         from scipy import signal
 
-        sys_data = super(BoucWen, self).apply_experiment(exp)
+        sys_data = super(Bouc_wen, self).apply_experiment(exp)
         sys_data = sys_data.down_sample_by_average(self.integration_factor)
 
         b,a = signal.butter(4, 350/sys_data.N_samples,'low',analog=False)
@@ -51,9 +51,9 @@ class BoucWen(System_deriv):
 
 if __name__=='__main__':
     from matplotlib import pyplot as plt
-    sys = BoucWen(seed=None,integration_factor=20)
+    sys = Bouc_wen(seed=None,integration_factor=20)
 
-    val_multi, val_sinesweep = datasets.BoucWen(dir_placement=None, force_download=False, split_data=False).sdl
+    val_multi, val_sinesweep = datasets.Bouc_wen(dir_placement=None, force_download=False, split_data=False).sdl
     val_multi_reproduce = sys.apply_experiment(val_multi)
     # factor = 20
     val_multi.plot()

@@ -266,7 +266,7 @@ class System_io(System):
     def step(self,action):
         self.uhist.append(action)
         uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhist).flat),axis=0) #might not be the quickest way
-        yout = self.IO_step(uy)
+        yout = self.io_step(uy)
         self.yhist.append(yout)
         self.yhist.pop(0)
         self.uhist.pop(0)
@@ -275,16 +275,16 @@ class System_io(System):
     def step_multi(self,actions):
         self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         uy = np.concatenate([self.uhist.reshape(self.uhist.shape[0],-1),self.yhist.reshape(self.uhist.shape[0],-1)],axis=1) ######todo MIMO
-        yout = self.multi_IO_step(uy)
+        yout = self.multi_io_step(uy)
         self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
         self.uhist = self.uhist[:,1:]
         return yout
 
-    def IO_step(self,uy):
-        raise NotImplementedError('IO_step should be implemented in child')
+    def io_step(self,uy):
+        raise NotImplementedError('io_step should be implemented in child')
 
-    def multi_IO_step(self,uy):
-        return self.IO_step(uy)
+    def multi_io_step(self,uy):
+        return self.io_step(uy)
 
 class System_bj(System):
     #yhat_{t} = f(u_{t-nb:t-1},yhat_{t-na:t-1},y_{t-nc:t-1})
@@ -392,7 +392,7 @@ class System_bj(System):
     #continue here
     # make apply_BJ_experiment
     # make make_fit_data or something
-    # make CallLoss
+    # make loss
 
 
 
@@ -408,7 +408,7 @@ if __name__ == '__main__':
     print(sys_data)
     sys_data.plot(show=True)
 
-    # sys = deepSI.systems.nonlin_Ibased_normals_system()
+    # sys = deepSI.systems.Nonlin_io_normals()
     # exp = System_data(u=np.random.normal(scale=2,size=100))
     # print(sys.step(1))
     # sys_data = sys.apply_experiment(exp)

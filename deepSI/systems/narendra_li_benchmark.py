@@ -1,12 +1,9 @@
-
-
 import deepSI
-from deepSI.systems.System import System_ss, System_data
+from deepSI.systems.system import System_ss, System_data
 import numpy as np
 
 class NarendraLiBenchmark(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
-    """docstring for Test_ss_linear1
-"""
+    """docstring for NarendraLiBenchmark"""
     def __init__(self):
         '''Noise, system setting and x0 settings'''
         super(NarendraLiBenchmark, self).__init__(nx=2)

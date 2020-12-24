@@ -4,11 +4,11 @@
 
 
 import deepSI
-from deepSI.systems.System import System, System_deriv, System_data
+from deepSI.systems.system import System, System_deriv, System_data
 import numpy as np
 
 
-class nonlinear_RLC(System_deriv): #discrate system single system
+class Nonlinear_rlc(System_deriv): #discrate system single system
     """docstring for nonlinear_RLC
 
     th,omega = x
