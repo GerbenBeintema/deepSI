@@ -43,7 +43,8 @@ class System_torch(System_fittable):
         raise NotImplementedError
 
 
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, optimizer_kwargs={}, sim_val=None, verbose=1, val_frac=0.2, sim_val_fun='NRMS'):
+    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, \
+        optimizer_kwargs={}, sim_val=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS'):
         #todo implement verbose
 
         #1. init funcs already happened
@@ -52,6 +53,7 @@ class System_torch(System_fittable):
         #4. optimization
 
         def validation(append=True):
+            self.eval(); self.cpu();
             global time_val
             t_start_val = time.time()
             if sim_val is not None:
@@ -68,6 +70,9 @@ class System_torch(System_fittable):
                 if verbose: print(f'########## new best ########### {Loss_val}')
                 self.checkpoint_save_system()
                 self.bestfit = Loss_val
+            if cuda: 
+                self.cuda()
+            self.train()
             return Loss_val
 
         if self.fitted==False:
@@ -104,7 +109,7 @@ class System_torch(System_fittable):
 
         global time_val, time_loss, time_back #time keeping
         time_val = time_back = time_loss = 0
-        Loss_val = validation(append=False) #add to cpu/to cuda in validation?
+        Loss_val = validation(append=False) #Also switches to cuda if indicated
         time_val = 0 #reset
         N_training_samples = len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
@@ -119,7 +124,7 @@ class System_torch(System_fittable):
                 Loss_acc = 0
                 for i in range(batch_size, N_training_samples + 1, batch_size):
                     ids_batch = ids[i-batch_size:i]
-                    train_batch = [part[ids_batch] for part in data_train] #add cuda?
+                    train_batch = [(part[ids_batch] if not cuda else part[ids_batch].cuda()) for part in data_train] #add cuda?
 
                     def closure(backward=True):
                         global time_loss, time_back
@@ -148,6 +153,7 @@ class System_torch(System_fittable):
                 # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
+        self.train(); self.cpu();
         self.Loss_val, self.Loss_train, self.batch_id, self.time = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time)
         self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system()
@@ -175,7 +181,7 @@ class System_torch(System_fittable):
         self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time = out_real
         # self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val, self.Loss_train, self.batch_id, self.time
         
-    def _save_system_torch(self,file):
+    def _save_system_torch(self, file):
         save_dict = {}
         for d in dir(self):
             if d in ['random']: #exclude random
@@ -184,7 +190,7 @@ class System_torch(System_fittable):
             if isinstance(attribute,(nn.Module,optim.Optimizer)):
                 save_dict[d] = attribute.state_dict()
         torch.save(save_dict,file)
-    def _load_system_torch(self,file):
+    def _load_system_torch(self, file):
         save_dict = torch.load(file)
         for key in save_dict:
             attribute = self.__getattribute__(key)
@@ -192,6 +198,28 @@ class System_torch(System_fittable):
                 attribute.load_state_dict(save_dict[key])
             except (AttributeError, ValueError):
                 print('Error loading key',key)
+
+    ### CPU & CUDA ###
+    def cuda(self):
+        self.to_device('cuda')
+    def cpu(self):
+        self.to_device('cpu')
+    def to_device(self,device):
+        for d in dir(self):
+            attribute = self.__getattribute__(d)
+            if isinstance(attribute,nn.Module):
+                attribute.to(device)
+
+    def eval(self):
+        for d in dir(self):
+            attribute = self.__getattribute__(d)
+            if isinstance(attribute,nn.Module):
+                attribute.eval()
+    def train(self):
+        for d in dir(self):
+            attribute = self.__getattribute__(d)
+            if isinstance(attribute,nn.Module):
+                attribute.train()
 
 if __name__ == '__main__':
     pass
