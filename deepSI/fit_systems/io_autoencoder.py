@@ -8,7 +8,7 @@ import numpy as np
 
 
 class IO_autoencoder(System_torch):
-    """docstring for SS_encoder"""
+    """docstring for IO_autoencoder"""
     def __init__(self, nz=4, na=5, nb=5):
         super(IO_autoencoder, self).__init__()
         self.nz, self.na, self.nb = nz, na, nb

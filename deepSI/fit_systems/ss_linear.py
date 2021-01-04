@@ -251,7 +251,7 @@ class SS_linear(System_ss, System_fittable):
         if A is not None:
             self.fitted = True
             nx = A.shape[0]
-            self.ny = C.shape[0]
+            self.ny = C.shape[0] if C.shape[0]!=1 else None
             self.nu = B.shape[1]
         super(SS_linear, self).__init__(nx=nx)
 
@@ -261,7 +261,6 @@ class SS_linear(System_ss, System_fittable):
 
         y = sys_data.y.T if sys_data.y.ndim==2 else sys_data.y.T[None,:] #work with (features,time)
         u = sys_data.u.T if sys_data.u.ndim==2 else sys_data.u.T[None,:] #work with (features,time)
-        self.ny, self.nu = y.shape[0], u.shape[0]
 
         # SS_f = 20 #future steps?
         SS_fixed_order = self.nx
@@ -290,8 +289,6 @@ class SS_linear(System_ss, System_fittable):
         self.B = T@self.B
         self.C = self.C@Tinv
         self._nx = A.shape[0]
-        self.ny = C.shape[0]
-        self.nu = B.shape[1]
 
 
     def f(self,x,u):
@@ -305,7 +302,7 @@ class SS_linear(System_ss, System_fittable):
         # if u.ndim==0:
         #     u = u[None]
         yhat = np.dot(self.C, x) #+ np.dot(self.D, u)
-        return yhat[0] if self.ny==1 or self.ny==None else yhat
+        return yhat[0] if (self.ny==None) else yhat
 
 
 

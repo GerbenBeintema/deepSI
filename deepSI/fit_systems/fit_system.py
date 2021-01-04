@@ -7,9 +7,17 @@ import torch
 from torch import nn, optim
 from tqdm.auto import tqdm
 import time
+from pathlib import Path
+import os.path
 
 class System_fittable(System):
-    """docstring for System_fit"""
+    """Subclass of system which introduces a .fit method which calls ._fit to fit the systems
+
+    Notes
+    -----
+    This function will automaticly fit the normalization in self.norm if self.use_norm is set to True (default). 
+    Lastly it will set self.fitted to True which will keep the norm constant. 
+    """
     def fit(self, sys_data, **kwargs):
         if self.fitted==False:
             if self.use_norm: #if the norm is not used you can also manually initialize it.
@@ -17,17 +25,91 @@ class System_fittable(System):
                 self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
-        self._fit(self.norm.transform(sys_data), **kwargs) #transform data to fittable data?
+        self._fit(self.norm.transform(sys_data), **kwargs)
         self.fitted = True
+
+    def _fit(self, normed_sys_data, **kwargs):
+        raise NotImplementedError('_fit or fit should be implemented in subclass')
 
 
 class System_torch(System_fittable):
-    def init_nets(self,nu,ny):
-        #returns parameters
-        raise NotImplementedError
+    '''For systems that utilize torch
 
-    def init_optimizer(self,parameters,**optimizer_kwargs):
-        #return the optimizer with a optimizer.zero_grad and optimizer.step method
+    Attributes
+    ----------
+    parameters : list
+        The list of fittable network parameters returned by System_torch.init_nets(nu,ny)
+    optimizer : torch.Optimizer
+        The main optimizer returned by System_torch.init_optimizer
+    time : numpy.ndarray
+        Current runtime after each epoch
+    batch_id : numpy.ndarray
+        Current total number of batch optimization steps is saved after each epoch
+    Loss_train : numpy.ndarray
+        Average training loss for each epoch
+    Loss_val : numpy.ndarray
+        Validation loss for each epoch
+
+    Notes
+    -----
+    subclasses should define three methods
+    (i) init_nets(nu, ny) which returns the network parameters, 
+    (ii) make_training_data(sys_data, **loss_kwargs)` which converts the normed sys_data into training data (list of numpy arrays),
+    (iii) loss(*training_data, **loss_kwargs) which returns the loss using the current training data
+    '''
+    def init_nets(self, nu, ny):
+        '''Defined in subclass and initializes networks and returns the parameters
+
+        Parameters
+        ----------
+        nu : None, int or tuple
+            The shape of the input u
+        ny : None, int or tuple
+            The shape of the output y
+
+        Returns
+        -------
+        parameters : list
+            List of the network parameters
+        '''
+        raise NotImplementedError('init_nets should be implemented in subclass')
+
+    def make_training_data(self, sys_data, **loss_kwargs):
+        '''Defined in subclass which converts the normed sys_data into training data
+
+        Parameters
+        ----------
+        sys_data : System_data or System_data_list
+            Already normalized
+        loss_kwargs : dict
+            loss function settings passed into .fit
+        '''
+        assert sys_data.normed == True
+        raise NotImplementedError('make_training_data should be implemented in subclass')
+
+    def loss(*training_data_batch, **loss_kwargs):
+        '''Defined in subclass which take the batch data and calculates the loss based on loss_kwargs
+
+        Parameters
+        ----------
+        training_data_batch : list
+            batch of the training data returned by make_training_data and converted to torch arrays
+        loss_kwargs : dict
+            loss function settings passed into .fit
+        '''
+        raise NotImplementedError('loss should be implemented in subclass')
+
+    def init_optimizer(self, parameters, **optimizer_kwargs):
+        '''Optionally defined in subclass to create the optimizer
+
+        Parameters
+        ----------
+        parameters : list
+            system torch parameters
+        optimizer_kwargs : dict
+            If 'optimizer' is defined than that optimizer will be used otherwise Adam will be used.
+            The other parameters will be passed to the optimizer as a kwarg.
+        '''
         if optimizer_kwargs.get('optimizer') is not None:
             from copy import deepcopy
             optimizer_kwargs = deepcopy(optimizer_kwargs) #do not modify the original kwargs, is this necessary
@@ -37,37 +119,52 @@ class System_torch(System_fittable):
             optimizer = torch.optim.Adam
         return optimizer(parameters,**optimizer_kwargs) 
 
-    def make_training_data(self,sys_data, **Loss_kwargs):
-        assert sys_data.normed == True
-        #should be implemented in child
-        raise NotImplementedError
-
-
-    def fit(self, sys_data, epochs=30, batch_size=256, Loss_kwargs={}, \
+    def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, \
         optimizer_kwargs={}, sim_val=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS'):
-        #todo implement verbose
+        '''The default batch optimization method 
 
-        #1. init funcs already happened
-        #2. init optimizer
-        #3. training data
-        #4. optimization
-
+        Parameters
+        ----------
+        sys_data : System_data or System_data_list
+            the system data to be fitted
+        epochs : int
+        batch_size : int
+        loss_kwargs : dict
+            kwargs to be passed on to make_training_data and init_optimizer
+        optimizer_kwargs : dict
+            kwargs to be passed on to init_optimizer
+        sim_val : System_data or System_data_list
+            the system data to be used as simulation validation using apply_experiment
+        verbose : int
+            set to 0 for a silent run
+        cuda : bool
+            if cuda will be used (often slower than not using it, be aware)
+        val_frac : float
+            if sim_val is absent a portion will be splitted from the training data to act as validation set using the loss method.
+        sim_val_fun : str
+            method on system_data invoked if sim_val is used.
+        
+        Notes
+        -----
+        This method implements a batch optimization method in the following way; each epoch the training data is scrambled and batched where each batch
+        is passed to the loss method and utilized to optimize the parameters. After each epoch the systems is validated using the evaluation of a 
+        simulation or a validation split and saved if a new lowest validation loss has been achieved. 
+        After training (which can be stopped at any moment using a KeyboardInterrupt) the system is loaded with the lowest validation loss. 
+        '''
         def validation(append=True):
             self.eval(); self.cpu();
             global time_val
             t_start_val = time.time()
             if sim_val is not None:
                 sim_val_predict = self.apply_experiment(sim_val)
-                #I can transform sim_val_predict and sim_val with self.norm for a controllable NRMS
-                
                 Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
-                    Loss_val = self.loss(*data_val,**Loss_kwargs).item()
+                    Loss_val = self.loss(*data_val,**loss_kwargs).item()
             time_val += time.time() - t_start_val
             if append: self.Loss_val.append(Loss_val) 
             if self.bestfit>Loss_val:
-                if verbose: print(f'########## new best ########### {Loss_val}')
+                if verbose: print(f'########## New lowest validation loss achieved ########### {Loss_val}')
                 self.checkpoint_save_system()
                 self.bestfit = Loss_val
             if cuda: 
@@ -81,8 +178,8 @@ class System_torch(System_fittable):
                 self.norm.fit(sys_data)
             self.nu = sys_data.nu
             self.ny = sys_data.ny
-            self.paremters = list(self.init_nets(self.nu,self.ny))
-            self.optimizer = self.init_optimizer(self.paremters,**optimizer_kwargs)
+            self.parameters = list(self.init_nets(self.nu,self.ny))
+            self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs)
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time = np.array([]), np.array([]), np.array([]), np.array([])
             self.batch_counter = 0
@@ -94,7 +191,7 @@ class System_torch(System_fittable):
 
 
         sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
-        data_full = self.make_training_data(sys_data, **Loss_kwargs)
+        data_full = self.make_training_data(sys_data, **loss_kwargs)
         data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full] #add cuda?
 
 
@@ -129,7 +226,7 @@ class System_torch(System_fittable):
                     def closure(backward=True):
                         global time_loss, time_back
                         start_t_loss = time.time()
-                        Loss = self.loss(*train_batch, **Loss_kwargs)
+                        Loss = self.loss(*train_batch, **loss_kwargs)
                         time_loss += time.time() - start_t_loss
                         if backward:
                             self.optimizer.zero_grad()
@@ -148,33 +245,22 @@ class System_torch(System_fittable):
                 Loss_val = validation()
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
-                    # print('train Loss:',self.loss(*data_train, **Loss_kwargs).item(), 'val:',self.loss(*data_val, **Loss_kwargs).item() )
                     print(f'Epoch: {epoch+1:4} Training loss: {self.Loss_train[-1]:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
-                # print(f'epoch={epoch} NRMS={Loss_val:9.4%} Loss={Loss_acc:.5f}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
         self.train(); self.cpu();
         self.Loss_val, self.Loss_train, self.batch_id, self.time = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time)
         self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system()
-
-    def loss(*args,**kwargs):
-        #kwargs are the settings
-        #args is the data
-        raise NotImplementedError
     
     ########## Saving and loading ############
-    def checkpoint_save_system(self,name='_best'):
-        from pathlib import Path
-        import os.path
-        directory  = get_work_dirs()['checkpoints']
+    def checkpoint_save_system(self, name='_best', directory=None):
+        directory  = get_work_dirs()['checkpoints'] if directory is None else directory
         self._save_system_torch(file=os.path.join(directory,self.name+name+'.pth')) #error here if you have 
         vars = self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time
         np.savez(os.path.join(directory,self.name+name+'.npz'),*vars)
-    def checkpoint_load_system(self,name='_best'):
-        from pathlib import Path
-        import os.path
-        directory  = get_work_dirs()['checkpoints'] 
+    def checkpoint_load_system(self, name='_best', directory=None):
+        directory  = get_work_dirs()['checkpoints'] if directory is None else directory
         self._load_system_torch(file=os.path.join(directory,self.name+name+'.pth'))
         out = np.load(os.path.join(directory,self.name+name+'.npz'))
         out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
@@ -209,7 +295,6 @@ class System_torch(System_fittable):
             attribute = self.__getattribute__(d)
             if isinstance(attribute,nn.Module):
                 attribute.to(device)
-
     def eval(self):
         for d in dir(self):
             attribute = self.__getattribute__(d)

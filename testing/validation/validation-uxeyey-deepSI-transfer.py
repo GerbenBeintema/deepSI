@@ -69,7 +69,7 @@ sys_deepSI.fit(sys_train_deepSI, epochs=0, verbose=1, batch_size=1024, Loss_kwar
 
 from torch import optim
 
-sys_deepSI.optimizer = optim.Adam(sys_deepSI.paremters)
+sys_deepSI.optimizer = optim.Adam(sys_deepSI.parameters)
 
 
 # In[10]:

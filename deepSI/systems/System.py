@@ -4,43 +4,78 @@ import numpy as np
 from matplotlib import pyplot as plt
 import pickle
 from secrets import token_urlsafe
+import copy
+import gym
+from gym.spaces import Box
 
 def load_system(file):
     """This is not a safe function, only use on trusted files"""
     return pickle.load(open(file,'rb'))
 
 class System(object):
-    # action_space, observation_space = None, None #backwards  
+    '''The base System class
+
+    Attributes
+    ----------
+    action_space : gym.space or None
+        the input shape of input u. (None is a single unbounded float)
+    observation_space : gym.space or None
+        The input shape of output y. (None is a single unbounded float)
+    norm : instance of System_data_norm
+        Used in most fittable systems to normalize the input output.
+    fitted : Boole
+    unique_code : str
+        Some random unique 4 digit code (can be used for saving/loading)
+    name : str
+        concatenation of the the class name and the unique code
+    use_norm : bool
+    seed : int
+        random seed
+    random : np.random.RandomState
+        unique random generated initialized with seed (only created ones called)
+    '''
     def __init__(self, action_space=None, observation_space=None):
-        #implement action_space observation space later
+        '''Create a System
+
+        Parameters
+        ----------
+        action_space : gym.space or None
+            the input shape of input u. (None is a single unbounded float)
+        observation_space : gym.space or None
+            The input shape of output y. (None is a single unbounded float)
+        '''
         self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
         self.fitted = False
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
         self.name = self.__class__.__name__ + '_' + self.unique_code
         self.seed = 42
-        self.use_norm = True #can be changed later 
+        self.use_norm = True #can be changed later
 
     @property
     def random(self): #gets created ones called, this is to make pickle more stable between different version of numpy
         if not hasattr(self,'_random'):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
-    
-    def apply_controller(self,controller,N_samples):
-        Y = []
-        U = []
-        obs = self.reset() #normed obs
-        for i in range(N_samples):
-            Y.append(obs)
-            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd #transform y and inverse transform resulting action
-            U.append(action)
-            obs = self.step(action)
-        # Y = Y[:-1]
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
 
+    def apply_experiment(self, sys_data): #can put this in apply controller
+        '''Do a experiment with for given system data (fixed u)
 
-    def apply_experiment(self,sys_data): #can put this in apply controller
+        Parameters
+        ----------
+        sys_data : System_data or System_data_list (or list or tuple)
+            The experiment which should be applied
+
+        Notes
+        -----
+        This will initialize the state using self.init_state if sys_data.y (and u)
+        is not None and skip the appropriate number of steps associated with it.
+        If either is missing than self.reset() is used to initialize the state. 
+        Afterwards this state is advanced using sys_data.u and the output is saved at each step.
+        Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
+        that it can be accounted for later.
+        '''
+
         if isinstance(sys_data,(tuple,list,System_data_list)):
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         Y = []
@@ -59,32 +94,77 @@ class System(object):
                 action = U[k]
                 obs = self.step(action)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
+    
+    def apply_controller(self,controller,N_samples):
+        '''Same as self.apply_experiment but with a controller
+
+        Parameters
+        ----------
+        controller : callable
+            when called with the current output it return the next action/input that should be taken
+
+        Notes
+        -----
+        This method is in a very early state and will probably be changed in the near future.
+        '''
+        Y = []
+        U = []
+        obs = self.reset() #normed obs
+        for i in range(N_samples):
+            Y.append(obs)
+            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd #transform y and inverse transform resulting action
+            U.append(action)
+            obs = self.step(action)
+        # Y = Y[:-1]
+        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
 
     def init_state(self, sys_data):
-        '''sys_data is already normed'''
+        '''Initialize the internal state of the model using the start of sys_data
+
+        Returns
+        -------
+        Output : an observation (e.g. floats)
+            The observation/predicted state at time step k0
+        k0 : int
+            number of steps that should be skipped
+
+        Notes
+        -----
+        Example: x0 = encoder(u[t-k0:k0],yhist[t-k0:k0]), and return h(x0), k0
+        This function is often overwritten in child. As default it will return self.reset(), 0 
+        '''
         return self.reset(), 0
 
-    def init_state_multi(self, sys_data, dilation=1):
-        '''sys_data is already normed'''
-        raise NotImplementedError('init_state_multi should be implemented in child')
+    def init_state_multi(self, sys_data, nf=None, dilation=1):
+        '''Similar to init_state but to initialize multiple states 
+           (used in self.n_step_error and self.one_step_ahead)
 
-    def step(self,action):
-        '''Applies the action to the systems and returns the new observation'''
-        raise NotImplementedError('one_step_ahead should be implemented in child')
+            Parameters
+            ----------
+            sys_data : System_data
+                Data used to initialize the state
+            nf : int
+                skip the nf last states
+            dilation: int
+                number of states between each state
+           '''
+        raise NotImplementedError('init_state_multi should be implemented in subclass')
+
+    def step(self, action):
+        '''Applies the action to the system and returns the new observation, 
+        should always be overwritten in subclass'''
+        raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
     def step_multi(self,actions):
+        '''Applies the actions to the system and returns the new observations'''
         return self.step(actions)
 
     def reset(self):
         '''Should reset the internal state and return the current obs'''
-        raise NotImplementedError('one_step_ahead should be implemented in child')
+        raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
-    def reset_multi(self,n):
-        '''Should reset the internal state and return the current obs'''
-        raise NotImplementedError('reset_multi is to be implemented')
-
-
-    def one_step_ahead(self,sys_data):
+    def one_step_ahead(self, sys_data):
+        '''One step ahead prediction'''
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data)
@@ -94,11 +174,18 @@ class System(object):
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
     def n_step_error(self,sys_data,nf=100,dilation=1,RMS=False):
-        # 1. init a multi state
-        # do the normal loop, 
-        # how to deal with list sys_data?
-        # raise NotImplementedError('n_step_error is to be implemented')
+        '''Calculate the expected error after taking n=1...nf steps.
 
+        Parameters
+        ----------
+        sys_data : System_data
+        nf : int
+            upper bound of n.
+        dilation : int
+            passed to init_state_multi to reduce memory cost.
+        RMS : boole
+            flag to toggle between NRMS and RMS
+         '''
         if isinstance(sys_data,(list,tuple)):
             sys_data = System_data_list(sys_data)
             # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
@@ -115,14 +202,14 @@ class System(object):
             obs = self.step_multi(unow)
         return np.array(Losses)
 
-    def n_step_error_slow(self,sys_data,nf=100):
-        '''Slow variant of n_step_error'''
-        # do it in a for loop
-        # for k in range(len(sys_data)-nf-k0?):
-        #     init state
-        raise NotImplementedError('one_step_ahead is to be implemented')
-
     def save_system(self,file):
+        '''Save the system using pickle
+
+        Notes
+        -----
+        This can be quite unstable for long term storage or switching between versions of this and other modules.
+        Consider manually creating a save_system function for a long term solution.
+        '''
         pickle.dump(self, open(file,'wb'))
 
     def __repr__(self):
@@ -133,21 +220,25 @@ class System(object):
         else:
             return f'System: {self.name}, action_space={self.action_space}, observation_space={self.observation_space}'
 
-    def get_train_data(self):
-        exp = System_data(u=self.random.uniform(-2,2,size=10**4))
+    def sample_system(self,N_sampes=10**4):
+        '''Mostly used for testing purposes it, will apply random actions on the system'''
+        if self.action_space is None:
+            exp = System_data(u=self.random.uniform(-2,2,size=N_sampes))
+        else:
+            s = copy.deepcopy(self.action_space)
+            if isinstance(s,gym.spaces.Box):
+                if np.isscalar(s.low):
+                    s.low[1 - np.isfinite(s.low)] = -2
+                    s.high[1 - np.isfinite(s.high)] = 2
+                else:
+                    s.low = np.max([s.low, -2])
+                    s.high = np.min([s.high, 2])
+            exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
-
-    def get_test_data(self):
-        exp = System_data(u=self.random.uniform(-2,2,size=10**3))
-        return self.apply_experiment(exp)
-
-import gym
-from gym.spaces import Box
 
 class Systems_gyms(System):
     """docstring for Systems_gyms"""
     def __init__(self, env, env_kwargs=dict(), n=None):
-        
         if isinstance(env,gym.Env):
             assert n==None, 'if env is already a gym environment than n cannot be given'
             self.env = env
@@ -168,7 +259,8 @@ class Systems_gyms(System):
         return obs
 
 class System_ss(System): #simple state space systems
-    def __init__(self,nx,nu=None,ny=None):
+    '''Derived state-space system with continues u, x, y vectors or scalars'''
+    def __init__(self, nx, nu=None, ny=None):
         action_shape = tuple() if nu is None else (nu,)
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'),float('inf'),shape=action_shape)
@@ -186,10 +278,6 @@ class System_ss(System): #simple state space systems
         self.x = np.zeros((self.nx,))
         return self.h(self.x)
 
-    def reset_multi(self,n):
-        self.x = np.zeros((n,self.nx))
-        return self.h(self.x)
-
     def step(self,action):
         self.x = self.f(self.x,action)
         return self.h(self.x)
@@ -203,6 +291,8 @@ class System_ss(System): #simple state space systems
         raise NotImplementedError('f and h should be implemented in child')
 
 class System_deriv(System_ss):
+    ''''''
+
     def __init__(self,dt=None,nx=None,nu=None,ny=None):
         assert dt is not None
         self.dt = dt

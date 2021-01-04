@@ -18,11 +18,10 @@ Quick start
 
 a quick example
 
-
-.. doctest::
-    >>> import deepSI
-    >>> import numpy as np
-    >>> from matplotlib import pyplot as plt
+>>> import deepSI
+>>> import numpy as np
+>>> from matplotlib import pyplot as plt
+>>> 
 
 
 Structure of deepSI
