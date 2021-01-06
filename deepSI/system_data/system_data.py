@@ -325,7 +325,7 @@ class System_data(object):
 
     def __sub__(self,other): 
         '''Calculate the difference between y two System_data a number or array'''
-        if isinstance(other,System_data):
+        if isinstance(other, System_data):
             assert len(self.y)==len(other.y), 'both arguments need to be the same length'
             return System_data(u=self.u, x=self.x, y=self.y-other.y, cheat_n=self.cheat_n)
         else:
@@ -512,12 +512,13 @@ class System_data_list(System_data):
         return self.weighted_mean([sd.VAF(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
 
     def __sub__(self,other):
-        if isinstance(other,(float,int,np.ndarray,System_data)):
+        if isinstance(other,System_data_list):            
+            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-sdo.y, cheat_n=sd.cheat_n) for sd, sdo in zip(self.sdl,other.sdl)])
+        elif isinstance(other,(float,int,np.ndarray,System_data)):
             if isinstance(other, System_data):
                 other = other.y
             return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-other, cheat_n=sd.cheat_n) for sd in self.sdl])
-        elif isinstance(other,System_data_list):            
-            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-sdo.y, cheat_n=sd.cheat_n) for sd,sdo in zip(self.sdl,other.sdl)])
+
 
     def train_test_split(self,split_fraction=0.25):
         '''return 2 data sets of length n*(1-split_fraction) and n*split_fraction respectively (left, right) split'''

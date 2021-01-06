@@ -6,7 +6,7 @@ import numpy as np
 
 
 class Nonlin_drag(System_deriv):
-    def __init__(self,dt=1, Fdrag = lambda v: -0.1*v):
+    def __init__(self, dt=1, Fdrag = lambda v: -0.1*v):
         super(Nonlin_drag,self).__init__(dt=dt,nx=1)
         self.Fdrag = Fdrag
 

@@ -20,7 +20,7 @@ def linear_SI_example():
     B = np.array([[0.3], [2.5]]) #(2,1) x<-u
     C = np.array([[0.7, 1.]]) #(1,2) y<-u
     D = np.array([[0.0]]) #(1,1) 
-    sys0 = deepSI.fit_systems.statespace_linear_system(A=A,B=B,C=C,D=D)
+    sys0 = deepSI.fit_systems.SS_linear(A=A,B=B,C=C,D=D)
 
     ## Generate experiment
     sys_data_train = deepSI.System_data(u=np.random.normal(size=1000))
@@ -33,7 +33,7 @@ def linear_SI_example():
 
 
     #create linear fit systems
-    fit_sys_SS = deepSI.fit_systems.statespace_linear_system(nx=2)
+    fit_sys_SS = deepSI.fit_systems.SS_linear(nx=2)
     fit_sys_IO = deepSI.fit_systems.System_IO_fit_linear(na=4,nb=4)
 
     fit_sys_SS.fit(sys_data_train)

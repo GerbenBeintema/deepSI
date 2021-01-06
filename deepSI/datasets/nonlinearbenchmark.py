@@ -42,19 +42,33 @@ def EMPS(dir_placement=None,vir_as_u=True,force_download=False,split_data=True):
 
 
 def CED(dir_placement=None,force_download=False,split_data=True):
-    '''The coupled electric drives consists of two electric motors that drive a pulley using a flexible belt. The pulley is held by a spring, resulting in a lightly damped dynamic mode. The electric drives can be individually controlled allowing the tension and the speed of the belt to be simultaneously controlled. The drive control is symmetric around zero, hence both clockwise and counter clockwise movement is possible. The focus is only on the speed control system. The angular speed of the pulley is measured as an output with a pulse counter and this sensor is insensitive to the sign of the velocity. The available data sets are short, which constitute a challenge when performing identification.
+    '''The coupled electric drives consists of two electric motors that drive a pulley using a flexible belt. 
+    The pulley is held by a spring, resulting in a lightly damped dynamic mode. The electric drives can
+    be individually controlled allowing the tension and the speed of the belt to be simultaneously controlled. 
+    The drive control is symmetric around zero, hence both clockwise and counter clockwise movement is possible.
+    The focus is only on the speed control system. The angular speed of the pulley is measured as an output with
+    a pulse counter and this sensor is insensitive to the sign of the velocity. The available data sets are short,
+    which constitute a challenge when performing identification.
 
-    The provided data is part of a technical note available online through this link. The provided Coupled Electric Drives datasets are available for download here. This zip-file contains the system description and available data sets, both in the .csv and .mat file format.
+    The provided data is part of a technical note available online through this link. 
+    The provided Coupled Electric Drives datasets are available for download here. 
+    This zip-file contains the system description and available data sets, both in 
+    the .csv and .mat file format.
 
     Please refer to the Coupled Electric Drives dataset as:
 
-    T. Wigren and M. Schoukens, Coupled Electric Drives Data Set and Reference Models, Technical Report, Department of Information Technology, Uppsala University, Department of Information Technology, Uppsala University, 2017.
+    T. Wigren and M. Schoukens, Coupled Electric Drives Data Set and Reference Models, 
+    Technical Report, Department of Information Technology, Uppsala University, 
+    Department of Information Technology, Uppsala University, 2017.
 
-    Previously published results on the Coupled Electric Drives benchmark are listed in the history section of this webpage.
+    Previously published results on the Coupled Electric Drives benchmark are listed in 
+    the history section of this webpage.
 
     Special thanks to Torbjön Wigren for making this dataset available.
 
-    NOTE: We are re-evaluating the continuous-time models reported in the technical note. For now, the discrete-time model reported in eq. (9) of the technical note can be used in combination of PRBS dataset with amplitude 1.'''
+    NOTE: We are re-evaluating the continuous-time models reported in the technical note. 
+    For now, the discrete-time model reported in eq. (9) of the technical note can be used 
+    in combination of PRBS dataset with amplitude 1.'''
 
     #http://www.it.uu.se/research/publications/reports/2017-024/2017-024-nc.pdf
     url = 'http://www.it.uu.se/research/publications/reports/2017-024/CoupledElectricDrivesDataSetAndReferenceModels.zip'
@@ -62,7 +76,7 @@ def CED(dir_placement=None,force_download=False,split_data=True):
     save_dir = cashed_download(url,'CED',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     
     # there is something not right with this data set. 
-    datasets = []
+    # datasets = []
     # d = 'DATAPRBS.MAT'
     # # for d in [,'DATAUNIF.MAT']:
     # matfile = loadmat(os.path.join(save_dir,d))

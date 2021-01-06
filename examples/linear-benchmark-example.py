@@ -1,4 +1,4 @@
-
+ 
 #! /usr/bin/env python3
 #
 # This is an example shows application of linear system identification
@@ -28,7 +28,7 @@ def linear_SI_benchmark():
     #                     fit_dict_choices=dict(SS_A_stability=[True],SS_f=[10,20,40,60,80]))
     # print(best_score,best_sys_dict)
 
-    fit_sys_SS = deepSI.fit_systems.statespace_linear_system(nx=8)
+    fit_sys_SS = deepSI.fit_systems.SS_linear(nx=8)
     fit_sys_IO = deepSI.fit_systems.System_IO_fit_linear(na=1,nb=10)
 
     fit_sys_SS.fit(sys_data_train,SS_f=40)
