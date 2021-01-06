@@ -29,7 +29,7 @@ def linear_SI_benchmark():
     # print(best_score,best_sys_dict)
 
     fit_sys_SS = deepSI.fit_systems.SS_linear(nx=8)
-    fit_sys_IO = deepSI.fit_systems.System_IO_fit_linear(na=1,nb=10)
+    fit_sys_IO = deepSI.fit_systems.Sklearn_io_linear(na=1,nb=10)
 
     fit_sys_SS.fit(sys_data_train,SS_f=40)
     fit_sys_IO.fit(sys_data_train)
