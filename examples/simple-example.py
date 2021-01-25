@@ -2,7 +2,7 @@ import deepSI
 import numpy as np
 from matplotlib import pyplot as plt
 
-class My_system(deepSI.System_ss):
+class My_system(deepSI.System_ss): 
     def __init__(self):
         super(My_system,self).__init__(nx=2)
     def f(self, x, u):
