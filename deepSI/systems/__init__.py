@@ -14,5 +14,5 @@ from deepSI.systems.nonlin_drag import Nonlin_drag, Coupled_electric_drive
 from deepSI.systems.lorenz_attractor import Lorenz_attractor
 from deepSI.systems.van_der_pol_oscillator import Van_der_pol_oscillator
 from deepSI.systems.double_well import Double_potential_well, Double_potential_well_video
-from deepSI.systems.ball_in_box import Ball_in_box, Ball_in_box
+from deepSI.systems.ball_in_box import Ball_in_box, Ball_in_box_video
 from deepSI.systems.boucwen import Bouc_wen

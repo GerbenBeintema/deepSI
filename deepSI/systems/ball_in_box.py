@@ -40,7 +40,7 @@ class Ball_in_box(System_deriv): #discrate system single system
     def h(self,x):
         return x[0],x[1] #return position
 
-class Ball_in_box(Ball_in_box): #discrate system single system
+class Ball_in_box_video(Ball_in_box): #discrate system single system
     """docstring for double_well_system
 
     V(x) = 1/2*min((x-a)**2,(x+a)**2)
