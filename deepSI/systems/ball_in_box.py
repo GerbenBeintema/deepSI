@@ -51,7 +51,7 @@ class Ball_in_box_video(Ball_in_box): #discrate system single system
     """
     def __init__(self, Fmax=0.25):
         self.ny_vid, self.nx_vid = 25, 25
-        super(Ball_in_box, self).__init__(Fmax=Fmax)
+        super(Ball_in_box_video, self).__init__(Fmax=Fmax)
         self.observation_space = Box(0.,1.,shape=(self.nx_vid,self.ny_vid))
         
 
