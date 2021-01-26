@@ -265,17 +265,17 @@ class System_ss(System): #simple state space systems
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'),float('inf'),shape=action_shape)
         observation_space = Box(-float('inf'),float('inf'),shape=observation_shape)
-        super(System_ss,self).__init__(action_space,observation_space)
+        super(System_ss,self).__init__(action_space, observation_space)
 
         assert nx is not None
         self.nx = nx
         self.nu = nu
         self.ny = ny
 
-        self.x = np.zeros((self.nx,))
+        self.x = np.zeros((self.nx,) if isinstance(nx,int) else self.nx)
 
     def reset(self):
-        self.x = np.zeros((self.nx,))
+        self.x = np.zeros((self.nx,) if isinstance(nx,int) else self.nx)
         return self.h(self.x)
 
     def step(self,action):
@@ -377,6 +377,8 @@ class System_io(System):
         return self.io_step(uy)
 
 class System_bj(System):
+    #work in progress, use at own risk
+
     #yhat_{t} = f(u_{t-nb:t-1},yhat_{t-na:t-1},y_{t-nc:t-1})
     def __init__(self,na,nb,nc):
         #na = length of y hat

@@ -44,7 +44,7 @@ In this example we will fit the well known Silverbox included with deepSI. We fi
    plt.ylabel('y'); plt.xlabel('x'); plt.legend(['train','test'])
    plt.show()
 
-.. image:: ../../docs/images/silverboxfigure.png
+.. image:: images/silverboxfigure.png
    :scale: 100 %
    :alt: alternate text
    :align: center
@@ -74,7 +74,7 @@ To use this system we can use :meth:`deepSI.systems.System.apply_experiment` met
 
 residual plot of ARX
 
-.. image:: ../../docs/images/silverbox_arx.png
+.. image:: images/silverbox_arx.png
    :scale: 100 %
    :alt: alternate text
    :align: center
@@ -103,7 +103,7 @@ Which is quite a substantial improvement even without complete convergence of th
    plt.show()
 
 
-.. image:: ../../docs/images/silverbox_arx_encoder.png
+.. image:: images/silverbox_arx_encoder.png
    :scale: 100 %
    :alt: alternate text
    :align: center
@@ -114,7 +114,7 @@ To save the resulted encoder system we can simply call
    :emphasize-lines: 3,5
 
    sys_encoder.save_system('encoder-silverbox') # saves a pickle of the systems.
-   #sys_encoder = deepSI.load_system('encoder-silverbox') # load system
+   # sys_encoder = deepSI.load_system('encoder-silverbox') # load system
 
 This concludes a basic use case of deepSI.
 
@@ -134,3 +134,29 @@ There is a build in quick plot method in :meth:`deepSI.system_data.System_data.p
    :emphasize-lines: 3,5
 
    sys_data.plot()
+
+All fit_systems have as default a input and output normalization operation see :meth:`deepSI.system_data.System_data_norm` and setting the sys.use_norm flag to false will disable this feature. (can be glitchy if constant values are present)
+
+
+
+Sometimes you have multiple independent time series, one can combine these series by using :meth:`deepSI.system_data.System_data_list`
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   sys_data_list = deepSI.system_data.System_data_list([sys_data1,sys_data2])
+
+This can than be directly used to fit systems (SS_linear is an exception).
+
+For hyper-parameter tuning one can use the build in functions of :meth:`deepSI.fit_systems.random_search` and :meth:`deepSI.fit_systems.grid_search`.
+
+
+Making your own systems
+-----------------------
+
+For this you will need to have a grasp of the basics of python classes and Inheritance. These two concepts are the basis of deepSI and makes it relatively easy to expand. 
+
+Example tutorial: https://www.w3schools.com/python/python_inheritance.asp
+
+Afterwards take a look at the inheritance chains present (e.i. start with :meth:`deepSI.fit_systems.SS_encoder` and work your way up)
+

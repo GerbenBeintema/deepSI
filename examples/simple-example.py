@@ -2,13 +2,15 @@ import deepSI
 import numpy as np
 from matplotlib import pyplot as plt
 
+
+#create a state-space system (e.g. x is a vector)
 class My_system(deepSI.System_ss): 
     def __init__(self):
         super(My_system,self).__init__(nx=2)
     def f(self, x, u):
         return x[0]/(1.2+x[1]**2)+x[1]*0.4, x[1]/(1.2+x[0]**2)+x[0]*0.4+u #some non-linear function
     def h(self, x):
-        return x[0]+self.random.normal(scale=0.1,size=())
+        return x[0]+self.random.normal(scale=0.1,size=()) #add some noise
 
 
 if __name__ == '__main__':
