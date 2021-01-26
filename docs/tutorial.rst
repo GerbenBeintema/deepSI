@@ -10,22 +10,127 @@ familiarity with the third party modules Numpy and Matplotlib.
 A little bit of theory
 ----------------------
 
-Discrete time systems of the form ...
+The main focus is on discrete time systems of the form 
 
+.. math::
+
+   x_{t+1} = f(x_{t}, u_{t})
+
+   y_t = h(x_t)
+
+where :math:`x_t` is a internal state, :math:`u_t` the input applied on the system, :math:`y_t` the system output and :math:`f,h` the state and output functions. This can be extended to include problems with noise. These discrete time systems which hence generates system data in the form 
+
+.. math::
+
+   D = \{(u_t,y_t)| t=1,...,N_{\text{samples}}\}
+
+
+Hence, the main problem deepSI aims to address is given systems data :math:`D` what is an accurate estimate of :math:`f,h`?
 
 Quick start
 -----------
 
-a quick example
+In this example we will fit the well known Silverbox included with deepSI. We first load the system data into our dataframe called :meth:`deepSI.system_data.System_data`.
 
->>> import deepSI
->>> import numpy as np
->>> from matplotlib import pyplot as plt
->>> 
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   import deepSI
+   from matplotlib import pyplot as plt
+   train, test = deepSI.datasets.Silverbox() # automaticly downloaded (and cashed) the system data
+                                             # It also splitted the systems into two instances of System_data
+   plt.plot(train.y)
+   plt.plot(test.y)
+   plt.ylabel('y'); plt.xlabel('x'); plt.legend(['train','test'])
+   plt.show()
+
+.. image:: ../../docs/images/silverboxfigure.png
+   :scale: 100 %
+   :alt: alternate text
+   :align: center
 
 
-Structure of deepSI
--------------------
+Next we can choose from countless fittable systems. For instance we can use a ARX method like :meth:`deepSI.fit_systems.Sklearn_io_linear` which utilizes sklearn linear regression. 
 
-System Data, Systems, fit systems
+.. code-block:: python
+   :emphasize-lines: 3,5
 
+   sys_SS_linear = deepSI.fit_systems.Sklearn_io_linear(na=2,nb=5)
+   sys_SS_linear.fit(train)
+
+To use this system we can use :meth:`deepSI.systems.System.apply_experiment` method which return a :meth:`deepSI.system_data.System_data` dataframe. The measure of fitness generally used is the NRMS :meth:`deepSI.system_data.System_data.NRMS`.
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   test_simulation_SS_linear = sys_SS_linear.apply_experiment(test)
+   train_simulation_SS_linear = sys_SS_linear.apply_experiment(train)
+   print(test_simulation_SS_linear.NRMS(test)) # 0.12984812533409787
+   print(train_simulation_SS_linear.NRMS(train)) # 0.13541408740489072
+   plt.plot(test.y)
+   plt.plot(test.y-test_simulation_SS_linear.y)
+   plt.ylabel('y'); plt.xlabel('x'); plt.legend(['real test','simulation test ARX'])
+   plt.show()
+
+residual plot of ARX
+
+.. image:: ../../docs/images/silverbox_arx.png
+   :scale: 100 %
+   :alt: alternate text
+   :align: center
+
+Or we can use a more advanced SI method such as the encoder method :meth:`deepSI.fit_systems.SS_encoder` which utilizes the deep learning library PyTorch. Moreover it also utilizes batch optimization with the Adam optimizer. (see :meth:`deepSI.fit_systems.System_torch.fit` for details)
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   sys_encoder = deepSI.fit_systems.SS_encoder(nx=4, na=10, nb=10)
+   sys_encoder.fit(train, epochs=50, batch_size=256, loss_kwargs={'nf':50}, sim_val=test[:5000])
+   test_simulation_encoder = sys_encoder.apply_experiment(test)
+   train_simulation_encoder = sys_encoder.apply_experiment(train)
+   print(train_simulation_encoder.NRMS(train)) # 0.013109197256339526
+   print(test_simulation_encoder.NRMS(test)) # 0.01563269225510009
+
+Which is quite a substantial improvement even without complete convergence of the optimization.
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   plt.plot(test.y)
+   plt.plot(test.y-test_simulation_SS_linear.y)
+   plt.plot(test.y-test_simulation_encoder.y)
+   plt.ylabel('y'); plt.xlabel('x'); plt.legend(['real test','simulation test ARX', 'simulation test encoder'])
+   plt.show()
+
+
+.. image:: ../../docs/images/silverbox_arx_encoder.png
+   :scale: 100 %
+   :alt: alternate text
+   :align: center
+
+To save the resulted encoder system we can simply call
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   sys_encoder.save_system('encoder-silverbox') # saves a pickle of the systems.
+   #sys_encoder = deepSI.load_system('encoder-silverbox') # load system
+
+This concludes a basic use case of deepSI.
+
+Quick tips
+----------
+
+You can create your own system data by calling
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   sys_data = deepSI.System_data(u=[1,2,3,4,5],y=[1,1,2,3,5])
+
+There is a build in quick plot method in :meth:`deepSI.system_data.System_data.plot` which will automaticly set the axis labels.
+
+.. code-block:: python
+   :emphasize-lines: 3,5
+
+   sys_data.plot()

@@ -11,11 +11,8 @@ from gym.spaces import Box
 class Ball_in_box(System_deriv): #discrate system single system
     """docstring for double_well_system
 
-    V(x) = 1/2*min((x-a)**2,(x+a)**2)
-    v' = -(x-a) if x>0 else (x+a) + u #+ resistance 
-    x' = v
-    Fmax < a
-    Fmin > -a
+    dvxdt = (1/x**2-1/(1-x)**2)/200+ux-self.gamma*vx
+    dvydt = (1/y**2-1/(1-y)**2)/200+uy-self.gamma*vy
     """
     def __init__(self, Fmax=0.25, Nresist=0.7):
         '''Noise, system setting and x0 settings'''
@@ -65,7 +62,7 @@ class Ball_in_box_video(Ball_in_box): #discrate system single system
         return A #return position
 
 if __name__ == '__main__':
-    sys = Ball_in_box() 
+    sys = Ball_in_box_video() 
     exp = System_data(u=[sys.action_space.sample() for i in range(1000)])
     print(sys.action_space.low)
     sys_data = sys.apply_experiment(exp)
