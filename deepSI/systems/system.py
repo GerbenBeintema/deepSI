@@ -315,7 +315,7 @@ class System_deriv(System_ss):
 
 
 class System_io(System):
-    def __init__(self,na,nb,nu=None,ny=None): #(u,y)
+    def __init__(self,na, nb, nu=None, ny=None): #(u,y)
         action_shape = tuple() if nu is None else (nu,) #repeated code
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'), float('inf'), shape=action_shape)
