@@ -589,9 +589,9 @@ class System_data_norm(object):
         '''set the values of u0, ustd, y0 and ystd using sys_data (can be a list) given'''
         u, y = self.make_training_data(sys_data)
         self.u0 = np.mean(u,axis=0)
-        self.ustd = np.std(u,axis=0)+1e-15 #does this work with is_id?
+        self.ustd = np.std(u,axis=0) + 1e-15 #does this work with is_id?
         self.y0 = np.mean(y,axis=0)
-        self.ystd = np.std(y,axis=0)+1e-15
+        self.ystd = np.std(y,axis=0) + 1e-15
         
     def transform(self,sys_data):
         '''Transform the data by 

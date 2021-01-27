@@ -28,7 +28,7 @@ For these exercises, you will be using python 3.7 with some extensions for strea
       * ("ML" is the name which can be changed to preference)
       * Follow install instruction on screen
       * type "`conda activate ML`" to enter the created environment
-    * type "`conda install -c anaconda git`"
+    * type "`conda install -c anaconda git ipywidgets`"
     * type "`pip install git+git://github.com/GerbenBeintema/deepSI@master`" to install deepSI in the ML environment
  4. Opening a notebook.
     * Open the anaconda navigator
