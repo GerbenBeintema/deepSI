@@ -120,7 +120,7 @@ class System_torch(System_fittable):
         return optimizer(parameters,**optimizer_kwargs) 
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, \
-        optimizer_kwargs={}, sim_val=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS'):
+        optimizer_kwargs={}, sim_val=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True):
         '''The default batch optimization method 
 
         Parameters
@@ -245,7 +245,8 @@ class System_torch(System_fittable):
                 Loss_val = validation()
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
-                    print(f'Epoch: {epoch+1:4} Training loss: {self.Loss_train[-1]:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
+                    train_loss = self.Loss_train[-1]**0.5 if sqrt_train else self.Loss_train[-1]
+                    print(f'Epoch: {epoch+1:4} Training loss: {train_loss:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
         self.train(); self.cpu();
