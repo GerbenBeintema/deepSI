@@ -147,10 +147,15 @@ if __name__ == '__main__':
     sys = SS_encoder()
     from deepSI.datasets.sista_database import powerplant
     from deepSI.datasets import Silverbox
-    train, test = powerplant()
-    train, test = train[:150], test[:50]
+    train, test = Silverbox()#powerplant()
+    # train, test = train[:150], test[:50]
     print(train, test)
-    sys.fit(train, sim_val=test,epochs=50)
+    # sys.fit(train, sim_val=test,epochs=50)
+    import deepSI
+    test2 = deepSI.system_data.System_data_list([test,test])
+    sys.fit_val_multiprocess(train, sim_val=test2,epochs=50)
+
+    # fit_val_multiprocess
     train_predict = sys.apply_experiment(train)
     train.plot()
     train_predict.plot(show=True)
