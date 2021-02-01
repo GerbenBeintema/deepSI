@@ -164,7 +164,7 @@ class System_torch(System_fittable):
             time_val += time.time() - t_start_val
             if append: self.Loss_val.append(Loss_val) 
             if self.bestfit>Loss_val:
-                if verbose: print(f'########## New lowest validation loss achieved ########### {Loss_val}')
+                if verbose: print(f'########## New lowest validation loss achieved ########### NRMS={Loss_val}')
                 self.checkpoint_save_system()
                 self.bestfit = Loss_val
             if cuda: 
@@ -190,17 +190,22 @@ class System_torch(System_fittable):
             extra_t = 0 if len(self.time)==0 else self.time[-1] #correct time counting after reset
 
 
-        sys_data, sys_data0 = self.norm.transform(sys_data), sys_data
+        sys_data = self.norm.transform(sys_data)
         data_full = self.make_training_data(sys_data, **loss_kwargs)
-        data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full] #add cuda?
 
 
         if sim_val is not None:
-            data_train = data_full
+            data_train = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
         else: #is not used that often, could use sklearn to split data
-            split = int(len(data_full[0])*(1-val_frac))
-            data_train = [dat[:split] for dat in data_full]
-            data_val = [dat[split:] for dat in data_full]
+            from sklearn.model_selection import train_test_split
+            datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
+            data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
+            data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
+
+            # split = int(len(data_full[0])*(1-val_frac))
+            # #random subset selection
+            # data_train = [dat[:split] for dat in data_full]
+            # data_val = [dat[split:] for dat in data_full]
 
         self.Loss_val, self.Loss_train, self.batch_id, self.time = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time)
 
@@ -308,15 +313,15 @@ class System_torch(System_fittable):
 
         sys_data = self.norm.transform(sys_data)
         data_full = self.make_training_data(sys_data, **loss_kwargs)
-        data_full = [torch.tensor(dat, dtype=torch.float32) for dat in data_full] #add cuda?
 
         if sim_val is not None:
-            data_train = data_full
+            data_train = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
             data_val = None
         else: #is not used that often, could use sklearn to split data
-            split = int(len(data_full[0])*(1-val_frac))
-            data_train = [dat[:split] for dat in data_full]
-            data_val = [dat[split:] for dat in data_full]
+            from sklearn.model_selection import train_test_split
+            datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
+            data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
+            data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
 
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
 
@@ -334,9 +339,6 @@ class System_torch(System_fittable):
         remote.send((self, append, Loss_acc, time.time()-self.start_t+extra_t)) #time here does not matter
         #sys, append, Loss_acc, time_now, epoch
         # remote.send(self, False, self.bestfit, Loss_acc, time.time()-self.start_t+extra_t, self. N_batch_updates_per_epoch)
-
-
-
 
         global time_loss, time_back #time keeping
         time_back = time_loss = 0
@@ -385,7 +387,7 @@ class System_torch(System_fittable):
                 if verbose>0:
                     time_elapsed = time.time()-self.start_t
                     if bestfit_old > self.bestfit:
-                        print(f'########## New lowest validation loss achieved ########### {self.bestfit}')
+                        print(f'########## New lowest validation loss achieved ########### NRMS={self.bestfit}')
                     train_loss = (self.Loss_train[-1]**0.5 if sqrt_train else self.Loss_train[-1]) if len(self.Loss_train)>0 else float('nan')
                     Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)>0 else float('nan')
                     val_feq = val_counter/(epoch+1)
