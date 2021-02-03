@@ -251,7 +251,8 @@ class System_torch(System_fittable):
                 if verbose>0: 
                     time_elapsed = time.time()-self.start_t
                     train_loss = self.Loss_train[-1]**0.5 if sqrt_train else self.Loss_train[-1]
-                    print(f'Epoch: {epoch+1:4} Training loss: {train_loss:7.4} Validation loss = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
+                    val_str = sim_val_fun if sim_val is not None else 'loss'
+                    print(f'Epoch: {epoch+1:4} Training loss: {train_loss:7.4} Validation {val_str} = {Loss_val:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, val: {time_val/time_elapsed:.1%}')
         except KeyboardInterrupt:
             print('stopping early due to KeyboardInterrupt')
         self.train(); self.cpu();
@@ -392,7 +393,8 @@ class System_torch(System_fittable):
                     Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)>0 else float('nan')
                     val_feq = val_counter/(epoch+1)
                     valfeqstr = f'{val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f'{1/val_feq:4.3} epochs/val'
-                    print(f'Epoch: {epoch+1:4} Training loss: {train_loss:7.4} Validation loss = {Loss_val_now:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, {valfeqstr}')
+                    val_str = sim_val_fun if sim_val is not None else 'loss'
+                    print(f'Epoch: {epoch+1:4} Training loss: {train_loss:7.4} Validation {val_str} = {Loss_val_now:6.4}, time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, {valfeqstr}')
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch, self.bestfit = remote.recv()
