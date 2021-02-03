@@ -43,13 +43,15 @@ class SS_encoder(System_torch):
     ########## How to use ##############
     def init_state(self,sys_data): #put nf here for n-step error?
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist) #detach here?
+        with torch.no_grad():
+            self.state = self.encoder(hist) #detach here?
         y_predict = self.hn(self.state).detach().numpy()[0,:]
         return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
 
     def init_state_multi(self,sys_data,nf=100,dilation=1):
         hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist)
+        with torch.no_grad():
+            self.state = self.encoder(hist)
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
 
@@ -61,14 +63,16 @@ class SS_encoder(System_torch):
     def step(self,action):
         action = torch.tensor(action,dtype=torch.float32) #number
         action = action[None,None] if self.nu is None else action[None,:]
-        self.state = self.fn(torch.cat((self.state,action),axis=1))
+        with torch.no_grad():
+            self.state = self.fn(torch.cat((self.state,action),axis=1))
         y_predict = self.hn(self.state).detach().numpy()[0,:]
         return (y_predict[0] if self.ny is None else y_predict)
 
     def step_multi(self,action):
         action = torch.tensor(action,dtype=torch.float32) #array
         action = action[:,None] if self.nu is None else action
-        self.state = self.fn(torch.cat((self.state,action),axis=1))
+        with torch.no_grad():
+            self.state = self.fn(torch.cat((self.state,action),axis=1))
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
 
