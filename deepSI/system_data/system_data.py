@@ -115,8 +115,9 @@ class System_data(object):
 
     def reshape_as(self, other):
         """Inverse of .flatten and will reshape both u and y to (N,) + other.u.shape[1:] and (N,) + other.y.shape[1:]"""
-        y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:])
-        u = self.u.reshape((self.u.shape[0],)+other.u.shape[1:])
+        #this can fail if either is None
+        y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:]) if self.y is not None else None
+        u = self.u.reshape((self.u.shape[0],)+other.u.shape[1:]) if self.u is not None else None
         return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
 
 
@@ -458,24 +459,29 @@ class System_data_list(System_data):
     @property
     def u(self): #concatenate or list of lists
         return np.concatenate([sd.u for sd in self.sdl],axis=0)    
+    @property
+    def n_cheat(self):
+        return self.sdl.n_cheat
     def flatten(self):
         return System_data_list([sdli.flatten() for sdli in self.sdl])
-    
+    def reshape_as(self, other):
+        """Inverse of .flatten and will reshape both u and y to (N,) + other.u.shape[1:] and (N,) + other.y.shape[1:]"""
+        if isinstance(other,System_data_list):
+            return System_data_list([sd.reshape_as(sdo) for sd,sdo in zip(self.sdl,other.sdl)])
+        else:
+            return System_data_list([sd.reshape_as(other) for sd in self.sdl])
+
     ## Transformations ##
     def to_IO_data(self,na=10,nb=10,dilation=1):
         #normed check?
         out = [sys_data.to_IO_data(na=na,nb=nb,dilation=1) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-
     def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
         out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-
     def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False):
         out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-
-
     def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
         out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
@@ -499,17 +505,8 @@ class System_data_list(System_data):
     def weighted_mean(self,vals):
         return np.average(vals,axis=0,weights=[sd.N_samples for sd in self.sdl])
 
-    def BFR(self,real,multi_average=True):
-        return self.weighted_mean([sd.BFR(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
-
-    def NRMS(self,real,multi_average=True):
-        return self.weighted_mean([sd.NRMS(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
-
     def RMS(self,real, multi_average=True):
         return self.weighted_mean([sd.RMS(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
-
-    def VAF(self,real,multi_average=True):
-        return self.weighted_mean([sd.VAF(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
 
     def __sub__(self,other):
         if isinstance(other,System_data_list):            
@@ -540,7 +537,7 @@ class System_data_list(System_data):
             else: #slice of something
                 return System_data_list(self.sdl[arg])
 
-    def __len__(self):
+    def __len__(self): #number of datasets
         return len(self.sdl)
 
     def down_sample_by_average(self,factor):
@@ -701,3 +698,12 @@ if __name__=='__main__':
 
     print(sdl[1:2,:-10])
     print(len(sdl))
+
+    sys_data = System_data(u=np.random.normal(scale=2,size=(100,2,2)),y=np.random.normal(scale=1.5,size=(100,2,5)))
+    sdl = System_data_list([sys_data,sys_data])
+    print('sdl',sdl)
+    print(sdl.NRMS(sdl))
+    sdl_flat = sdl.flatten()
+    print(sdl_flat)
+    print(sdl_flat.reshape_as(sdl))
+
