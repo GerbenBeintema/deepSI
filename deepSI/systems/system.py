@@ -10,7 +10,12 @@ from gym.spaces import Box
 
 def load_system(file):
     """This is not a safe function, only use on trusted files"""
-    return pickle.load(open(file,'rb'))
+    try:
+        return pickle.load(open(file,'rb'))
+    except (pickle.UnpicklingError, EOFError): #maybe it was saved using torch systems
+        import torch
+        return torch.load(file)
+
 
 class System(object):
     '''The base System class

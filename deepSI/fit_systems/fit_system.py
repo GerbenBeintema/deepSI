@@ -346,6 +346,15 @@ class System_torch(System_fittable):
                 attribute.load_state_dict(save_dict[key])
             except (AttributeError, ValueError):
                 print('Error loading key',key)
+    def save_system(self,file):
+        '''Save the system using pickle provided by torch
+
+        Notes
+        -----
+        This can be quite unstable for long term storage or switching between versions of this and other modules.
+        Consider manually creating a save_system function for a long term solution. (maybe utilize checkpoint_save_system)
+        '''
+        torch.save(self,file)
 
     ### CPU & CUDA ###
     def cuda(self):
