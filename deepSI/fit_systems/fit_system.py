@@ -413,4 +413,4 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
 if __name__ == '__main__':
     sys = deepSI.fit_systems.SS_encoder()
     train, test = deepSI.datasets.CED()
-    sys.fit_combined(train)
+    sys.fit(train)

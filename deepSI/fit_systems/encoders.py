@@ -2,6 +2,7 @@
 from deepSI.fit_systems.fit_system import System_fittable, System_torch
 import torch
 from torch import nn
+import numpy as np
 
 class SS_encoder(System_torch):
     """docstring for SS_encoder"""
@@ -11,10 +12,20 @@ class SS_encoder(System_torch):
         self.k0 = max(self.na,self.nb)
         
         from deepSI.utils import simple_res_net, feed_forward_nn
-        self.net = simple_res_net
-        self.n_hidden_layers = 2
-        self.n_nodes_per_layer = 64
-        self.activation = nn.Tanh
+        self.e_net = simple_res_net
+        self.e_n_hidden_layers = 2
+        self.e_n_nodes_per_layer = 64
+        self.e_activation = nn.Tanh
+
+        self.f_net = simple_res_net
+        self.f_n_hidden_layers = 2
+        self.f_n_nodes_per_layer = 64
+        self.f_activation = nn.Tanh
+
+        self.h_net = simple_res_net
+        self.h_n_hidden_layers = 2
+        self.h_n_nodes_per_layer = 64
+        self.h_activation = nn.Tanh
 
     ########## How to fit #############
     def make_training_data(self, sys_data, **Loss_kwargs):
@@ -26,9 +37,9 @@ class SS_encoder(System_torch):
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
-        self.encoder = self.net(n_in=self.nb*nu+self.na*ny, n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.fn =      self.net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.hn =      self.net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
+        self.encoder = self.e_net(n_in=self.nb*nu+self.na*ny, n_out=self.nx, n_nodes_per_layer=self.e_n_nodes_per_layer, n_hidden_layers=self.e_n_hidden_layers, activation=self.e_activation)
+        self.fn =      self.f_net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
+        self.hn =      self.h_net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
     def loss(self, hist, ufuture, yfuture, **Loss_kwargs):
@@ -75,6 +86,117 @@ class SS_encoder(System_torch):
             self.state = self.fn(torch.cat((self.state,action),axis=1))
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
+
+class default_encoder_net(nn.Module):
+    def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+        super(default_encoder_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
+        self.net = simple_res_net(n_in=nb*np.prod(self.nu,dtype=int) + na*np.prod(self.ny,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+
+    def forward(self, upast, ypast):
+        net_in = torch.cat([upast.view(upast.shape[0],-1),ypast.view(ypast.shape[0],-1)],axis=1)
+        return self.net(net_in)
+
+class default_state_net(nn.Module):
+    def __init__(self, nx, nu, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+        super(default_state_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+
+    def forward(self, x, u):
+        net_in = torch.cat([x,u.view(u.shape[0],-1)],axis=1)
+        return self.net(net_in)
+
+class default_output_net(nn.Module):
+    def __init__(self, nx, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+        super(default_output_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
+        self.net = simple_res_net(n_in=nx, n_out=np.prod(self.ny,dtype=int), n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+
+    def forward(self, x):
+        return self.net(x).view(*((x.shape[0],)+self.ny))
+    
+
+class SS_encoder_general(System_torch):
+    """docstring for SS_encoder_general"""
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_general, self).__init__()
+        self.nx, self.na, self.nb = nx, na, nb
+        self.k0 = max(self.na,self.nb)
+        
+        self.e_net = e_net
+        self.e_net_kwargs = e_net_kwargs
+
+        self.f_net = f_net
+        self.f_net_kwargs = f_net_kwargs
+
+        self.h_net = h_net
+        self.h_net_kwargs = h_net_kwargs
+
+    ########## How to fit #############
+    def make_training_data(self, sys_data, **Loss_kwargs):
+        assert sys_data.normed == True
+        nf = Loss_kwargs.get('nf',25)
+        dilation = Loss_kwargs.get('dilation',1)
+        uhist, yhist, ufuture, yfuture = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)
+        return uhist, yhist, ufuture, yfuture
+
+    def init_nets(self, nu, ny): # a bit weird
+        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        self.fn =      self.f_net(nx=self.nx, nu=nu,                                **self.f_net_kwargs)
+        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs) 
+        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
+
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        x = self.encoder(uhist, yhist)
+        y_predict = []
+        for u in torch.transpose(ufuture,0,1): #iterate over time
+            y_predict.append(self.hn(x)) 
+            x = self.fn(x,u)
+        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
+
+    ########## How to use ##############
+    def init_state(self,sys_data): #put nf here for n-step error?
+        uhist, yhist = sys_data[:self.k0].to_hist_future_data(na=self.na,nb=self.nb,nf=0)[:2]
+        uhist = torch.tensor(uhist,dtype=torch.float32)
+        yhist = torch.tensor(yhist,dtype=torch.float32)
+        with torch.no_grad():
+            self.state = self.encoder(uhist, yhist) #detach here?
+            y_predict = self.hn(self.state).numpy()[0]
+        return y_predict, max(self.na,self.nb)
+
+    def init_state_multi(self,sys_data,nf=100,dilation=1):
+        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[:2] #(1,)
+        uhist = torch.tensor(uhist,dtype=torch.float32)
+        yhist = torch.tensor(yhist,dtype=torch.float32)
+        with torch.no_grad():
+            self.state = self.encoder(uhist,yhist)
+            y_predict = self.hn(self.state).numpy()
+        return y_predict, max(self.na,self.nb)
+
+    def reset(self): #to be able to use encoder network as a data generator
+        self.state = torch.randn(1,self.nx)
+        y_predict = self.hn(self.state).detach().numpy()[0,:]
+        return (y_predict[0] if self.ny is None else y_predict)
+
+    def step(self,action):
+        action = torch.tensor(action,dtype=torch.float32)[None] #(1,...)
+        with torch.no_grad():
+            self.state = self.fn(self.state,action)
+            y_predict = self.hn(self.state).numpy()[0]
+        return y_predict
+
+    def step_multi(self,action):
+        action = torch.tensor(action,dtype=torch.float32) #(N,...)
+        with torch.no_grad():
+            self.state = self.fn(self.state,action)
+            y_predict = self.hn(self.state).numpy()
+        return y_predict
+
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -148,7 +270,7 @@ class SS_encoder_rnn(System_torch):
         return self.hn(output[:,0,:])[:,0].detach().numpy()
 
 if __name__ == '__main__':
-    sys = SS_encoder()
+    sys = SS_encoder_general()
     from deepSI.datasets.sista_database import powerplant
     from deepSI.datasets import Silverbox
     train, test = Silverbox()#powerplant()
@@ -157,7 +279,7 @@ if __name__ == '__main__':
     # sys.fit(train, sim_val=test,epochs=50)
     import deepSI
     test2 = deepSI.system_data.System_data_list([test,test])
-    sys.fit_val_multiprocess(train, sim_val=test2,epochs=50)
+    sys.fit(train, sim_val=test2, epochs=50, concurrent_val=True)
 
     # fit_val_multiprocess
     train_predict = sys.apply_experiment(train)

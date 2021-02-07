@@ -185,10 +185,10 @@ class System_data(object):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
         uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
-        if force_multi_u and uhist.ndim==2: #(uhist, time_seq, nu)
+        if force_multi_u and uhist.ndim==2: #(N, time_seq, nu)
             uhist = uhist[:,:,None]
             ufuture = ufuture[:,:,None]
-        if force_multi_y and yhist.ndim==2: #(yhist, time_seq, ny)
+        if force_multi_y and yhist.ndim==2: #(N, time_seq, ny)
             yhist = yhist[:,:,None]
             yfuture = yfuture[:,:,None]
         return uhist, yhist, ufuture, yfuture
