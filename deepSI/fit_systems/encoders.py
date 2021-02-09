@@ -179,9 +179,10 @@ class SS_encoder_general(System_torch):
         return y_predict, max(self.na,self.nb)
 
     def reset(self): #to be able to use encoder network as a data generator
-        self.state = torch.randn(1,self.nx)
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
+        self.state = torch.zeros(1,self.nx)
+        with torch.no_grad():
+            y_predict = self.hn(self.state).numpy()[0]
+        return y_predict
 
     def step(self,action):
         action = torch.tensor(action,dtype=torch.float32)[None] #(1,...)

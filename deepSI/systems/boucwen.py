@@ -18,7 +18,7 @@ class Bouc_wen(System_deriv):
         self.nu = 1 #dummy
 
     def deriv(self,x,u):
-        y,yd,z = x
+        y, yd, z = x
         ydd = (u-(self.kL*y+self.cL*yd)-z)/self.mL
         zd = self.alpha*yd-self.beta*(self.gamma*abs(yd)*z+self.delta*yd*abs(z)) #nu=1
         return yd,ydd,zd
