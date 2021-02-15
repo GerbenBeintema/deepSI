@@ -173,9 +173,9 @@ class System_torch(System_fittable):
                 time_val += time.time() - t_start_val
                 self.epoch_id.append(self.epoch_counter)
             
-            if self.bestfit>Loss_val:
-                self.checkpoint_save_system()
+            if self.bestfit>=Loss_val:
                 self.bestfit = Loss_val
+                self.checkpoint_save_system()
             
             if cuda: 
                 self.cuda()
@@ -318,35 +318,17 @@ class System_torch(System_fittable):
     ########## Saving and loading ############
     def checkpoint_save_system(self, name='_best', directory=None):
         directory  = get_work_dirs()['checkpoints'] if directory is None else directory
-        self._save_system_torch(file=os.path.join(directory,self.name+name+'.pth')) #error here if you have 
-        vars = self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id
-        np.savez(os.path.join(directory,self.name+name+'.npz'),*vars)
+        file = os.path.join(directory,self.name + name + '.pth')
+        torch.save(self.__dict__, file)
     def checkpoint_load_system(self, name='_best', directory=None):
         directory  = get_work_dirs()['checkpoints'] if directory is None else directory
-        self._load_system_torch(file=os.path.join(directory,self.name+name+'.pth'))
-        out = np.load(os.path.join(directory,self.name+name+'.npz'))
-        out_real = [(a[1].tolist() if a[1].ndim==0 else a[1]) for a in out.items()]
-        self.norm.u0, self.norm.ustd, self.norm.y0, self.norm.ystd, self.fitted, self.bestfit, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = out_real
-        # self.Loss_val, self.Loss_train, self.batch_id, self.time = self.Loss_val, self.Loss_train, self.batch_id, self.time
-        
-    def _save_system_torch(self, file):
-        save_dict = {}
-        for d in dir(self):
-            if d in ['random']: #exclude random
-                continue
-            attribute = self.__getattribute__(d)
-            if isinstance(attribute,(nn.Module,optim.Optimizer)):
-                save_dict[d] = attribute.state_dict()
-        torch.save(save_dict,file)
-    def _load_system_torch(self, file):
-        save_dict = torch.load(file)
-        for key in save_dict:
-            attribute = self.__getattribute__(key)
-            try:
-                attribute.load_state_dict(save_dict[key])
-            except (AttributeError, ValueError):
-                print('Error loading key',key)
-    def save_system(self,file):
+        file = os.path.join(directory,self.name + name + '.pth')
+        try:
+            self.__dict__ = torch.load(file)
+        except FileNotFoundError:
+            raise FileNotFoundError(f'No such file at {file}, did you set sys.unique_code correctly?')
+
+    def save_system(self, file):
         '''Save the system using pickle provided by torch
 
         Notes
@@ -354,7 +336,7 @@ class System_torch(System_fittable):
         This can be quite unstable for long term storage or switching between versions of this and other modules.
         Consider manually creating a save_system function for a long term solution. (maybe utilize checkpoint_save_system)
         '''
-        torch.save(self,file)
+        torch.save(self, file)
 
     ### CPU & CUDA ###
     def cuda(self):
@@ -381,7 +363,6 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
     parent_remote.close()
     with open('test.txt','w') as f:
         f.write(str(sim_val))
-    # print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Worker sim_val!!!!!!!!!!!!!!!!!!!!!!!!!!!!', str(sim_val))
     while True:
         try:
             sys, append, Loss_train, time_now = remote.recv() #gets the current network

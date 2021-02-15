@@ -53,10 +53,12 @@ class System(object):
         self.norm = System_data_norm()
         self.fitted = False
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
-        self.name = self.__class__.__name__ + '_' + self.unique_code
         self.seed = 42
         self.use_norm = True #can be changed later
 
+    @property
+    def name(self):
+        return self.__class__.__name__ + '_' + self.unique_code
     @property
     def random(self): #gets created ones called, this is to make pickle more stable between different version of numpy
         if not hasattr(self,'_random'):
