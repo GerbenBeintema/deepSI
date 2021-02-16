@@ -64,8 +64,18 @@ class System(object):
         if not hasattr(self,'_random'):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
+    def get_state(self):
+        '''state of the system (not the parameters)
 
-    def apply_experiment(self, sys_data): #can put this in apply controller
+        Returns
+        -------
+        state : the user defined state
+        '''
+        import warnings
+        warnings.warn('Calling sys.state but no state has been set')
+        return None
+
+    def apply_experiment(self, sys_data, save_state=False): #can put this in apply controller
         '''Do a experiment with for given system data (fixed u)
 
         Parameters
@@ -91,16 +101,20 @@ class System(object):
         U = sys_data_norm.u
         if sys_data_norm.y is not None: #if y is not None than init state
             obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
-            Y.extend(sys_data_norm.y[:k0])
+            Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
         else:
             obs, k0 = self.reset(), 0
+        if save_state:
+            X = [self.get_state()]*(k0+1)
 
         for k in range(k0,len(U)):
-            Y.append(obs)
+            Y.append(obs) 
             if k<len(U)-1: #skip last step
                 action = U[k]
                 obs = self.step(action)
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True,cheat_n=k0))   
+                if save_state:
+                    X.append(self.get_state())
+        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0))   
     
     def apply_controller(self,controller,N_samples):
         '''Same as self.apply_experiment but with a controller
@@ -297,6 +311,9 @@ class System_ss(System): #simple state space systems
         '''y[k] = h(x[k])'''
         raise NotImplementedError('f and h should be implemented in child')
 
+    def get_state(self):
+        return self.x
+
 class System_deriv(System_ss):
     ''''''
 
@@ -382,6 +399,9 @@ class System_io(System):
 
     def multi_io_step(self,uy):
         return self.io_step(uy)
+
+    def get_state(self):
+        return [copy.copy(self.uhist), copy.copy(self.yhist)]
 
 class System_bj(System):
     #work in progress, use at own risk

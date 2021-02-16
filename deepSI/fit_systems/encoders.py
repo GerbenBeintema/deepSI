@@ -87,6 +87,9 @@ class SS_encoder(System_torch):
         y_predict = self.hn(self.state).detach().numpy()
         return (y_predict[:,0] if self.ny is None else y_predict)
 
+    def get_state(self):
+        return self.state[0].numpy()
+
 class default_encoder_net(nn.Module):
     def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
         super(default_encoder_net, self).__init__()
@@ -198,6 +201,9 @@ class SS_encoder_general(System_torch):
             y_predict = self.hn(self.state).numpy()
         return y_predict
 
+    def get_state(self):
+        return self.state[0].numpy()
+
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -269,6 +275,9 @@ class SS_encoder_rnn(System_torch):
         action = torch.tensor(action,dtype=torch.float32) #array
         output, self.state = self.rnn(action[:,None,None], self.state)
         return self.hn(output[:,0,:])[:,0].detach().numpy()
+
+    def get_state(self):
+        return self.state[0].numpy()
 
 if __name__ == '__main__':
     sys = SS_encoder_general()
