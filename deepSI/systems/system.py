@@ -293,10 +293,10 @@ class System_ss(System): #simple state space systems
         self.nu = nu
         self.ny = ny
 
-        self.x = np.zeros((self.nx,) if isinstance(nx,int) else self.nx)
+        self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
 
     def reset(self):
-        self.x = np.zeros((self.nx,) if isinstance(nx,int) else self.nx)
+        self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
         return self.h(self.x)
 
     def step(self,action):
