@@ -660,7 +660,7 @@ class System_data_norm(object):
             raise NotImplementedError(f'type={type(sys_data)} cannot yet be inverse_transform by norm')
 
     def __repr__(self):
-        return f'System_data_norm: (u0={self.u0}, ustd={self.ustd}, y0={self.y0}, ystd={self.ystd}, norm={self.norm})'
+        return f'System_data_norm: (u0={self.u0}, ustd={self.ustd}, y0={self.y0}, ystd={self.ystd})'
 
 
 if __name__=='__main__':

@@ -279,22 +279,146 @@ class SS_encoder_rnn(System_torch):
     def get_state(self):
         return self.state[0].numpy()
 
+
+
+class par_start_encoder(nn.Module):
+    """docstring for par_start_encoder"""
+    def __init__(self, nx, nsamples):
+        super(par_start_encoder, self).__init__()
+        self.start_state = nn.parameter.Parameter(data=torch.as_tensor(np.random.normal(scale=0.1,size=(nsamples,nx)),dtype=torch.float32))
+
+    def forward(self,ids):
+        return self.start_state[ids]
+        
+
+class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs.
+    """docstring for SS_par_start"""
+    def __init__(self, nx=10):
+        super(SS_par_start, self).__init__()
+        self.nx = nx
+        self.k0 = 0
+
+        from deepSI.utils import simple_res_net, feed_forward_nn
+        self.f_net = simple_res_net
+        self.f_n_hidden_layers = 2
+        self.f_n_nodes_per_layer = 64
+        self.f_activation = nn.Tanh
+
+        self.h_net = simple_res_net
+        self.h_n_hidden_layers = 2
+        self.h_n_nodes_per_layer = 64
+        self.h_activation = nn.Tanh
+
+    def init_optimizer(self, parameters, **optimizer_kwargs):
+        '''Optionally defined in subclass to create the optimizer
+
+        Parameters
+        ----------
+        parameters : list
+            system torch parameters
+        optimizer_kwargs : dict
+            If 'optimizer' is defined than that optimizer will be used otherwise Adam will be used.
+            The other parameters will be passed to the optimizer as a kwarg.
+        '''
+        self.optimizer_kwargs = optimizer_kwargs
+        if optimizer_kwargs.get('optimizer') is not None:
+            from copy import deepcopy
+            optimizer_kwargs = deepcopy(optimizer_kwargs) #do not modify the original kwargs, is this necessary
+            optimizer = optimizer_kwargs['optimizer']
+            del optimizer_kwargs['optimizer']
+        else:
+            optimizer = torch.optim.Adam
+        return optimizer(parameters,**optimizer_kwargs) 
+
+
+    ########## How to fit #############
+    def make_training_data(self, sys_data, **Loss_kwargs):
+        assert sys_data.normed == True
+        nf = Loss_kwargs.get('nf',25)
+        dilation = Loss_kwargs.get('dilation',1)
+        hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True)
+        nsamples = hist.shape[0]
+        ids = np.arange(nsamples,dtype=int)
+        self.par_starter = par_start_encoder(nx=self.nx, nsamples=nsamples)
+        self.optimizer = self.init_optimizer(self.parameters+list(self.par_starter.parameters()), **self.optimizer_kwargs) #no kwargs
+
+        return ids, ufuture, yfuture #returns np.array(hist),np.array(ufuture),np.array(yfuture)
+
+    def init_nets(self, nu, ny): # a bit weird
+        ny = ny if ny is not None else 1
+        nu = nu if nu is not None else 1
+        self.fn =      self.f_net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
+        self.hn =      self.h_net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
+        return list(self.fn.parameters()) + list(self.hn.parameters())
+
+    def loss(self, ids, ufuture, yfuture, **Loss_kwargs):
+        ids = ids.numpy().astype(int)
+        #hist is empty
+        x = self.par_starter(ids)
+        y_predict = []
+        for u in torch.transpose(ufuture,0,1):
+            y_predict.append(self.hn(x)) #output prediction
+            fn_in = torch.cat((x,u),dim=1)
+            x = self.fn(fn_in)
+        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
+
+    ########## How to use ##############
+    def init_state(self,sys_data): #put nf here for n-step error?
+        with torch.no_grad():
+            self.state = torch.as_tensor(np.random.normal(scale=0.1,size=(1,self.nx)),dtype=torch.float32) #detach here?
+        y_predict = self.hn(self.state).detach().numpy()[0,:]
+        return (y_predict[0] if self.ny is None else y_predict), 0
+
+    def init_state_multi(self,sys_data,nf=100,dilation=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+        with torch.no_grad():
+            self.state = torch.as_tensor(np.random.normal(scale=0.1,size=(hist.shape[0],self.nx)),dtype=torch.float32) #detach here?
+        y_predict = self.hn(self.state).detach().numpy()
+        return (y_predict[:,0] if self.ny is None else y_predict), 0
+
+    def reset(self): #to be able to use encoder network as a data generator
+        self.state = torch.randn(1,self.nx)
+        y_predict = self.hn(self.state).detach().numpy()[0,:]
+        return (y_predict[0] if self.ny is None else y_predict)
+
+    def step(self,action):
+        action = torch.tensor(action,dtype=torch.float32) #number
+        action = action[None,None] if self.nu is None else action[None,:]
+        with torch.no_grad():
+            self.state = self.fn(torch.cat((self.state,action),axis=1))
+        y_predict = self.hn(self.state).detach().numpy()[0,:]
+        return (y_predict[0] if self.ny is None else y_predict)
+
+    def step_multi(self,action):
+        action = torch.tensor(action,dtype=torch.float32) #array
+        action = action[:,None] if self.nu is None else action
+        with torch.no_grad():
+            self.state = self.fn(torch.cat((self.state,action),axis=1))
+        y_predict = self.hn(self.state).detach().numpy()
+        return (y_predict[:,0] if self.ny is None else y_predict)
+
+    def get_state(self):
+        return self.state[0].numpy()
+
 if __name__ == '__main__':
-    sys = SS_encoder_general()
-    from deepSI.datasets.sista_database import powerplant
+    # sys = SS_encoder_general()
+    # from deepSI.datasets.sista_database import powerplant
     from deepSI.datasets import Silverbox
     train, test = Silverbox()#powerplant()
     # train, test = train[:150], test[:50]
-    print(train, test)
-    # sys.fit(train, sim_val=test,epochs=50)
-    import deepSI
-    test2 = deepSI.system_data.System_data_list([test,test])
-    sys.fit(train, sim_val=test2, epochs=50, concurrent_val=True)
+    # print(train, test)
+    # # sys.fit(train, sim_val=test,epochs=50)
+    # import deepSI
+    # test2 = deepSI.system_data.System_data_list([test,test])
+    # sys.fit(train, sim_val=test2, epochs=50, concurrent_val=True)
 
-    # fit_val_multiprocess
-    train_predict = sys.apply_experiment(train)
-    train.plot()
-    train_predict.plot(show=True)
-    from matplotlib import pyplot as plt
-    plt.plot(sys.n_step_error(train,nf=20))
-    plt.show()
+    # # fit_val_multiprocess
+    # train_predict = sys.apply_experiment(train)
+    # train.plot()
+    # train_predict.plot(show=True)
+    # from matplotlib import pyplot as plt
+    # plt.plot(sys.n_step_error(train,nf=20))
+    # plt.show()
+    sys = SS_encoder()
+    # sys = SS_par_start()
+    sys.fit(train, sim_val=test,epochs=50, concurrent_val=True)

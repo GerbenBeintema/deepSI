@@ -146,8 +146,8 @@ def WienerHammerstein_Process_Noise(dir_placement=None, force_download=False, sp
     save_dir = cashed_download(url,'WienHammer',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     save_dir = os.path.join(save_dir,'WienerHammersteinFiles') #matfiles location
     matfiles = [os.path.join(save_dir,a).replace('\\','/') for a in os.listdir(save_dir) if a.split('.')[-1]=='mat']
-    datafiles = []
-    datafiles_test = []
+    dataset = []
+    dataset_test = []
 
     #file = 'WH_CombinedZeroMultisineSinesweep.mat' #'WH_Triangle_meas.mat'
     for file in matfiles:
@@ -156,13 +156,13 @@ def WienerHammerstein_Process_Noise(dir_placement=None, force_download=False, sp
         fs = fs[0,0]
         data = [System_data(u=ui,y=yi) for ui,yi in zip(u.T,y.T)]
         if split_data and 'Test' in file:
-            datafiles_test.extend(data)
+            dataset_test.extend(data)
         else:
-            datafiles.extend(data)
+            dataset.extend(data)
 
-    datasets = System_data_list(datasets)
-    datafiles_test = System_data_list(datafiles_test)
-    return (datafiles, datafiles_test) if split_data else datafiles  #brackets required if before ,
+    dataset = System_data_list(dataset)
+    dataset_test = System_data_list(dataset_test)
+    return (dataset, dataset_test) if split_data else dataset  #brackets required if before ,
 
 def BoucWen(dir_placement=None, force_download=False, split_data=True):
 

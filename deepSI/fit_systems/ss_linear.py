@@ -282,13 +282,15 @@ class SS_linear(System_ss, System_fittable):
         for u in sys_data.u:
             X.append(x)
             x = self.f(x,u)
-        assert np.any(np.isnan(X))==False, 'x exploded, consider lowering nx increasing SS_f or SS_A_stability=True'
+        assert np.any(np.isnan(X))==False, 'x exploded, consider lowering nx or increasing SS_f or setting SS_A_stability=True'
         T = np.diag(1/np.std(X,axis=0))
         Tinv = np.linalg.inv(T)
         self.A = T@self.A@Tinv
         self.B = T@self.B
         self.C = self.C@Tinv
         self._nx = A.shape[0]
+        self.SS_f = SS_f
+        self.SS_A_stability = SS_A_stability
 
 
     def f(self,x,u):
