@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 packages = [a for a in find_namespace_packages(where='.') if a[:6]=='deepSI']
 
 setup(name = 'deepSI',
-      version = '0.2.10',
+      version = '0.2.11',
       description = 'Dynamical system identification',
       author = 'Gerben Beintema',
       author_email = 'g.i.beintema@tue.nl',
@@ -17,7 +17,7 @@ setup(name = 'deepSI',
       extras_require = dict(
         docs = ['sphinx>=1.6','sphinx-rtd-theme>=0.5']
         )
-     )
+    )
 
   # extras_require = dict(
   #   docs=['Sphinx>=1.6','scipy>=0.13','matplotlib>=1.3'],
