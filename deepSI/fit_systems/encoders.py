@@ -422,6 +422,59 @@ class SS_encoder_affine_input(SS_encoder_general):
             e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), h_net_kwargs=h_net_kwargs)
 
 
+class default_ino_state_net(nn.Module):
+    def __init__(self, nx, nu, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh): #ny here?
+        super(default_ino_state_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
+        self.nx = nx
+        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+        self.K = nn.Linear(np.prod(self.ny,dtype=int),nx,bias=False)
+
+    def forward(self, x, u, eps=None):
+        net_in = torch.cat([x,u.view(u.shape[0],-1)],axis=1)
+        if eps==None:
+            return self.net(net_in)
+        else:
+            epsflat = eps.view(eps.shape[0],-1)
+            return self.net(net_in) + self.K(epsflat)
+
+class SS_encoder_inovation(SS_encoder_general):
+    """
+    Similar to SS encoder but with the structure of 
+
+    x_k+1 = f(x_k,u_k,eps_k)
+    y_k = h(x_k) + eps_k
+
+
+    During optimization eps will be set to
+    eps_k = y_k - h(x_k)
+
+    During simulation eps will be set to zero (None)
+    Futhermore this requires a specialized f net build as 
+        self.fn = self.f_net(nx=self.nx, nu=nu, ny=self.ny,**self.f_net_kwargs)
+
+    """
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+
+    def init_nets(self, nu, ny): # a bit weird
+        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        self.fn =      self.f_net(nx=self.nx, nu=nu, ny=self.ny,                    **self.f_net_kwargs)
+        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs) 
+        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
+
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        x = self.encoder(uhist, yhist)
+        y_predict = []
+        for u,y in zip(torch.transpose(ufuture,0,1),torch.transpose(yfuture,0,1)): #iterate over time
+            yhat = self.hn(x)
+            y_predict.append(yhat) 
+            x = self.fn(x,u,eps=y-yhat)
+        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
+
+
 if __name__ == '__main__':
     # sys = SS_encoder_general()
     # from deepSI.datasets.sista_database import powerplant
@@ -441,6 +494,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder()
+    sys = SS_encoder_inovation()
     # sys = SS_par_start()
     sys.fit(train, sim_val=test,epochs=50, concurrent_val=True)
