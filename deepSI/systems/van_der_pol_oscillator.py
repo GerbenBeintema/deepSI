@@ -20,7 +20,7 @@ class Van_der_pol_oscillator(System_deriv):
         return x[0]
 
     def deriv(self,state,u): #will be converted by Deriv system
-        x,y = state #unpack
+        x, y = state #unpack
         xp = self.mu*(x-x**3/3-y)
         yp = 1/self.mu*(x-u)
         return np.array([xp,yp])

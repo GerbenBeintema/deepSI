@@ -120,7 +120,7 @@ class System_torch(System_fittable):
         return optimizer(parameters,**optimizer_kwargs) 
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
-            sim_val=None, concurrent_val=False, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True):
+            sim_val=None, concurrent_val=False, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True, timeout=None):
         '''The batch optimization method with parallel validation, (if concurrent_val then use "if __name__=='__main__'" or import from a file if using self defined method)
 
         Parameters
@@ -241,11 +241,12 @@ class System_torch(System_fittable):
         else: #do it now
             Loss_val_now = validation(append=False)
             print(f'Initial Validation {val_str}=', Loss_val_now)
-
         try:
             start_t = time.time() #time keeping
-            
-            for epoch in (tqdm(range(epochs)) if verbose>0 else range(epochs)):
+            import itertools
+            epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
+            if timeout is not None and verbose>0: print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
+            for epoch in (tqdm(epochsrange) if verbose>0 else epochsrange):
                 np.random.shuffle(ids)
                 bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
                 Loss_acc_epoch = 0.
@@ -297,6 +298,9 @@ class System_torch(System_fittable):
                     Loss_str = f'Epoch {epoch+1:4}, Train {trainstr}, Val {val_str} {Loss_val_now:6.4}'
                     time_str = f'Time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, {valfeqstr}'
                     print(f'{Loss_str}, {time_str}')
+                if timeout is not None:
+                    if time.time() >= start_t+timeout:
+                        break
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
         #end of training

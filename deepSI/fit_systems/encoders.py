@@ -400,6 +400,28 @@ class SS_par_start(System_torch): #this is not implemented in a nice manner, the
     def get_state(self):
         return self.state[0].numpy()
 
+
+from deepSI.utils import simple_res_net, feed_forward_nn, affine_forward_layer
+class SS_encoder_affine_input(SS_encoder_general):
+    """
+    The encoder setup with a linear transition function with an affine input (kinda like an LPV), in equations
+
+        x_k = e(u_kpast,y_kpast) 
+        x_k+1 = A@x_k + g(x_k)@u_k          #affine input here (@=matrix multiply)
+        y_k = h(x_k)
+
+    Where g is given by g_net which is by default a feedforward nn with residual (i.e. simple_res_net) called as 
+        'g_net(n_in=affine_dim,n_out=output_dim*input_dim,**g_net_kwargs)'
+    with affine_dim=nx, output_dim = nx, input_dim=nu
+
+    Hence, g_net produces a vector which is reshaped into a matrix (See deepSI.utils.torch_nets.affine_forward_layer for details).
+    """
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, g_net=simple_res_net, h_net=default_output_net, e_net_kwargs={}, g_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb,\
+            e_net=e_net,f_net=affine_forward_layer, h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), h_net_kwargs=h_net_kwargs)
+
+
 if __name__ == '__main__':
     # sys = SS_encoder_general()
     # from deepSI.datasets.sista_database import powerplant
