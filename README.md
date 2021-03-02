@@ -18,9 +18,9 @@ The deepSI Documentation and Installation details are available at [deepsi.readt
 ```python
 import deepSI
 from matplotlib import pyplot as plt
-train, test = deepSI.datasets.Silverbox() # automaticly downloaded (and cashed) the system data
-                                          # It also splitted the systems into two instances of System_data
-plt.plot(train.y) #train.y = measured outputs (train.u = the system inputs)
+train, test = deepSI.datasets.Silverbox() # Automaticly downloaded (and cashed) the Silverbox system data
+                                          # It also splitted the data into two instances of System_data
+plt.plot(train.y) #train.y = measured outputs (and train.u = the system inputs)
 plt.plot(test.y)
 plt.ylabel('y'); plt.xlabel('t'); plt.legend(['train','test']); plt.show()
 ```
