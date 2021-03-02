@@ -443,17 +443,20 @@ class default_ino_state_net(nn.Module):
 class SS_encoder_inovation(SS_encoder_general):
     """
     Similar to SS encoder but with the structure of 
-
-    x_k+1 = f(x_k,u_k,eps_k)
-    y_k = h(x_k) + eps_k
-
+       x_k+1 = f(x_k,u_k,eps_k)
+       y_k = h(x_k) + eps_k
 
     During optimization eps will be set to
     eps_k = y_k - h(x_k)
 
     During simulation eps will be set to zero (None)
+    eps_k = 0
+
     Futhermore this requires a specialized f net build as 
         self.fn = self.f_net(nx=self.nx, nu=nu, ny=self.ny,**self.f_net_kwargs)
+
+    default structure for f is as follows:
+    f(x_k,u_k,eps_k) = f0(x_k,u_k) + K eps_k    (with K a matrix)
 
     """
     def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):

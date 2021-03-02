@@ -364,9 +364,9 @@ class System_torch(System_fittable):
                 attribute.train()
 
 def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRMS', loss_kwargs={}):
+    '''Utility function used by .fit for concurrent validation'''
+
     parent_remote.close()
-    with open('test.txt','w') as f:
-        f.write(str(sim_val))
     while True:
         try:
             sys, append, Loss_train, time_now = remote.recv() #gets the current network
