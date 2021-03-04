@@ -120,23 +120,28 @@ class System_torch(System_fittable):
         return optimizer(parameters,**optimizer_kwargs) 
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
-            sim_val=None, concurrent_val=False, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True, timeout=None):
-        '''The batch optimization method with parallel validation, (if concurrent_val then use "if __name__=='__main__'" or import from a file if using self defined method)
+            sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True):
+        '''The batch optimization method with parallel validation, 
 
         Parameters
         ----------
         sys_data : System_data or System_data_list
-            the system data to be fitted
+            The system data to be fitted
         epochs : int
         batch_size : int
         loss_kwargs : dict
-            kwargs to be passed on to make_training_data and init_optimizer
+            Kwargs to be passed to make_training_data and loss.
         optimizer_kwargs : dict
-            kwargs to be passed on to init_optimizer
+            Kwargs to be passed on to init_optimizer.
         sim_val : System_data or System_data_list
-            the system data to be used as simulation validation using apply_experiment
+            The system data to be used as simulation validation using apply_experiment (if absent than a portion of the training data will be used)
+        concurrent_val : boole
+            If set to true a subprocess will be started which concurrently evaluates the validation method selected.
+            Warning: if concurrent_val is set than "if __name__=='__main__'" or import from a file if using self defined method or networks.
+        timeout : None or number
+            Alternative to epochs to run until a set amount of time has past. 
         verbose : int
-            set to 0 for a silent run
+            Set to 0 for a silent run
         cuda : bool
             if cuda will be used (often slower than not using it, be aware)
         val_frac : float
@@ -150,8 +155,11 @@ class System_torch(System_fittable):
         -----
         This method implements a batch optimization method in the following way; each epoch the training data is scrambled and batched where each batch
         is passed to the loss method and utilized to optimize the parameters. After each epoch the systems is validated using the evaluation of a 
-        simulation or a validation split and saved if a new lowest validation loss has been achieved. 
+        simulation or a validation split and a checkpoint will be crated if a new lowest validation loss has been achieved. (or concurrently if concurrent_val is set)
         After training (which can be stopped at any moment using a KeyboardInterrupt) the system is loaded with the lowest validation loss. 
+
+        The default checkpoint location is "C:/Users/USER/AppData/Local/deepSI/checkpoints" for windows and ~/.deepSI/checkpoints/ for unix like.
+        These can be loaded manually using sys.load_checkpoint("_best") or "_last". (For this to work the sys.unique_code needs to be set to the correct string)
         '''
         def validation(append=True, train_loss=None, time_elapsed_total=None):
             self.eval(); self.cpu();
@@ -226,7 +234,7 @@ class System_torch(System_fittable):
         val_counter = 0  #to print the frequency of the validation step.
         val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         best_epoch = 0
-
+        batch_id_start = self.batch_counter
 
         if concurrent_val:
             from multiprocessing import Process, Pipe
@@ -278,26 +286,30 @@ class System_torch(System_fittable):
                         remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
 
-
-                #end of epoch
+                #end of epoch clean up
                 train_loss_epoch = Loss_acc_epoch/N_batch_updates_per_epoch
                 if not concurrent_val:
                     Loss_val_now = validation(append=True,train_loss=train_loss_epoch, time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit
 
+                #printing routine
                 if verbose>0:
                     time_elapsed = time.time() - start_t
                     if bestfit_old > self.bestfit:
                         print(f'########## New lowest validation loss achieved ########### {val_str} = {self.bestfit}')
                         best_epoch = epoch+1
-                    if concurrent_val:
+                    if concurrent_val: #if concurrent val then print validation freq
                         val_feq = val_counter/(epoch+1)
                         valfeqstr = (f'{val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f'{1/val_feq:4.3} epochs/val')
-                    else:
+                    else: #else print validation time use
                         valfeqstr = f'val: {time_val/time_elapsed:.1%}'
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
                     Loss_str = f'Epoch {epoch+1:4}, Train {trainstr}, Val {val_str} {Loss_val_now:6.4}'
                     time_str = f'Time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, {valfeqstr}'
-                    print(f'{Loss_str}, {time_str}')
+                    batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
+                    batch_str = (f'{batch_feq:4.3} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.3} sec/batch')
+                    print(f'{Loss_str}, {time_str}, {batch_str}')
+
+                #breaking on timeout
                 if timeout is not None:
                     if time.time() >= start_t+timeout:
                         break
@@ -305,7 +317,7 @@ class System_torch(System_fittable):
             print('Stopping early due to a KeyboardInterrupt')
         #end of training
         if concurrent_val:
-            if verbose: print('Waiting for validation process to finish and one last validation...',end='')
+            if verbose: print('Waiting for started validation process to finish and one last validation...',end='')
             Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
             if N_batch_acc_val>0: #there might be some trained but not yet tested
                 remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
@@ -316,8 +328,9 @@ class System_torch(System_fittable):
         self.train(); self.cpu();
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
         self.checkpoint_save_system(name='_last')
-        self.checkpoint_load_system()
-        if verbose: print(f'Loaded model with best known validation {val_str} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
+        self.checkpoint_load_system(name='_best')
+        if verbose: 
+            print(f'Loaded model with best known validation {val_str} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
 
     ########## Saving and loading ############
     def checkpoint_save_system(self, name='_best', directory=None):
@@ -365,7 +378,6 @@ class System_torch(System_fittable):
 
 def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRMS', loss_kwargs={}):
     '''Utility function used by .fit for concurrent validation'''
-
     parent_remote.close()
     while True:
         try:
@@ -398,4 +410,4 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
 if __name__ == '__main__':
     sys = deepSI.fit_systems.SS_encoder()
     train, test = deepSI.datasets.CED()
-    sys.fit(train)
+    sys.fit(train,sim_val=test,batch_size=64,concurrent_val=True)
