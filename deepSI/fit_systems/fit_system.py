@@ -239,11 +239,13 @@ class System_torch(System_fittable):
         if concurrent_val:
             from multiprocessing import Process, Pipe
             remote, work_remote = Pipe()
+            remote.receiving = False
             process = Process(target=_worker, args=(work_remote, remote, sim_val, data_val, sim_val_fun, loss_kwargs))
             process.daemon = True  # if the main process crashes, we should not cause things to hang
             process.start()
             work_remote.close()
             remote.send((self, False, float('inf'), None)) #time here does not matter
+            remote.receiving = True
             #           sys, append, Loss_acc, time_now, epoch
             Loss_val_now = float('nan')
         else: #do it now
@@ -283,7 +285,9 @@ class System_torch(System_fittable):
 
                     if concurrent_val and remote.poll():
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
+                        remote.receiving = False
                         remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
+                        remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
 
                 #end of epoch clean up
@@ -318,7 +322,9 @@ class System_torch(System_fittable):
         #end of training
         if concurrent_val:
             if verbose: print('Waiting for started validation process to finish and one last validation...',end='')
-            Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
+            if remote.receiving:
+                Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here
+                if verbose: print('recv done...',end='')
             if N_batch_acc_val>0: #there might be some trained but not yet tested
                 remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()

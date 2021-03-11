@@ -221,6 +221,7 @@ class System(object):
             else:
                 Losses.append(np.mean((ynow-obs)**2)**0.5)
             obs = self.step_multi(unow)
+        self.init_state(sys_data) #remove large state
         return np.array(Losses)
 
     def save_system(self,file):
