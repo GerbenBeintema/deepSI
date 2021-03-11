@@ -235,16 +235,18 @@ class System_torch(System_fittable):
         val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         best_epoch = 0
         batch_id_start = self.batch_counter
+        
 
         if concurrent_val:
             from multiprocessing import Process, Pipe
+            from copy import deepcopy
             remote, work_remote = Pipe()
             remote.receiving = False
             process = Process(target=_worker, args=(work_remote, remote, sim_val, data_val, sim_val_fun, loss_kwargs))
             process.daemon = True  # if the main process crashes, we should not cause things to hang
             process.start()
             work_remote.close()
-            remote.send((self, False, float('inf'), None)) #time here does not matter
+            remote.send((deepcopy(self), False, float('inf'), None)) #time here does not matter
             remote.receiving = True
             #           sys, append, Loss_acc, time_now, epoch
             Loss_val_now = float('nan')
@@ -286,7 +288,7 @@ class System_torch(System_fittable):
                     if concurrent_val and remote.poll():
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
-                        remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
+                        remote.send((deepcopy(self), True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
 
@@ -323,6 +325,7 @@ class System_torch(System_fittable):
         if concurrent_val:
             if verbose: print('Waiting for started validation process to finish and one last validation...',end='')
             if remote.receiving:
+                #add poll here?
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here
                 if verbose: print('recv done...',end='')
             if N_batch_acc_val>0: #there might be some trained but not yet tested
