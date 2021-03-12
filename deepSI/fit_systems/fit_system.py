@@ -246,12 +246,13 @@ class System_torch(System_fittable):
             process.daemon = True  # if the main process crashes, we should not cause things to hang
             process.start()
             work_remote.close()
-            remote.send((deepcopy(self), False, float('inf'), None)) #time here does not matter
+            remote.send((deepcopy(self), True, float('NaN'), extra_t)) #time here does not matter
+            #            sys, append, Loss_train, time_now
             remote.receiving = True
             #           sys, append, Loss_acc, time_now, epoch
             Loss_val_now = float('nan')
         else: #do it now
-            Loss_val_now = validation(append=False)
+            Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
             print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
             start_t = time.time() #time keeping
@@ -351,6 +352,12 @@ class System_torch(System_fittable):
         file = os.path.join(directory,self.name + name + '.pth')
         try:
             self.__dict__ = torch.load(file)
+            if self.fitted:
+                self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
+                for i in np.where(np.isnan(self.Loss_train))[0]:
+                    if i!=len(self.Loss_train)-1: #if the last is NaN than I will leave it there. Something weird happened like breaking before one validation loop was completed. 
+                        self.Loss_train[i] = self.Loss_train[i+1]
+
         except FileNotFoundError:
             raise FileNotFoundError(f'No such file at {file}, did you set sys.unique_code correctly?')
 
@@ -392,7 +399,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
         try:
             sys, append, Loss_train, time_now = remote.recv() #gets the current network
             
-            sys.eval(); sys.cpu();
+            sys.eval(); sys.cpu()
             if sim_val is not None:
                 sim_val_sim = sys.apply_experiment(sim_val)
                 Loss_val = sim_val_sim.__getattribute__(sim_val_fun)(sim_val)
@@ -410,7 +417,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
             sys.train() #back to training mode
             if sys.bestfit >= Loss_val:
                 sys.bestfit = Loss_val
-                sys.checkpoint_save_system()
+                sys.checkpoint_save_system('_best')
             remote.send((Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
         except EOFError:
             break
@@ -419,4 +426,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
 if __name__ == '__main__':
     sys = deepSI.fit_systems.SS_encoder()
     train, test = deepSI.datasets.CED()
-    sys.fit(train,sim_val=test,batch_size=64,concurrent_val=True)
+    sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
+    # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
+    # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
+    print(sys.Loss_train)
