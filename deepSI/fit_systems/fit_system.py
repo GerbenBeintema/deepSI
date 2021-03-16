@@ -419,14 +419,20 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
                 sys.bestfit = Loss_val
                 sys.checkpoint_save_system('_best')
             remote.send((Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
-        except EOFError:
+        except EOFError: #main process stopped
             break
+        except Exception as err: #some other error
+            import traceback
+            with open('validation process crash file.txt','w') as f:
+                f.write(traceback.format_exc())
+            raise err
+
 
 
 if __name__ == '__main__':
     sys = deepSI.fit_systems.SS_encoder()
     train, test = deepSI.datasets.CED()
-    sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
+    sys.fit(train,sim_val=test,epochs=2,batch_size=64,concurrent_val=True)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)

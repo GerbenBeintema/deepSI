@@ -23,7 +23,7 @@ class Double_potential_well(System_deriv): #discrate system single system
         self.gamma = 1/(Nresist*2*np.pi)
         dt = 2*np.pi/20 #20 points in the sin
         super(Double_potential_well, self).__init__(dt=dt,nx=2)
-        self.action_space = Box(-float(-1),float(1),shape=tuple())
+        self.action_space = Box(-float(1),float(1),shape=tuple())
 
     def reset(self):
         self.x = [-self.a,0]
