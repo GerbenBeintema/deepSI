@@ -315,25 +315,25 @@ class System_ss(System): #simple state space systems
     def get_state(self):
         return self.x
 
+
+from scipy.integrate import solve_ivp
 class System_deriv(System_ss):
     ''''''
 
-    def __init__(self,dt=None,nx=None,nu=None,ny=None):
+    def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK45'):
         assert dt is not None
         self.dt = dt
-        super(System_deriv,self).__init__(nx,nu,ny)
-        
+        self.method = method
+        super(System_deriv, self).__init__(nx, nu, ny)
 
     def f(self,x,u):
         #https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
         #uses self.deriv and self.dt
-        #RK4, later some adaptive step and other method
-        x = np.array(x)
-        k1 = self.dt*np.array(self.deriv(x,u))
-        k2 = self.dt*np.array(self.deriv(x+k1/2,u))
-        k3 = self.dt*np.array(self.deriv(x+k2/2,u))
-        k4 = self.dt*np.array(self.deriv(x+k3,u))
-        return x + (k1+2*k2+2*k3+k4)/6
+        #RK4
+        f = lambda t,x: self.deriv(x,u)
+        sol = solve_ivp(f, [0, self.dt], x, method=self.method) #integration
+        x = sol.y[:,-1]
+        return x
 
     def deriv(self,x,u):
         raise NotImplementedError('self.deriv should be implemented in child')
@@ -518,15 +518,16 @@ class System_bj(System):
 
 if __name__ == '__main__':
     # sys = Systems_gyms('MountainCarContinuous-v0')
-    sys = Systems_gyms('LunarLander-v2')
-    print(sys.reset())
-    # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve
-    print(sys)
-    exp = System_data(u=[sys.action_space.sample() for i in range(500)]) 
-    print(exp.u.dtype)
-    sys_data =sys.apply_experiment(exp)
-    print(sys_data)
-    sys_data.plot(show=True)
+    pass
+    # sys = Systems_gyms('LunarLander-v2')
+    # print(sys.reset())
+    # # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve
+    # print(sys)
+    # exp = System_data(u=[sys.action_space.sample() for i in range(500)]) 
+    # print(exp.u.dtype)
+    # sys_data =sys.apply_experiment(exp)
+    # print(sys_data)
+    # sys_data.plot(show=True)
 
     # sys = deepSI.systems.Nonlin_io_normals()
     # exp = System_data(u=np.random.normal(scale=2,size=100))
@@ -543,3 +544,25 @@ if __name__ == '__main__':
 
     # sys_data = sys.apply_experiment(exp)
     # sys_data.plot(show=True)
+
+    #deriv testing
+    # class barrier(System_deriv):
+    #     """docstring for barrier"""
+    #     def __init__(self, method='RK4'):
+    #         super(barrier, self).__init__(nx=2,dt=0.1,method=method)
+        
+    #     def deriv(self,x,u):
+    #         x,vx = x
+    #         dxdt = vx
+    #         alpha = 0.01
+    #         dvxdt = - 1e-3*vx + alpha*( - 1/(x-1)**2 + 1/(x+1)**2) + u
+    #         return [dxdt,dvxdt]
+
+    #     def h(self,x):
+    #         return x[0]
+
+    # np.random.seed(32)
+    # sys = barrier(method='RK45')
+    # exp = deepSI.System_data(u=np.random.uniform(-1,1,size=500))
+    # d = sys.apply_experiment(exp)
+    # d.plot(show=True)
