@@ -221,7 +221,11 @@ class System(object):
             else:
                 Losses.append(np.mean((ynow-obs)**2)**0.5)
             obs = self.step_multi(unow)
-        self.init_state(sys_data) #remove large state
+
+        if isinstance(sys_data,System_data_list):
+            self.init_state(sys_data[0]) #remove large state
+        else:
+            self.init_state(sys_data) #remove large state
         return np.array(Losses)
 
     def save_system(self,file):
@@ -320,7 +324,7 @@ from scipy.integrate import solve_ivp
 class System_deriv(System_ss):
     ''''''
 
-    def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK45'):
+    def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK4'):
         assert dt is not None
         self.dt = dt
         self.method = method
@@ -330,10 +334,17 @@ class System_deriv(System_ss):
         #https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
         #uses self.deriv and self.dt
         #RK4
-        f = lambda t,x: self.deriv(x,u)
-        sol = solve_ivp(f, [0, self.dt], x, method=self.method) #integration
-        x = sol.y[:,-1]
-        return x
+        if self.method=='RK4':
+            x = np.array(x)
+            k1 = self.dt*np.array(self.deriv(x,u))
+            k2 = self.dt*np.array(self.deriv(x+k1/2,u))
+            k3 = self.dt*np.array(self.deriv(x+k2/2,u))
+            k4 = self.dt*np.array(self.deriv(x+k3,u))
+            return x + (k1+2*k2+2*k3+k4)/6
+        else:
+            f = lambda t,x: self.deriv(x,u)
+            sol = solve_ivp(f, [0, self.dt], x, method=self.method) #integration
+            return sol.y[:,-1]
 
     def deriv(self,x,u):
         raise NotImplementedError('self.deriv should be implemented in child')

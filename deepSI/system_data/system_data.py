@@ -552,6 +552,41 @@ class System_data_list(System_data):
             other = System_data_list(other)
         self.sdl.extend(other.sdl)
 
+
+    def down_sample_by_average(self,factor):
+        """Down sample method
+
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
+        return System_data_list([s.down_sample_by_average(factor) for s in self.sdl])
+
+
+    #scipy.signal.decimate lookup
+    #other downsample methods
+    def down_sample_by_decimate(self,factor):
+        """Down sample method
+        
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
+        return System_data_list([s.down_sample_by_decimate(factor) for s in self.sdl])
+
+
+    def down_sample_by_MIMO(self,factor):
+        """Down sample method
+
+        Parameters
+        ----------
+        factor : int
+            length will be (original length)/factor        
+        """
+        return System_data_list([s.down_sample_by_MIMO(factor) for s in self.sdl])
+
 class System_data_norm(object):
     '''A utility to normalize system_data before fitting or usage
 

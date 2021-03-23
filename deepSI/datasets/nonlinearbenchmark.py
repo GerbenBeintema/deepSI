@@ -161,8 +161,7 @@ def WienerHammerstein_Process_Noise(dir_placement=None, force_download=False, sp
             dataset.extend(data)
 
     dataset = System_data_list(dataset)
-    dataset_test = System_data_list(dataset_test)
-    return (dataset, dataset_test) if split_data else dataset  #brackets required if before ,
+    return (dataset, System_data_list(dataset_test)) if split_data else dataset  #brackets required if before ,
 
 def BoucWen(dir_placement=None, force_download=False, split_data=True):
 
