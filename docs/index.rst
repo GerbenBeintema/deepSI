@@ -10,6 +10,7 @@ Welcome to deepSI's documentation!
    :maxdepth: 1
 
    intro
+   installation
    tutorial
    examples
    deepSI

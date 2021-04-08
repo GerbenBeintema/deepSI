@@ -1,7 +1,6 @@
 from deepSI.system_data import System_data, System_data_list, System_data_norm
 import deepSI
 import numpy as np
-from matplotlib import pyplot as plt
 import pickle
 from secrets import token_urlsafe
 import copy
@@ -423,7 +422,7 @@ class System_bj(System):
         #na = length of y hat
         #nb = length of u
         #nc = length of y real
-        super(System_IO_fit_sklearn, self).__init__(None, None) #action_space=None, observation_space=None
+        super(System_bj, self).__init__(None, None) #action_space=None, observation_space=None
         self.na = na
         self.nb = nb
         self.nc = nc
@@ -503,7 +502,7 @@ class System_bj(System):
     def multi_BJ_step(self,uy):
         return self.BJ_step(uy)
 
-    def apply_BJ_experiment(sys_data):
+    def apply_BJ_experiment(self,sys_data):
         if isinstance(sys_data,(tuple,list,System_data_list)):
             return System_data_list([self.apply_BJ_experiment(sd) for sd in sys_data])
         if sys_data.y==None:

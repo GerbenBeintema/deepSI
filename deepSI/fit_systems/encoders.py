@@ -476,7 +476,7 @@ class SS_encoder_inovation(SS_encoder_general):
             y_predict.append(yhat) 
             x = self.fn(x,u,eps=y-yhat)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
-
+        
 
 if __name__ == '__main__':
     # sys = SS_encoder_general()

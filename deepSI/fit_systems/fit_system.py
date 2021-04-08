@@ -324,7 +324,7 @@ class System_torch(System_fittable):
             print('Stopping early due to a KeyboardInterrupt')
         #end of training
         if concurrent_val:
-            if verbose: print('Waiting for started validation process to finish and one last validation...',end='')
+            if verbose: print('Waiting for started validation process to finish and one last validation...receiving=',remote.receiving,end='')
             if remote.receiving:
                 #add poll here?
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here

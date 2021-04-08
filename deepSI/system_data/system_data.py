@@ -264,7 +264,7 @@ class System_data(object):
         video = cv2.VideoWriter(file_name, 0, 60, (ny_out,nx_out))
 
         resize = lambda x: np.array(Image.fromarray(x).resize((ny_out, nx_out)))
-        to_img = lambda x: resize((np.clip(x,vmin,vmax).copy()[:,:,None]*255*np.ones((1,1,3))).astype(np.uint8))
+        to_img = lambda x: resize((((np.clip(x,vmin,vmax) - vmin)/(vmax - vmin)).copy()[:,:,None]*255*np.ones((1,1,3))).astype(np.uint8))
         try: 
             for yi in self.y:
                 video.write(to_img(yi))
