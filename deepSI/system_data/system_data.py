@@ -101,6 +101,16 @@ class System_data(object):
         else:
             return self.u.shape[1] if self.u.ndim==2 else self.u.shape[1:]
 
+    @property
+    def nx(self):
+        '''Number of internal states. None or number or tuple'''
+        if self.x is None:
+            raise ValueError('No state present')
+        elif self.x.ndim==1:
+            return None
+        else:
+            return self.x.shape[1] if self.x.ndim==2 else self.x.shape[1:]
+
     def flatten(self):
         """Flatten both u and y to (N,nu) and (N,ny) returns a new System_data"""
         if self.y is not None and self.y.ndim>2:
@@ -258,7 +268,7 @@ class System_data(object):
         if not file_name.endswith('.mp4'):
             file_name += '.mp4'
 
-        nx,ny = self.y.shape[1],self.y.shape[2] #resolution of simulation
+        nx,ny = self.y.shape[1], self.y.shape[2] #resolution of simulation
         nx_out,ny_out = round(nx*scale_factor),round(ny*scale_factor) #resolution of video produced
 
         video = cv2.VideoWriter(file_name, 0, 60, (ny_out,nx_out))
@@ -271,6 +281,27 @@ class System_data(object):
         finally:
             cv2.destroyAllWindows()
             video.release()
+
+    def plot_state_space_3d(self,nmax=2000,kernal=None,interpol_n=10):
+        from scipy.interpolate import interp1d
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+
+        fig = plt.figure(figsize=(6,6))
+        ax = fig.add_subplot(111, projection='3d')
+        if self.nx>3:
+            if kernal is None:
+                from sklearn.decomposition import KernelPCA
+                kernal = KernelPCA(n_components=3,fit_inverse_transform=True)
+            kernal.fit(self.x)
+            F = kernal.transform(self.x[:nmax])
+        else:
+            F = self.x[:nmax]
+        f = interp1d(np.arange(F.shape[0]),F.T,kind='quadratic')
+        out = f(np.arange(0,F.shape[0]-1,1/interpol_n))
+        ax.plot(out[0],out[1],out[2])
+        # plt.show()
+        return kernal
 
 
     def save(self,file):

@@ -333,7 +333,7 @@ class System_deriv(System_ss):
         #https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
         #uses self.deriv and self.dt
         #RK4
-        if self.method=='RK4':
+        if self.method=='RK4': #this is a lot faster and quite accurate if dt is smaller than the shortest characteristic time-scale.
             x = np.array(x)
             k1 = self.dt*np.array(self.deriv(x,u))
             k2 = self.dt*np.array(self.deriv(x+k1/2,u))

@@ -289,6 +289,7 @@ class System_torch(System_fittable):
                     if concurrent_val and remote.poll():
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
+                        #deepcopy(self) costs time due to the arrays that are passed.
                         remote.send((deepcopy(self), True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
@@ -394,11 +395,12 @@ class System_torch(System_fittable):
 
 def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRMS', loss_kwargs={}):
     '''Utility function used by .fit for concurrent validation'''
+    
     parent_remote.close()
     while True:
         try:
             sys, append, Loss_train, time_now = remote.recv() #gets the current network
-            
+            #put deepcopy here?
             sys.eval(); sys.cpu()
             if sim_val is not None:
                 sim_val_sim = sys.apply_experiment(sim_val)

@@ -58,4 +58,21 @@ class affine_forward_layer(nn.Module):
 
     def forward(self,x,u):
         u = u.view(u.shape[0],-1) #flatten
-        return self.Apart(x) + self.gpart(x,u)        
+        return self.Apart(x) + self.gpart(x,u)
+
+
+
+class integrators_RK4(nn.Module):
+    def __init__(self, dt):
+        super(integrators_RK4,self).__init__()
+        self.dt = dt
+    
+    def forward(self, x, u):
+        k1 = self.dt*self.deriv(x,u)
+        k2 = self.dt*self.deriv(x+k1/2,u)
+        k3 = self.dt*self.deriv(x+k2/2,u)
+        k4 = self.dt*self.deriv(x+k3,u)
+        return x + (k1 + 2*k2 + 2*k3 + k4)/6
+
+    def deriv(self,x,u):
+        raise NotImplementedError('deriv')        
