@@ -1,13 +1,14 @@
 
 from deepSI.fit_systems.fit_system import System_fittable, System_torch
+import deepSI
 import torch
 from torch import nn
 import numpy as np
 
 class SS_encoder(System_torch):
     """docstring for SS_encoder"""
-    def __init__(self, nx=10, na=20, nb=20):
-        super(SS_encoder, self).__init__()
+    def __init__(self, nx=10, na=20, nb=20, continuous_time=False):
+        super(SS_encoder, self).__init__() #where does dt come into
         self.nx, self.na, self.nb = nx, na, nb
         self.k0 = max(self.na,self.nb)
         
@@ -22,7 +23,7 @@ class SS_encoder(System_torch):
         self.f_n_nodes_per_layer = 64
         self.f_activation = nn.Tanh
 
-        self.h_net = simple_res_net
+        self.h_net = simple_res_net if not continuous_time else simple_res_deriv_net
         self.h_n_hidden_layers = 2
         self.h_n_nodes_per_layer = 64
         self.h_activation = nn.Tanh
@@ -203,6 +204,23 @@ class SS_encoder_general(System_torch):
 
     def get_state(self):
         return self.state[0].numpy()
+
+from deepSI.utils import integrators_RK4
+class default_deriv_state_net(integrators_RK4):
+    def __init__(self, nx, nu, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+        super(default_deriv_state_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+
+    def deriv(self, x, u):
+        net_in = torch.cat([x,u.view(u.shape[0],-1)],axis=1)
+        return self.net(net_in)
+
+class SS_encoder_deriv_general(SS_encoder_general):
+    """docstring for SS_encoder_general"""
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_deriv_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_deriv_general, self).__init__(nx=nx,na=na,nb=nb,e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
 
 
 class SS_encoder_rnn(System_torch):
@@ -483,6 +501,8 @@ if __name__ == '__main__':
     # from deepSI.datasets.sista_database import powerplant
     from deepSI.datasets import Silverbox
     train, test = Silverbox()#powerplant()
+    train.dt = 0.1
+    test.dt = 0.1
     # train, test = train[:150], test[:50]
     # print(train, test)
     # # sys.fit(train, sim_val=test,epochs=50)
@@ -497,6 +517,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_inovation()
+    sys = SS_encoder_deriv_general()
     # sys = SS_par_start()
     sys.fit(train, sim_val=test,epochs=50, concurrent_val=True)

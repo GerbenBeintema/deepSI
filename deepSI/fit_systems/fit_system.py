@@ -202,6 +202,8 @@ class System_torch(System_fittable):
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
 
+        self.set_dt(sys_data.dt)
+
         self.epoch_counter = 0 if len(self.epoch_id)==0 else self.epoch_id[-1]
         self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
         extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct time counting after reset
@@ -339,7 +341,10 @@ class System_torch(System_fittable):
         self.train(); self.cpu();
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
         self.checkpoint_save_system(name='_last')
-        self.checkpoint_load_system(name='_best')
+        try:
+            self.checkpoint_load_system(name='_best')
+        except FileNotFoundError:
+            print('no best checkpoint found keeping last')
         if verbose: 
             print(f'Loaded model with best known validation {val_str} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
 
@@ -371,6 +376,12 @@ class System_torch(System_fittable):
         Consider manually creating a save_system function for a long term solution. (maybe utilize checkpoint_save_system)
         '''
         torch.save(self, file)
+
+    ######### Continuous Time #########
+    def set_dt(self,dt):
+        if hasattr(self,'fn') and isinstance(self.fn, deepSI.utils.time_integrators):
+            self.fn.dt = dt
+        self.dt = dt
 
     ### CPU & CUDA ###
     def cuda(self):
@@ -420,7 +431,9 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
             if sys.bestfit >= Loss_val:
                 sys.bestfit = Loss_val
                 sys.checkpoint_save_system('_best')
-            remote.send((Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
+            out = (Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)
+            del sys
+            remote.send(out) #sends back arrays
         except EOFError: #main process stopped
             break
         except Exception as err: #some other error
@@ -432,9 +445,25 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
 
 
 if __name__ == '__main__':
-    sys = deepSI.fit_systems.SS_encoder()
-    train, test = deepSI.datasets.CED()
-    sys.fit(train,sim_val=test,epochs=2,batch_size=64,concurrent_val=True)
-    # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
-    # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
-    print(sys.Loss_train)
+    # #check if system is continues, pass dt into 
+    # class Test(object):
+    #     """docstring for test"""
+    #     def __init__(self, arg):
+    #         super(Test, self).__init__()
+    #         self.arg = arg
+
+    #     def forward(self,**kwargs):
+    #         kwargs['dt'] = 1.
+    #         self.loss(**kwargs)
+
+    #     def loss(self, nu=2):
+    #         return nu
+    # t = Test(1)
+    # print(t.forward(nu=2))
+    pass            
+    # sys = deepSI.fit_systems.SS_encoder()
+    # train, test = deepSI.datasets.CED()
+    # sys.fit(train,sim_val=test,epochs=2,batch_size=64,concurrent_val=True)
+    # # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
+    # # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
+    # print(sys.Loss_train)

@@ -6,6 +6,7 @@ from secrets import token_urlsafe
 import copy
 import gym
 from gym.spaces import Box
+from matplotlib import pyplot as plt
 
 def load_system(file):
     """This is not a safe function, only use on trusted files"""
@@ -54,6 +55,7 @@ class System(object):
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
         self.seed = 42
         self.use_norm = True #can be changed later
+        self.dt = None
 
     @property
     def name(self):
@@ -95,14 +97,19 @@ class System(object):
         if isinstance(sys_data,(tuple,list,System_data_list)):
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         Y = []
-        sys_data_norm = self.norm.transform(sys_data)
+        sys_data_norm = self.norm.transform(sys_data) #do this correctly
         
+        if sys_data.dt is not None: #dt check
+            dt_old = self.dt
+            self.set_dt(sys_data.dt)
+
         U = sys_data_norm.u
         if sys_data_norm.y is not None: #if y is not None than init state
             obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
             Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
         else:
             obs, k0 = self.reset(), 0
+
         if save_state:
             X = [self.get_state()]*(k0+1)
 
@@ -110,10 +117,13 @@ class System(object):
             Y.append(obs) 
             if k<len(U)-1: #skip last step
                 action = U[k]
-                obs = self.step(action)
+                obs = self.step(action) #here
                 if save_state:
                     X.append(self.get_state())
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0))   
+        
+        if sys_data.dt is not None:
+            self.set_dt(dt_old)
+        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
     
     def apply_controller(self,controller,N_samples):
         '''Same as self.apply_experiment but with a controller
@@ -127,6 +137,9 @@ class System(object):
         -----
         This method is in a very early state and will probably be changed in the near future.
         '''
+        if sys_data.dt is not None: #dt check
+            dt_old = self.dt
+            self.set_dt(sys_data.dt)
         Y = []
         U = []
         obs = self.reset() #normed obs
@@ -136,6 +149,8 @@ class System(object):
             U.append(action)
             obs = self.step(action)
         # Y = Y[:-1]
+        if sys_data.dt is not None:
+            self.set_dt(dt_old)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
 
     def init_state(self, sys_data):
@@ -183,13 +198,22 @@ class System(object):
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
+    def set_dt(self,dt):
+        self.dt = dt
+
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data)
+        if sys_data.dt is not None: #dt check
+            dt_old = self.dt
+            self.set_dt(sys_data.dt)
+
         obs, k0 = self.init_state_multi(sys_data_norm,nf=1)
         Y = np.concatenate([sys_data_norm.y[:k0],obs],axis=0)
+        if sys_data.dt is not None:
+            self.set_dt(dt_old)
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
@@ -209,6 +233,11 @@ class System(object):
         if isinstance(sys_data,(list,tuple)):
             sys_data = System_data_list(sys_data)
             # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
+
+        if sys_data.dt is not None: #dt check
+            dt_old = self.dt #may not exist
+            self.set_dt(sys_data.dt)
+
         sys_data = self.norm.transform(sys_data)
         obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
         _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf,dilation=dilation)
@@ -225,7 +254,21 @@ class System(object):
             self.init_state(sys_data[0]) #remove large state
         else:
             self.init_state(sys_data) #remove large state
+        if sys_data.dt is not None:
+            self.set_dt(dt_old)
         return np.array(Losses)
+    def n_step_error_plot(self, sys_data, nf=100, dilation=1, RMS=False, show=True):
+        Losses = self.n_step_error(sys_data,nf=nf,dilation=dilation,RMS=RMS)
+        if sys_data.dt is not None:
+            dt = sys_data.dt
+        else:
+            dt = self.dt if self.dt is not None else 1
+        tar = np.arange(nf)*dt
+        plt.plot(tar,Losses)
+        plt.xlabel('time-error' if dt!=1 else 'n-step-error')
+        plt.ylabel('NRMS' if RMS==False else 'RMS')
+        if show:
+            plt.show()
 
     def save_system(self,file):
         '''Save the system using pickle
@@ -324,12 +367,12 @@ class System_deriv(System_ss):
     ''''''
 
     def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK4'):
-        assert dt is not None
-        self.dt = dt
-        self.method = method
         super(System_deriv, self).__init__(nx, nu, ny)
+        self.set_dt(dt)
+        self.method = method
 
     def f(self,x,u):
+        assert self.dt is not None, 'please set dt or in the __init__ or in sys_data.dt'
         #https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods
         #uses self.deriv and self.dt
         #RK4

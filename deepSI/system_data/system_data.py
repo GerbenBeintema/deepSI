@@ -46,7 +46,7 @@ class System_data(object):
     normed : bool
         Check if this data set is normed (i.e. was used as norm.transform(sys_data)) mostly used for debugging. 
     '''
-    def __init__(self, u=None, y=None, x=None, cheat_n=0, normed=False):
+    def __init__(self, u=None, y=None, x=None, cheat_n=0, normed=False, dt=None):
         '''Create System data to be used in fitting, plotted and 
 
         Parameters
@@ -73,6 +73,7 @@ class System_data(object):
         self.multi_u = self.u.ndim>1
         self.multi_y = self.y.ndim>1 if self.y is not None else True
         self.normed = normed
+        self.dt = dt
 
         #checks
         if self.y is not None:
@@ -121,14 +122,14 @@ class System_data(object):
             u = self.u.reshape((self.u.shape[0],-1))
         else:
             u = self.u
-        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
+        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed,dt=self.dt)
 
     def reshape_as(self, other):
         """Inverse of .flatten and will reshape both u and y to (N,) + other.u.shape[1:] and (N,) + other.y.shape[1:]"""
         #this can fail if either is None
         y = self.y.reshape((self.y.shape[0],)+other.y.shape[1:]) if self.y is not None else None
         u = self.u.reshape((self.u.shape[0],)+other.u.shape[1:]) if self.u is not None else None
-        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed)
+        return System_data(u=u,y=y,x=self.x,cheat_n=self.cheat_n,normed=self.normed,dt=self.dt)
 
 
     ############################
@@ -303,20 +304,20 @@ class System_data(object):
         # plt.show()
         return kernal
 
-
     def save(self,file):
         '''Saves data with savez, see also load_system_data'''
         np.savez(file, u=self.u, x=self.x, y=self.y, cheat_n=self.cheat_n, normed=self.normed)
 
     def __repr__(self):
-        return f'System_data of length: {self.N_samples} nu={self.nu} ny={self.ny} normed={self.normed}'
+        return f'System_data of length: {self.N_samples} nu={self.nu} ny={self.ny} normed={self.normed} dt={self.dt}'
 
     def plot(self,show=False):
         '''Very simple plotting function'''
         plt.ylabel('y' if self.y is not None else 'u')
         plt.xlabel('t')
 
-        plt.plot(self.y.reshape((self.y.shape[0],-1)) if self.y is not None else self.u)
+        tar = np.arange(self.u.shape[0])*(1 if self.dt is None else self.dt)
+        plt.plot(tar, self.y.reshape((self.y.shape[0],-1)) if self.y is not None else self.u)
         if show: plt.show()
 
     def BFR(self,real,multi_average=True):
@@ -359,9 +360,9 @@ class System_data(object):
         '''Calculate the difference between y two System_data a number or array'''
         if isinstance(other, System_data):
             assert len(self.y)==len(other.y), 'both arguments need to be the same length'
-            return System_data(u=self.u, x=self.x, y=self.y-other.y, cheat_n=self.cheat_n)
+            return System_data(u=self.u, x=self.x, y=self.y-other.y, cheat_n=self.cheat_n,dt=self.dt)
         else:
-            return System_data(u=self.u, x=self.x, y=self.y-other, cheat_n=self.cheat_n)
+            return System_data(u=self.u, x=self.x, y=self.y-other, cheat_n=self.cheat_n,dt=self.dt)
 
 
     def train_test_split(self,split_fraction=0.25):
@@ -374,8 +375,8 @@ class System_data(object):
             xl,xr = None,None
         else:
             xl,xr = self.x[:split_n], self.x[split_n:]
-        left_data = System_data(u=ul, x=xl, y=yl, normed=self.normed)
-        right_data = System_data(u=ur, x=xr, y=yr, normed=self.normed)
+        left_data = System_data(u=ul, x=xl, y=yl, normed=self.normed,dt=self.dt)
+        right_data = System_data(u=ur, x=xr, y=yr, normed=self.normed,dt=self.dt)
         return left_data, right_data
 
     def __getitem__(self,arg):
@@ -386,7 +387,7 @@ class System_data(object):
         unew = self.u[arg]
         ynew = self.y[arg] if self.y is not None else None
         xnew = self.x[arg] if self.x is not None else None
-        return System_data(u=unew, y=ynew, x=xnew, cheat_n=cheat_n, normed=self.normed)
+        return System_data(u=unew, y=ynew, x=xnew, cheat_n=cheat_n, normed=self.normed,dt=self.dt)
     
     def __len__(self):
         '''Number of samples len(system_data) = self.N_samples'''
@@ -412,7 +413,7 @@ class System_data(object):
             y = np.mean(self.y[:n].reshape((-1,factor)),axis=1)
         else:
             y = np.stack([np.mean(self.y[:n,i].reshape((-1,factor)),axis=1) for i in range(self.y.shape[1])],axis=1)
-        return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n//factor,normed=self.normed)
+        return System_data(u=u,y=y,x=self.x[::factor] if self.x is not None else None,cheat_n=self.cheat_n//factor,normed=self.normed,dt=self.dt)
 
     #scipy.signal.decimate lookup
     #other downsample methods
@@ -426,7 +427,7 @@ class System_data(object):
         from scipy.signal import decimate
         u = decimate(self.u.T,factor).T
         y = decimate(self.y.T,factor).T
-        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n,normed=self.normed) #todo add x
+        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n,normed=self.normed,dt=self.dt) #todo add x
 
 
     def down_sample_by_MIMO(self,factor):
@@ -441,7 +442,7 @@ class System_data(object):
         u = self.u[:N-(N%factor)] # up scaling will be problematic
         y = self.y[:N-(N%factor):factor]
         u = u.reshape(u.shape[0]//factor,-1)
-        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n//factor,normed=self.normed) #todo add x
+        return System_data(u=u,y=y,x=None,cheat_n=self.cheat_n//factor,normed=self.normed,dt=self.dt) #todo add x
 
 
 
@@ -492,7 +493,14 @@ class System_data_list(System_data):
         return np.concatenate([sd.u for sd in self.sdl],axis=0)    
     @property
     def n_cheat(self):
-        return self.sdl.n_cheat
+        return self.sdl[0].n_cheat
+    @property
+    def dt(self):
+        dt = self.sdl[0].dt
+        for l in self.sdl[1:]:
+            assert dt==l.dt, 'all dt need to be the same'
+        return dt #assume everything the same
+
     def flatten(self):
         return System_data_list([sdli.flatten() for sdli in self.sdl])
     def reshape_as(self, other):
@@ -519,18 +527,16 @@ class System_data_list(System_data):
 
     def save(self,file):
         '''Saves data'''
-        out = [dict(u=sd.u, x=sd.x, y=sd.y, cheat_n=sd.cheat_n, normed=sd.normed) for sd in self.sdl]
+        out = [dict(u=sd.u, x=sd.x, y=sd.y, cheat_n=sd.cheat_n, normed=sd.normed, dt=sd.dt) for sd in self.sdl]
         np.savez(file, sdl=out)
 
     def __repr__(self):
-        return f'System_data_list with {len(self.sdl)} series and total length {self.N_samples}, nu={self.nu}, ny={self.ny}, normed={self.normed} lengths={[sd.N_samples for sd in self.sdl]}'
+        return f'System_data_list with {len(self.sdl)} series and total length {self.N_samples}, nu={self.nu}, ny={self.ny}, normed={self.normed} lengths={[sd.N_samples for sd in self.sdl]} dt={self.sdl[0].dt}'
 
     def plot(self,show=False):
         '''Very simple plotting function'''
-        plt.ylabel('y' if self.sdl[0].y is not None else 'u')
-        plt.xlabel('t')
         for sd in self.sdl:
-            plt.plot(sd.y if sd.y is not None else sd.u)
+            sd.plot()
         if show: plt.show()
 
     def weighted_mean(self,vals):
@@ -541,12 +547,11 @@ class System_data_list(System_data):
 
     def __sub__(self,other):
         if isinstance(other,System_data_list):            
-            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-sdo.y, cheat_n=sd.cheat_n) for sd, sdo in zip(self.sdl,other.sdl)])
+            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-sdo.y, cheat_n=sd.cheat_n, dt=sd.dt) for sd, sdo in zip(self.sdl,other.sdl)])
         elif isinstance(other,(float,int,np.ndarray,System_data)):
             if isinstance(other, System_data):
                 other = other.y
-            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-other, cheat_n=sd.cheat_n) for sd in self.sdl])
-
+            return System_data_list([System_data(u=sd.u, x=sd.x, y=sd.y-other, cheat_n=sd.cheat_n, dt=sd.dt) for sd in self.sdl])
 
     def train_test_split(self,split_fraction=0.25):
         '''return 2 data sets of length n*(1-split_fraction) and n*split_fraction respectively (left, right) split'''
@@ -681,14 +686,14 @@ class System_data_norm(object):
         
         if self.is_id:
             return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
-                               cheat_n=sys_data.cheat_n,normed=True)
+                               cheat_n=sys_data.cheat_n,normed=True,dt=sys_data.dt)
 
         if isinstance(sys_data,System_data):
             assert sys_data.normed==False, 'System_data is already normalized'
             u_transformed = (sys_data.u-self.u0)/self.ustd if sys_data.u is not None else None
             y_transformed = (sys_data.y-self.y0)/self.ystd if sys_data.y is not None else None
             return System_data(u=u_transformed,x=sys_data.x,y=y_transformed, \
-                cheat_n=sys_data.cheat_n,normed=True)
+                cheat_n=sys_data.cheat_n,normed=True,dt=sys_data.dt)
         else:
             raise NotImplementedError(f'type={type(sys_data)} cannot yet be transformed by norm')
 
@@ -714,14 +719,14 @@ class System_data_norm(object):
         
         if self.is_id:
             return System_data(u=sys_data.u,x=sys_data.x,y=sys_data.y, \
-                               cheat_n=sys_data.cheat_n,normed=False)
+                               cheat_n=sys_data.cheat_n,normed=False,dt=sys_data.dt)
 
         if isinstance(sys_data,System_data):
             assert sys_data.normed==True, 'System_data is already un-normalized'
             u_inv_transformed = sys_data.u*self.ustd + self.u0 if sys_data.u is not None else None
             y_inv_transformed = sys_data.y*self.ystd + self.y0 if sys_data.y is not None else None
             return System_data(u=u_inv_transformed,x=sys_data.x,y=y_inv_transformed,
-                               cheat_n=sys_data.cheat_n,normed=False)
+                               cheat_n=sys_data.cheat_n,normed=False,dt=sys_data.dt)
         else:
             raise NotImplementedError(f'type={type(sys_data)} cannot yet be inverse_transform by norm')
 
@@ -773,3 +778,6 @@ if __name__=='__main__':
     print(sdl_flat)
     print(sdl_flat.reshape_as(sdl))
 
+    sys_data = System_data(u=np.random.normal(scale=2,size=(100,2)),y=np.random.normal(scale=1.5,size=(100,2)),dt=0.1)
+    print(sys_data)
+    sys_data.plot(show=True)
