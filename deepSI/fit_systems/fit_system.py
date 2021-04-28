@@ -201,7 +201,7 @@ class System_torch(System_fittable):
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
-
+            self.set_dt_0(sys_data.dt)
         self.set_dt(sys_data.dt)
 
         self.epoch_counter = 0 if len(self.epoch_id)==0 else self.epoch_id[-1]
@@ -256,7 +256,7 @@ class System_torch(System_fittable):
         else: #do it now
             Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
             print(f'Initial Validation {val_str}=', Loss_val_now)
-        try:
+        try: #only to handle early stopping with keyboard interrupts 
             start_t = time.time() #time keeping
             import itertools
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
@@ -363,7 +363,6 @@ class System_torch(System_fittable):
                 for i in np.where(np.isnan(self.Loss_train))[0]:
                     if i!=len(self.Loss_train)-1: #if the last is NaN than I will leave it there. Something weird happened like breaking before one validation loop was completed. 
                         self.Loss_train[i] = self.Loss_train[i+1]
-
         except FileNotFoundError:
             raise FileNotFoundError(f'No such file at {file}, did you set sys.unique_code correctly?')
 
@@ -378,10 +377,14 @@ class System_torch(System_fittable):
         torch.save(self, file)
 
     ######### Continuous Time #########
-    def set_dt(self,dt):
-        if hasattr(self,'fn') and isinstance(self.fn, deepSI.utils.time_integrators):
-            self.fn.dt = dt
-        self.dt = dt
+    def set_dt(self,dt_now):
+        self.dt = dt_now #do not change this manually, thing will break
+        # raise NotImplementedError('set_dt should be implemented in subclass')
+
+    ######### Continuous Time #########
+    def set_dt_0(self,dt_0): #also sets dt?
+        pass #called during the first .fit call.
+        # raise NotImplementedError('set_dt_0 should be implemented in subclass')
 
     ### CPU & CUDA ###
     def cuda(self):

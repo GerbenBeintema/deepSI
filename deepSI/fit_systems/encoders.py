@@ -219,9 +219,64 @@ class default_deriv_state_net(integrators_RK4):
 
 class SS_encoder_deriv_general(SS_encoder_general):
     """docstring for SS_encoder_general"""
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_deriv_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_deriv_state_net, \
+        h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
         super(SS_encoder_deriv_general, self).__init__(nx=nx,na=na,nb=nb,e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
 
+    def set_dt(self,dt_now):
+        self.dt = dt_now
+        self.fn.dt = dt_now
+
+class time_integrators_V2(nn.Module):
+    """docstring for time_integrators"""
+    def __init__(self, deriv, dt_norm=1, dt_0=None, dt_now=None):
+        '''include time normalization as dt = dt_norm*dt_now/dt_0'''
+        super(time_integrators_V2,self).__init__()
+        self.dt_norm = dt_norm #normalized dt in units of x
+        self.dt_0 = dt_0 #original time constant of fitted data 
+                         #(set during first call of .fit using set_dt_0)
+        self.dt_now = dt_now #the current time constant (most probably the same as dt_0)
+                             #should be set using set_dt before applying any dataset
+        self.deriv   = deriv #the deriv network
+
+    @property
+    def dt(self):
+        if self.dt_0 is None: #no time constant set, assuming no changes in dt
+            return self.dt_norm
+        return self.dt_norm*self.dt_now/self.dt_0
+
+class integrators_RK4_V2(time_integrators_V2):
+    def forward(self, x, u): #u constant on segment
+        k1 = self.dt*self.deriv(x,u) #t=0
+        k2 = self.dt*self.deriv(x+k1/2,u) #t=dt/2
+        k3 = self.dt*self.deriv(x+k2/2,u) #t=dt/2
+        k4 = self.dt*self.deriv(x+k3,u) #t=dt
+        return x + (k1 + 2*k2 + 2*k3 + k4)/6
+
+class SS_encoder_deriv_general_V2(SS_encoder_general):
+    """fn is still the forward function which increments x using u as f(x,u), """
+    def __init__(self, nx=10, na=20, nb=20, dt_norm=0.1, e_net=default_encoder_net, f_net=default_state_net, \
+                 integrator_net=integrators_RK4_V2, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, \
+                 integrator_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_deriv_general_V2, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+
+        self.integrator_net = integrator_net
+        self.integrator_net_kwargs = integrator_net_kwargs
+        self.dt_norm = dt_norm
+
+    def set_dt(self,dt_now):
+        self.dt = dt_now
+        self.fn.dt_now = dt_now
+
+    def set_dt_0(self,dt_0):
+        self.fn.dt_0 = dt_0
+        self.set_dt(dt_0)
+
+    def init_nets(self, nu, ny): # a bit weird
+        par = super(SS_encoder_deriv_general_V2, self).init_nets(nu,ny)
+        self.derivn = self.fn 
+        self.fn = self.integrator_net(self.derivn, dt_norm=self.dt_norm, **self.integrator_net_kwargs) #has no torch parameters?
+        return par
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -499,8 +554,10 @@ class SS_encoder_inovation(SS_encoder_general):
 if __name__ == '__main__':
     # sys = SS_encoder_general()
     # from deepSI.datasets.sista_database import powerplant
-    from deepSI.datasets import Silverbox
-    train, test = Silverbox()#powerplant()
+    # from deepSI.datasets import Silverbox
+    from deepSI.datasets import Cascaded_Tanks
+    
+    train, test = Cascaded_Tanks()#powerplant()
     train.dt = 0.1
     test.dt = 0.1
     # train, test = train[:150], test[:50]
@@ -517,6 +574,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_deriv_general()
+    sys = SS_encoder_deriv_general_V2(nx=2,dt_norm=0.025)
     # sys = SS_par_start()
-    sys.fit(train, sim_val=test,epochs=50, concurrent_val=True)
+    sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)

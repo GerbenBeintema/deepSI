@@ -198,8 +198,8 @@ class System(object):
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
-    def set_dt(self,dt):
-        self.dt = dt
+    def set_dt(self,dt_now):
+        self.dt = dt_now
 
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
@@ -254,8 +254,10 @@ class System(object):
             self.init_state(sys_data[0]) #remove large state
         else:
             self.init_state(sys_data) #remove large state
+
         if sys_data.dt is not None:
             self.set_dt(dt_old)
+        
         return np.array(Losses)
     def n_step_error_plot(self, sys_data, nf=100, dilation=1, RMS=False, show=True):
         Losses = self.n_step_error(sys_data,nf=nf,dilation=dilation,RMS=RMS)
