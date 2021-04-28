@@ -60,21 +60,28 @@ class affine_forward_layer(nn.Module):
         u = u.view(u.shape[0],-1) #flatten
         return self.Apart(x) + self.gpart(x,u)
 
-
 class time_integrators(nn.Module):
     """docstring for time_integrators"""
-    def __init__(self, dt=None):
+    def __init__(self, deriv, dt_norm=1, dt_0=None, dt_now=None):
+        '''include time normalization as dt = dt_norm*dt_now/dt_0'''
         super(time_integrators,self).__init__()
-        self.dt = dt
-    def deriv(self,x,u):
-        raise NotImplementedError('deriv')    
+        self.dt_norm = dt_norm #normalized dt in units of x
+        self.dt_0 = dt_0 #original time constant of fitted data 
+                         #(set during first call of .fit using set_dt_0)
+        self.dt_now = dt_now #the current time constant (most probably the same as dt_0)
+                             #should be set using set_dt before applying any dataset
+        self.deriv   = deriv #the deriv network
+
+    @property
+    def dt(self):
+        if self.dt_0 is None: #no time constant set, assuming no changes in dt
+            return self.dt_norm
+        return self.dt_norm*self.dt_now/self.dt_0
 
 class integrators_RK4(time_integrators):
-    def forward(self, x, u): #almost
-        assert self.dt is not None, 'error dt not set'
-        k1 = self.dt*self.deriv(x,u)
-        k2 = self.dt*self.deriv(x+k1/2,u)
-        k3 = self.dt*self.deriv(x+k2/2,u)
-        k4 = self.dt*self.deriv(x+k3,u)
+    def forward(self, x, u): #u constant on segment
+        k1 = self.dt*self.deriv(x,u) #t=0
+        k2 = self.dt*self.deriv(x+k1/2,u) #t=dt/2
+        k3 = self.dt*self.deriv(x+k2/2,u) #t=dt/2
+        k4 = self.dt*self.deriv(x+k3,u) #t=dt
         return x + (k1 + 2*k2 + 2*k3 + k4)/6
-

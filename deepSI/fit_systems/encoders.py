@@ -205,78 +205,33 @@ class SS_encoder_general(System_torch):
     def get_state(self):
         return self.state[0].numpy()
 
+
+############## Continuous time ##################
 from deepSI.utils import integrators_RK4
-class default_deriv_state_net(integrators_RK4):
-    def __init__(self, nx, nu, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
-        super(default_deriv_state_net, self).__init__()
-        from deepSI.utils import simple_res_net
-        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
-        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
-
-    def deriv(self, x, u):
-        net_in = torch.cat([x,u.view(u.shape[0],-1)],axis=1)
-        return self.net(net_in)
-
 class SS_encoder_deriv_general(SS_encoder_general):
-    """docstring for SS_encoder_general"""
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_deriv_state_net, \
-        h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_deriv_general, self).__init__(nx=nx,na=na,nb=nb,e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
-
-    def set_dt(self,dt_now):
-        self.dt = dt_now
-        self.fn.dt = dt_now
-
-class time_integrators_V2(nn.Module):
-    """docstring for time_integrators"""
-    def __init__(self, deriv, dt_norm=1, dt_0=None, dt_now=None):
-        '''include time normalization as dt = dt_norm*dt_now/dt_0'''
-        super(time_integrators_V2,self).__init__()
-        self.dt_norm = dt_norm #normalized dt in units of x
-        self.dt_0 = dt_0 #original time constant of fitted data 
-                         #(set during first call of .fit using set_dt_0)
-        self.dt_now = dt_now #the current time constant (most probably the same as dt_0)
-                             #should be set using set_dt before applying any dataset
-        self.deriv   = deriv #the deriv network
-
-    @property
-    def dt(self):
-        if self.dt_0 is None: #no time constant set, assuming no changes in dt
-            return self.dt_norm
-        return self.dt_norm*self.dt_now/self.dt_0
-
-class integrators_RK4_V2(time_integrators_V2):
-    def forward(self, x, u): #u constant on segment
-        k1 = self.dt*self.deriv(x,u) #t=0
-        k2 = self.dt*self.deriv(x+k1/2,u) #t=dt/2
-        k3 = self.dt*self.deriv(x+k2/2,u) #t=dt/2
-        k4 = self.dt*self.deriv(x+k3,u) #t=dt
-        return x + (k1 + 2*k2 + 2*k3 + k4)/6
-
-class SS_encoder_deriv_general_V2(SS_encoder_general):
-    """fn is still the forward function which increments x using u as f(x,u), """
-    def __init__(self, nx=10, na=20, nb=20, dt_norm=0.1, e_net=default_encoder_net, f_net=default_state_net, \
-                 integrator_net=integrators_RK4_V2, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, \
-                 integrator_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_deriv_general_V2, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
-
+    """For backwards compatibility fn is the advance function"""
+    def __init__(self, nx=10, na=20, nb=20, dt_norm=0.1, \
+                 e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrators_RK4, h_net=default_output_net, \
+                 e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
+        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
         self.integrator_net = integrator_net
         self.integrator_net_kwargs = integrator_net_kwargs
         self.dt_norm = dt_norm
 
-    def set_dt(self,dt_now):
-        self.dt = dt_now
-        self.fn.dt_now = dt_now
-
-    def set_dt_0(self,dt_0):
-        self.fn.dt_0 = dt_0
-        self.set_dt(dt_0)
-
     def init_nets(self, nu, ny): # a bit weird
-        par = super(SS_encoder_deriv_general_V2, self).init_nets(nu,ny)
+        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny)
         self.derivn = self.fn 
         self.fn = self.integrator_net(self.derivn, dt_norm=self.dt_norm, **self.integrator_net_kwargs) #has no torch parameters?
         return par
+
+    def set_dt(self,dt_now): #is called on start of .fit and apply_experiment and alike
+        self.dt = dt_now
+        self.fn.dt_now = dt_now
+
+    def set_dt_0(self, dt_0): #is called on first call of .fit
+        self.fn.dt_0 = dt_0  #used for time normalization
+        self.set_dt(dt_0)
+
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -352,8 +307,6 @@ class SS_encoder_rnn(System_torch):
     def get_state(self):
         return self.state[0].numpy()
 
-
-
 class par_start_encoder(nn.Module):
     """docstring for par_start_encoder"""
     def __init__(self, nx, nsamples):
@@ -362,7 +315,6 @@ class par_start_encoder(nn.Module):
 
     def forward(self,ids):
         return self.start_state[ids]
-        
 
 class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs.
     """docstring for SS_par_start"""
