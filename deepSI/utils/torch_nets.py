@@ -24,9 +24,16 @@ class simple_res_net(nn.Module):
         #linear + non-linear part 
         super(simple_res_net,self).__init__()
         self.net_lin = nn.Linear(n_in,n_out)
-        self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
+        if n_hidden_layers>0:
+            self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
+        else:
+            self.net_non_lin = None
+
     def forward(self,x):
-        return self.net_lin(x) + self.net_non_lin(x)
+        if self.net_non_lin is not None:
+            return self.net_lin(x) + self.net_non_lin(x)
+        else: #linear
+            return self.net_lin(x)
 
 
 class affine_input_net(nn.Module):
@@ -66,6 +73,7 @@ class time_integrators(nn.Module):
         '''include time normalization as dt = dt_norm*dt_now/dt_0'''
         super(time_integrators,self).__init__()
         self.dt_norm = dt_norm #normalized dt in units of x
+                               #this a parameter?
         self.dt_0 = dt_0 #original time constant of fitted data 
                          #(set during first call of .fit using set_dt_0)
         self.dt_now = dt_now #the current time constant (most probably the same as dt_0)
@@ -78,10 +86,15 @@ class time_integrators(nn.Module):
             return self.dt_norm
         return self.dt_norm*self.dt_now/self.dt_0
 
-class integrators_RK4(time_integrators):
-    def forward(self, x, u): #u constant on segment
+class integrator_RK4(time_integrators):
+    def forward(self, x, u): #u constant on segment, zero-order hold
+        #put here a for loop
         k1 = self.dt*self.deriv(x,u) #t=0
         k2 = self.dt*self.deriv(x+k1/2,u) #t=dt/2
         k3 = self.dt*self.deriv(x+k2/2,u) #t=dt/2
         k4 = self.dt*self.deriv(x+k3,u) #t=dt
         return x + (k1 + 2*k2 + 2*k3 + k4)/6
+
+class integrator_euler(time_integrators):
+    def forward(self, x, u): #u constant on segment
+        return x + self.dt*self.deriv(x,u)

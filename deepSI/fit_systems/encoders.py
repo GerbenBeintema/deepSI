@@ -7,7 +7,7 @@ import numpy as np
 
 class SS_encoder(System_torch):
     """docstring for SS_encoder"""
-    def __init__(self, nx=10, na=20, nb=20, continuous_time=False):
+    def __init__(self, nx=10, na=20, nb=20):
         super(SS_encoder, self).__init__() #where does dt come into
         self.nx, self.na, self.nb = nx, na, nb
         self.k0 = max(self.na,self.nb)
@@ -23,7 +23,7 @@ class SS_encoder(System_torch):
         self.f_n_nodes_per_layer = 64
         self.f_activation = nn.Tanh
 
-        self.h_net = simple_res_net if not continuous_time else simple_res_deriv_net
+        self.h_net = simple_res_net
         self.h_n_hidden_layers = 2
         self.h_n_nodes_per_layer = 64
         self.h_activation = nn.Tanh
@@ -207,11 +207,11 @@ class SS_encoder_general(System_torch):
 
 
 ############## Continuous time ##################
-from deepSI.utils import integrators_RK4
+from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
     def __init__(self, nx=10, na=20, nb=20, dt_norm=0.1, \
-                 e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrators_RK4, h_net=default_output_net, \
+                 e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
         super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
         self.integrator_net = integrator_net
@@ -219,7 +219,7 @@ class SS_encoder_deriv_general(SS_encoder_general):
         self.dt_norm = dt_norm
 
     def init_nets(self, nu, ny): # a bit weird
-        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny)
+        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) #
         self.derivn = self.fn 
         self.fn = self.integrator_net(self.derivn, dt_norm=self.dt_norm, **self.integrator_net_kwargs) #has no torch parameters?
         return par
