@@ -9,6 +9,7 @@ from tqdm.auto import tqdm
 import time
 from pathlib import Path
 import os.path
+from torch.utils.data import Dataset, DataLoader
 
 class System_fittable(System):
     """Subclass of system which introduces a .fit method which calls ._fit to fit the systems
@@ -83,6 +84,11 @@ class System_torch(System_fittable):
             Already normalized
         loss_kwargs : dict
             loss function settings passed into .fit
+
+        returns
+        -------
+        data : list or torch.utils.data.Dataset
+            a list of arrays (e.g. [X,Y]) or an instance of torch.utils.data.Dataset
         '''
         assert sys_data.normed == True
         raise NotImplementedError('make_training_data should be implemented in subclass')
@@ -120,7 +126,8 @@ class System_torch(System_fittable):
         return optimizer(parameters,**optimizer_kwargs) 
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
-            sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, sim_val_fun='NRMS', sqrt_train=True):
+            sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
+            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0):
         '''The batch optimization method with parallel validation, 
 
         Parameters
@@ -204,20 +211,23 @@ class System_torch(System_fittable):
 
         self.epoch_counter = 0 if len(self.epoch_id)==0 else self.epoch_id[-1]
         self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
-        extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct time counting after reset
+        extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct time counting after restart
 
         sys_data = self.norm.transform(sys_data)
-        data_full = self.make_training_data(sys_data, **loss_kwargs)
+        data_full = self.make_training_data(sys_data, **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
+
 
         if sim_val is not None:
-            data_train = [torch.tensor(dat, dtype=torch.float32) for dat in data_full]
+            if not isinstance(data_full, Dataset):
+                data_train = default_dataset(data_full)
+            else:
+                data_train = data_full
             data_val = None
         else: #is not used that often, could use sklearn to split data
             from sklearn.model_selection import train_test_split
             datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
-            data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
+            data_train = default_dataset([datasplitted[i] for i in range(0,len(datasplitted),2)])
             data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
-
 
         #transforming it back to a list to be able to append.
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
@@ -225,17 +235,17 @@ class System_torch(System_fittable):
         global time_val, time_loss, time_back #time keeping
         time_val = time_back = time_loss = 0.
         Loss_acc_val, N_batch_acc_val = 0, 0
-        N_training_samples = len(data_train[0])
+        N_training_samples = len(data_train)
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
         if verbose>0: 
             print(f'N_training_samples = {N_training_samples}, batch_size = {batch_size}, N_batch_updates_per_epoch = {N_batch_updates_per_epoch}')
-        ids = np.arange(0, N_training_samples, dtype=int)
         val_counter = 0  #to print the frequency of the validation step.
         val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         best_epoch = 0
         batch_id_start = self.batch_counter
-        
+
+        data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
 
         if concurrent_val:
             from multiprocessing import Process, Pipe
@@ -246,7 +256,7 @@ class System_torch(System_fittable):
             process.daemon = True  # if the main process crashes, we should not cause things to hang
             process.start()
             work_remote.close()
-            remote.send((deepcopy(self), True, float('NaN'), extra_t)) #time here does not matter
+            remote.send((deepcopy(self), True, float('nan'), extra_t)) #time here does not matter
             #            sys, append, Loss_train, time_now
             remote.receiving = True
             #           sys, append, Loss_acc, time_now, epoch
@@ -260,12 +270,12 @@ class System_torch(System_fittable):
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
             if timeout is not None and verbose>0: print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
             for epoch in (tqdm(epochsrange) if verbose>0 else epochsrange):
-                np.random.shuffle(ids)
+
                 bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
                 Loss_acc_epoch = 0.
-                for i in range(batch_size, N_training_samples + 1, batch_size):
-                    ids_batch = ids[i-batch_size:i]
-                    train_batch = [(part[ids_batch] if not cuda else part[ids_batch].cuda()) for part in data_train] 
+                for train_batch in data_train_loader:
+                    if cuda:
+                        train_batch = [b.cuda() for b in train_batch]
 
                     def closure(backward=True):
                         global time_loss, time_back
@@ -429,12 +439,23 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
                 f.write(traceback.format_exc())
             raise err
 
+class default_dataset(Dataset):
+    """docstring for default_dataset"""
+    def __init__(self, data):
+        super(default_dataset, self).__init__()
+        self.data = [np.array(d,dtype=np.float32) for d in data]
+
+    def __getitem__(self, i):
+        return [d[i] for d in self.data]
+
+    def __len__(self):
+        return len(self.data[0])
 
 
 if __name__ == '__main__':
-    sys = deepSI.fit_systems.SS_encoder()
+    sys = deepSI.fit_systems.SS_encoder(nx=3,na=5,nb=5)
     train, test = deepSI.datasets.CED()
-    sys.fit(train,sim_val=test,epochs=2,batch_size=64,concurrent_val=True)
+    sys.fit(train,sim_val=test,epochs=500,batch_size=64,concurrent_val=True)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)
