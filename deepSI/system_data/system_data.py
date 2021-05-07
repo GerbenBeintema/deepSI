@@ -3,6 +3,7 @@ import deepSI
 import numpy as np
 from matplotlib import pyplot as plt
 from tqdm.auto import tqdm
+from torch.utils.data import Dataset, DataLoader, ConcatDataset
 
 def load_system_data(file):
     '''Load System_data from .npz file'''
@@ -16,6 +17,107 @@ def load_system_data(file):
         return System_data_list(sys_data_list = [get_sys_data(o) for o in outfile['sdl']])
     else:
         return get_sys_data(outfile)
+
+class IO_dataset(Dataset):
+    """docstring for IO_dataset"""
+    def __init__(self, u, y, na=10, nb=10):
+        super(IO_dataset, self).__init__()
+        self.u = u
+        self.y = y
+        self.na = na
+        self.nb = nb
+        self.k0 = max(na,nb)
+
+    def __getitem__(self, k):
+        k += self.k0
+        hist = np.concatenate((self.u[k-self.nb:k].flat,self.y[k-self.na:k].flat)).astype(np.float32)
+        Y = self.y[k].astype(np.float32)
+        return [hist, Y]
+
+    def __len__(self):
+        return len(self.u) - self.k0
+
+class hist_future_dataset(Dataset):
+    """docstring for hist_future_dataset"""
+    def __init__(self, u, y, na=10, nb=10, nf=5, force_multi_u=False, force_multi_y=False):
+        super(hist_future_dataset, self).__init__()
+        self.u = u
+        self.y = y
+        self.na = na
+        self.nb = nb
+        self.nf = nf
+        self.k0 = max(na,nb)
+        self.force_multi_u = force_multi_u
+        self.force_multi_y = force_multi_y
+
+    def __getitem__(self, k):
+        k += self.k0 + self.nf
+        yhist = self.y[k-self.na-self.nf:k-self.nf]
+        uhist = self.u[k-self.nb-self.nf:k-self.nf]
+        yfuture = self.y[k-self.nf:k]
+        ufuture = self.u[k-self.nf:k]
+
+        if self.force_multi_u and uhist.ndim==1: #(N, time_seq, nu)
+            uhist = uhist[:,None]
+            ufuture = ufuture[:,None]
+        if self.force_multi_y and yhist.ndim==1: #(N, time_seq, ny)
+            yhist = yhist[:,None]
+            yfuture = yfuture[:,None]
+        return [a.astype(np.float32) for a in [uhist, yhist, ufuture, yfuture]]
+
+    def __len__(self):
+        return len(self.u) - self.k0 - self.nf + 1
+
+class ss_dataset(Dataset):
+    """docstring for ss_dataset"""
+    def __init__(self, u, y, nf=20, dilation=1, force_multi_u=False, force_multi_y=False):
+        super(ss_dataset, self).__init__()
+        self.u = u
+        self.y = y
+        self.nf = nf
+        self.force_multi_u = force_multi_u
+        self.force_multi_y = force_multi_y
+
+    def __getitem__(self, k):
+        k += self.nf
+        yfuture = self.y[k-self.nf:k]
+        ufuture = self.u[k-self.nf:k]
+
+        if self.force_multi_u and ufuture.ndim==1: #(N, time_seq, nu)
+            ufuture = ufuture[:,None]
+        if self.force_multi_y and yfuture.ndim==1: #(N, time_seq, ny)
+            yfuture = yfuture[:,None]
+        return [a.astype(np.float32) for a in [ufuture, yfuture]]
+
+    def __len__(self):
+        return len(self.u) - self.nf + 1
+
+class encoder_dataset(Dataset):
+    """docstring for encoder_dataset"""
+    def __init__(self, u, y, na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+        super(encoder_dataset, self).__init__()
+        self.u = u
+        self.y = y
+        self.na = na
+        self.nb = nb
+        self.nf = nf
+        self.k0 = max(na,nb)
+        self.force_multi_u = force_multi_u
+        self.force_multi_y = force_multi_y
+
+    def __getitem__(self, k):
+        k += self.k0 + self.nf
+        hist = np.concatenate([self.u[k-self.nb-self.nf:k-self.nf].flat, self.y[k-self.na-self.nf:k-self.nf].flat])
+        yfuture = self.y[k-self.nf:k]
+        ufuture = self.u[k-self.nf:k]
+        if self.force_multi_u and ufuture.ndim==1: #(N, time_seq, nu)
+            ufuture = ufuture[:,None]
+        if self.force_multi_y and yfuture.ndim==1: #(N, time_seq, ny)
+            yfuture = yfuture[:,None]
+        return [a.astype(np.float32) for a in [hist, ufuture, yfuture]]
+
+    def __len__(self):
+        return len(self.u) - self.k0 - self.nf + 1
 
 class System_data(object):
     '''System Data to be used 
@@ -134,7 +236,7 @@ class System_data(object):
     ############################
     ###### Transformations #####
     ############################
-    def to_IO_data(self,na=10,nb=10,dilation=1):
+    def to_IO_data(self,na=10,nb=10,dilation=1,pre_construct=True):
         '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
 
         Parameters
@@ -151,6 +253,9 @@ class System_data(object):
         Y    : ndarray (Samples, features) or (Samples)
             array of single step ahead [y]
         '''
+        if not pre_construct:
+            return IO_dataset(self.u, self.y, na=na, nb=nb)
+
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         Y = []
@@ -159,7 +264,7 @@ class System_data(object):
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -184,6 +289,9 @@ class System_data(object):
         yfuture : ndarray (samples, nf, ny) or (sample, nf) if ny=None
             array of [y[k],....,y[k+nf-1]]
         '''
+        if not pre_construct:
+            return hist_future_dataset(self.u, self.y, na=na, nb=nb, nf=nf, force_multi_u=force_multi_u, force_multi_y=force_multi_y)
+
         u, y = np.copy(self.u), np.copy(self.y)
         yhist = []
         uhist = []
@@ -204,7 +312,10 @@ class System_data(object):
         return uhist, yhist, ufuture, yfuture
 
 
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False):
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+        if not pre_construct:
+            return ss_dataset(self.u, self.y, nf=nf, force_multi_u=force_multi_u,force_multi_y=force_multi_y)
+
         u, y = np.copy(self.u), np.copy(self.y)
         ufuture = []
         yfuture = []
@@ -218,7 +329,8 @@ class System_data(object):
             yfuture = yfuture[:,:,None]
         return ufuture, yfuture
 
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
         '''Transforms the system data to encoder structure as structure (hist,ufuture,yfuture) of 
 
         Parameters
@@ -245,6 +357,8 @@ class System_data(object):
         yfuture :  ndarray (samples, nf, ny) or (sample, nf) if ny=None
             array of [y[k],....,y[k+nf-1]]
         '''
+        if not pre_construct:
+            return encoder_dataset(self.u, self.y, na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y)
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         ufuture = []
@@ -503,19 +617,21 @@ class System_data_list(System_data):
             return System_data_list([sd.reshape_as(other) for sd in self.sdl])
 
     ## Transformations ##
-    def to_IO_data(self,na=10,nb=10,dilation=1):
-        #normed check?
-        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=1) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
-        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in  zip(*out)] #(I,I,I),(ys,ys,ys)
+    def to_IO_data(self,na=10,nb=10,dilation=1,pre_construct=True):
+        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=dilation,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in  zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+        out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
 
     def save(self,file):
         '''Saves data'''
@@ -736,40 +852,46 @@ if __name__=='__main__':
     sys_data = System_data(u=np.random.normal(scale=2,size=(100,2)),y=np.random.normal(scale=1.5,size=(100,2)))
     sys_data2 = System_data(u=np.random.normal(size=(100,2)),y=np.random.normal(size=(100,2)))
     sys_data3 = System_data(u=np.random.normal(size=(100,2)),y=np.random.normal(size=(100,2)))
+    sdl = System_data_list([sys_data,sys_data2])
 
-    print(sys_data.NRMS(sys_data2,multi_average=False))
-    print([a.shape for a in sys_data.to_encoder_data(5,7,10)])
-    print(sys_data2[10:20])
+    dataset = sdl.to_encoder_data(pre_construct=False)
+    dataset = DataLoader(dataset, batch_size=40, drop_last=True, shuffle=True)
+    for hist, ufuture,yfuture in dataset:
+        print(hist.shape, ufuture.dtype,yfuture.shape)
 
-    sdl = System_data_list([sys_data,sys_data2,sys_data3])
+    # print(sys_data.NRMS(sys_data2,multi_average=False))
+    # print([a.shape for a in sys_data.to_encoder_data(5,7,10)])
+    # print(sys_data2[10:20])
 
-    print(sdl.to_encoder_data(9)[0].shape)
-    print(len(sdl),sdl.N_samples)
-    # sdl.plot(show=True)
-    print(sdl.train_test_split())
-    print(sdl.down_sample_by_average(10))
-    print(sdl.VAF(sdl))
-    norm = System_data_norm()
-    norm.fit(sdl)
-    sdl_transformed = norm.transform(sdl)
-    sys_data_transformed = norm.transform(sys_data)
-    sys_data12_transformed = norm.transform((sys_data,sys_data2))
-    print('transformed:',sdl_transformed,sys_data_transformed,sys_data12_transformed)
+    # sdl = System_data_list([sys_data,sys_data2,sys_data3])
 
-    sdl3 = norm.inverse_transform(sdl_transformed)
-    print(sdl_transformed.NRMS(sdl))
-    print(sdl3.NRMS(sdl))
-    print(np.std(sdl_transformed.y,axis=0))
-    print('yshape=',sdl_transformed.y.shape)
+    # print(sdl.to_encoder_data(9)[0].shape)
+    # print(len(sdl),sdl.N_samples)
+    # # sdl.plot(show=True)
+    # print(sdl.train_test_split())
+    # print(sdl.down_sample_by_average(10))
+    # print(sdl.VAF(sdl))
+    # norm = System_data_norm()
+    # norm.fit(sdl)
+    # sdl_transformed = norm.transform(sdl)
+    # sys_data_transformed = norm.transform(sys_data)
+    # sys_data12_transformed = norm.transform((sys_data,sys_data2))
+    # print('transformed:',sdl_transformed,sys_data_transformed,sys_data12_transformed)
 
-    print(sdl[1:2,:-10])
-    print(len(sdl))
+    # sdl3 = norm.inverse_transform(sdl_transformed)
+    # print(sdl_transformed.NRMS(sdl))
+    # print(sdl3.NRMS(sdl))
+    # print(np.std(sdl_transformed.y,axis=0))
+    # print('yshape=',sdl_transformed.y.shape)
 
-    sys_data = System_data(u=np.random.normal(scale=2,size=(100,2,2)),y=np.random.normal(scale=1.5,size=(100,2,5)))
-    sdl = System_data_list([sys_data,sys_data])
-    print('sdl',sdl)
-    print(sdl.NRMS(sdl))
-    sdl_flat = sdl.flatten()
-    print(sdl_flat)
-    print(sdl_flat.reshape_as(sdl))
+    # print(sdl[1:2,:-10])
+    # print(len(sdl))
+
+    # sys_data = System_data(u=np.random.normal(scale=2,size=(100,2,2)),y=np.random.normal(scale=1.5,size=(100,2,5)))
+    # sdl = System_data_list([sys_data,sys_data])
+    # print('sdl',sdl)
+    # print(sdl.NRMS(sdl))
+    # sdl_flat = sdl.flatten()
+    # print(sdl_flat)
+    # print(sdl_flat.reshape_as(sdl))
 

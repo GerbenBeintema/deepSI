@@ -85,7 +85,7 @@ class System_torch(System_fittable):
         loss_kwargs : dict
             loss function settings passed into .fit
 
-        returns
+        Returns
         -------
         data : list or torch.utils.data.Dataset
             a list of arrays (e.g. [X,Y]) or an instance of torch.utils.data.Dataset
