@@ -126,7 +126,7 @@ class System_torch(System_fittable):
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
             sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
-            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0):
+            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0, print_full_time_profile=False):
         '''The batch optimization method with parallel validation, 
 
         Parameters
@@ -169,28 +169,21 @@ class System_torch(System_fittable):
         '''
         def validation(append=True, train_loss=None, time_elapsed_total=None):
             self.eval(); self.cpu();
-            global time_val
-            t_start_val = time.time()
-            
             if sim_val is not None:
                 sim_val_predict = self.apply_experiment(sim_val)
                 Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
             else:
                 with torch.no_grad():
                     Loss_val = self.loss(*data_val,**loss_kwargs).item()
-
             if append: 
                 self.Loss_val.append(Loss_val) 
                 self.Loss_train.append(train_loss)
                 self.time.append(time_elapsed_total)
                 self.batch_id.append(self.batch_counter)
-                time_val += time.time() - t_start_val
                 self.epoch_id.append(self.epoch_counter)
-            
             if self.bestfit>=Loss_val:
                 self.bestfit = Loss_val
                 self.checkpoint_save_system()
-            
             if cuda: 
                 self.cuda()
             self.train()
@@ -223,7 +216,7 @@ class System_torch(System_fittable):
                 dstr = f'{Dsize/2**20:.1f} MB'
             else:
                 dstr = f'{Dsize/2**10:.1f} kB'
-            print('base data_size =', dstr)
+            print('Size of the training array = ', dstr)
 
         if sim_val is not None:
             data_train = data_full
@@ -238,8 +231,6 @@ class System_torch(System_fittable):
         #transforming it back to a list to be able to append.
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
 
-        global time_val, time_loss, time_back #time keeping
-        time_val = time_back = time_loss = 0.
         Loss_acc_val, N_batch_acc_val = 0, 0
         N_training_samples = len(data_train) if isinstance(data_train, Dataset) else len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
@@ -281,11 +272,12 @@ class System_torch(System_fittable):
             start_t = time.time() #time keeping
             import itertools
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
-            if timeout is not None and verbose>0: print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
+            if timeout is not None and verbose>0: 
+                print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
             for epoch in (tqdm(epochsrange) if verbose>0 else epochsrange):
-
                 bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
                 Loss_acc_epoch = 0.
+
                 t.start()
                 t.tic('data get')
                 for train_batch in data_train_loader:
@@ -294,21 +286,16 @@ class System_torch(System_fittable):
                     t.toc('data get')
                     def closure(backward=True):
                         t.toc('optimizer start')
-                        global time_loss, time_back
-                        start_t_loss = time.time()
                         t.tic('loss')
                         Loss = self.loss(*train_batch, **loss_kwargs)
                         t.toc('loss')
-                        time_loss += time.time() - start_t_loss
                         if backward:
                             t.tic('zero_grad')
                             self.optimizer.zero_grad()
                             t.toc('zero_grad')
                             t.tic('backward')
-                            start_t_back = time.time()
                             Loss.backward()
                             t.toc('backward')
-                            time_back += time.time() - start_t_back
                         t.tic('stepping')
                         return Loss
 
@@ -327,7 +314,7 @@ class System_torch(System_fittable):
                     if concurrent_val and remote.poll():
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
-                        #deepcopy(self) costs time due to the arrays that are passed.
+                        #deepcopy(self) costs time due to the arrays that are passed?
                         remote.send((deepcopy(self), True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
@@ -352,16 +339,18 @@ class System_torch(System_fittable):
                         best_epoch = epoch+1
                     if concurrent_val: #if concurrent val then print validation freq
                         val_feq = val_counter/(epoch+1)
-                        valfeqstr = (f'{val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f'{1/val_feq:4.3} epochs/val')
+                        valfeqstr = f', {val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f', {1/val_feq:4.3} epochs/val'
                     else: #else print validation time use
-                        valfeqstr = f'val: {time_val/time_elapsed:.1%}'
+                        valfeqstr = f''
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
                     Loss_str = f'Epoch {epoch+1:4}, Train {trainstr}, Val {val_str} {Loss_val_now:6.4}'
-                    time_str = f'Time Loss: {time_loss/time_elapsed:.1%}, back: {time_back/time_elapsed:.1%}, {valfeqstr}'
+                    loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
+                    time_str = f'Time Loss: {loss_time:.1%}, data get: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
                     batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
-                    batch_str = (f'{batch_feq:4.3} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.3} sec/batch')
+                    batch_str = (f'{batch_feq:4.1f} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.1f} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
-                    print('Time:',t.procent())
+                    if print_full_time_profile:
+                        print('Time profile:',t.procent())
 
                 #breaking on timeout
                 if timeout is not None:
@@ -371,11 +360,11 @@ class System_torch(System_fittable):
             print('Stopping early due to a KeyboardInterrupt')
         #end of training
         if concurrent_val:
-            if verbose: print('Waiting for started validation process to finish and one last validation...receiving=',remote.receiving,end='')
+            if verbose: print(f'Waiting for started validation process to finish and one last validation... (receiving = {remote.receiving})',end='')
             if remote.receiving:
                 #add poll here?
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here
-                if verbose: print('recv done...',end='')
+                if verbose: print('Recv done... ',end='')
             if N_batch_acc_val>0: #there might be some trained but not yet tested
                 remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
@@ -558,7 +547,7 @@ if __name__ == '__main__':
     train, test = deepSI.datasets.CED()
     print(train,test)
     # exit()
-    sys.fit(train,sim_val=test,epochs=500,batch_size=126,concurrent_val=True)
+    sys.fit(train,sim_val=test,epochs=500,batch_size=126,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)
