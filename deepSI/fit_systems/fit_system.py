@@ -126,7 +126,8 @@ class System_torch(System_fittable):
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
             sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
-            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0, print_full_time_profile=False):
+            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0, \
+            print_full_time_profile=False):
         '''The batch optimization method with parallel validation, 
 
         Parameters
@@ -211,12 +212,13 @@ class System_torch(System_fittable):
             Dsize = sum([d.nbytes for d in data_full])
             if Dsize>2**30: 
                 dstr = f'{Dsize/2**30:.1f} GB!'
-                print('Consider using pre_construct=False or let make_training_data return a Dataset to reduce data-usage')
+                dstr += '\nConsider using pre_construct=False or let make_training_data return a Dataset to reduce data-usage'
             elif Dsize>2**20: 
                 dstr = f'{Dsize/2**20:.1f} MB'
             else:
                 dstr = f'{Dsize/2**10:.1f} kB'
             print('Size of the training array = ', dstr)
+
 
         if sim_val is not None:
             data_train = data_full
@@ -268,9 +270,9 @@ class System_torch(System_fittable):
             Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
             print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
+            import itertools
             t = Tictoctimer()
             start_t = time.time() #time keeping
-            import itertools
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
             if timeout is not None and verbose>0: 
                 print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
@@ -350,7 +352,7 @@ class System_torch(System_fittable):
                     batch_str = (f'{batch_feq:4.1f} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.1f} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
                     if print_full_time_profile:
-                        print('Time profile:',t.procent())
+                        print('Time profile:',t.percent())
 
                 #breaking on timeout
                 if timeout is not None:
@@ -483,13 +485,12 @@ class Tictoctimer(object):
         self.timer_running = False
         self.start_times = dict()
         self.acc_times = dict()
-    
     @property
     def time_elapsed(self):
         if self.timer_running:
-            return self.time_acc
-        else:
             return self.time_acc + time.time() - self.start_t
+        else:
+            return self.time_acc
     
     def start(self):
         self.timer_running = True
@@ -508,7 +509,7 @@ class Tictoctimer(object):
         else:
             self.acc_times[name] += time.time() - self.start_times[name]
 
-    def procent(self):
+    def percent(self):
         elapsed = self.time_elapsed
         R = sum([item for key,item in self.acc_times.items()])
         return ', '.join([key + f' {item/elapsed:.1%}' for key,item in self.acc_times.items()]) +\
