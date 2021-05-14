@@ -32,7 +32,6 @@ class System_fittable(System):
     def _fit(self, normed_sys_data, **kwargs):
         raise NotImplementedError('_fit or fit should be implemented in subclass')
 
-
 class System_torch(System_fittable):
     '''For systems that utilize torch
 
@@ -215,18 +214,25 @@ class System_torch(System_fittable):
 
         sys_data = self.norm.transform(sys_data)
         data_full = self.make_training_data(sys_data, **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
-
+        if not isinstance(data_full, Dataset) and verbose:
+            Dsize = sum([d.nbytes for d in data_full])
+            if Dsize>2**30: 
+                dstr = f'{Dsize/2**30:.1f} GB!'
+                print('Consider using pre_construct=False or let make_training_data return a Dataset to reduce data-usage')
+            elif Dsize>2**20: 
+                dstr = f'{Dsize/2**20:.1f} MB'
+            else:
+                dstr = f'{Dsize/2**10:.1f} kB'
+            print('base data_size =', dstr)
 
         if sim_val is not None:
-            if not isinstance(data_full, Dataset):
-                data_train = default_dataset(data_full)
-            else:
-                data_train = data_full
+            data_train = data_full
             data_val = None
-        else: #is not used that often, could use sklearn to split data
+        else: #is not used that often
             from sklearn.model_selection import train_test_split
+            assert isinstance(data_full,Dataset) is False, 'not yet implemented'
             datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
-            data_train = default_dataset([datasplitted[i] for i in range(0,len(datasplitted),2)])
+            data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
             data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
 
         #transforming it back to a list to be able to append.
@@ -235,7 +241,7 @@ class System_torch(System_fittable):
         global time_val, time_loss, time_back #time keeping
         time_val = time_back = time_loss = 0.
         Loss_acc_val, N_batch_acc_val = 0, 0
-        N_training_samples = len(data_train)
+        N_training_samples = len(data_train) if isinstance(data_train, Dataset) else len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
         if verbose>0: 
@@ -244,8 +250,14 @@ class System_torch(System_fittable):
         val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         best_epoch = 0
         batch_id_start = self.batch_counter
-
-        data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
+        
+        if isinstance(data_train, Dataset):
+            data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
+        else: #add my basic DataLoader
+            #slow old way
+            # data_train_loader = DataLoader(default_dataset(data_train), batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
+            #fast new way
+            data_train_loader = My_Simple_DataLoader(data_train, batch_size=batch_size) #is quite a bit faster for low data situations
 
         if concurrent_val:
             from multiprocessing import Process, Pipe
@@ -265,6 +277,7 @@ class System_torch(System_fittable):
             Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
             print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
+            t = Tictoctimer()
             start_t = time.time() #time keeping
             import itertools
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
@@ -273,29 +286,44 @@ class System_torch(System_fittable):
 
                 bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
                 Loss_acc_epoch = 0.
+                t.start()
+                t.tic('data get')
                 for train_batch in data_train_loader:
                     if cuda:
                         train_batch = [b.cuda() for b in train_batch]
-
+                    t.toc('data get')
                     def closure(backward=True):
+                        t.toc('optimizer start')
                         global time_loss, time_back
                         start_t_loss = time.time()
+                        t.tic('loss')
                         Loss = self.loss(*train_batch, **loss_kwargs)
+                        t.toc('loss')
                         time_loss += time.time() - start_t_loss
                         if backward:
+                            t.tic('zero_grad')
                             self.optimizer.zero_grad()
+                            t.toc('zero_grad')
+                            t.tic('backward')
                             start_t_back = time.time()
                             Loss.backward()
+                            t.toc('backward')
                             time_back += time.time() - start_t_back
+                        t.tic('stepping')
                         return Loss
 
+                    # t.tic('optimizer')
+                    t.tic('optimizer start')
                     training_loss = self.optimizer.step(closure).item()
+                    t.toc('stepping')
+                    # t.toc('optimizer')
                     Loss_acc_val += training_loss
                     Loss_acc_epoch += training_loss
                     N_batch_acc_val += 1
                     self.batch_counter += 1
                     self.epoch_counter += 1/N_batch_updates_per_epoch
 
+                    t.tic('val')
                     if concurrent_val and remote.poll():
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
@@ -303,11 +331,18 @@ class System_torch(System_fittable):
                         remote.send((deepcopy(self), True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
+                    t.toc('val')
+                    t.tic('data get')
+                t.toc('data get')
 
                 #end of epoch clean up
                 train_loss_epoch = Loss_acc_epoch/N_batch_updates_per_epoch
+                t.tic('val')
                 if not concurrent_val:
-                    Loss_val_now = validation(append=True,train_loss=train_loss_epoch, time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit
+                    Loss_val_now = validation(append=True,train_loss=train_loss_epoch, \
+                                        time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit
+                t.toc('val')
+                t.pause()
 
                 #printing routine
                 if verbose>0:
@@ -326,6 +361,7 @@ class System_torch(System_fittable):
                     batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
                     batch_str = (f'{batch_feq:4.3} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.3} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
+                    print('Time:',t.procent())
 
                 #breaking on timeout
                 if timeout is not None:
@@ -451,11 +487,78 @@ class default_dataset(Dataset):
     def __len__(self):
         return len(self.data[0])
 
+import time
+class Tictoctimer(object):
+    def __init__(self):
+        self.time_acc = 0
+        self.timer_running = False
+        self.start_times = dict()
+        self.acc_times = dict()
+    
+    @property
+    def time_elapsed(self):
+        if self.timer_running:
+            return self.time_acc
+        else:
+            return self.time_acc + time.time() - self.start_t
+    
+    def start(self):
+        self.timer_running = True
+        self.start_t = time.time()
+        
+    def pause(self):
+        self.time_acc += time.time() - self.start_t
+        self.timer_running = False
+    
+    def tic(self,name):
+        self.start_times[name] = time.time()
+    
+    def toc(self,name):
+        if self.acc_times.get(name) is None:
+            self.acc_times[name] = time.time() - self.start_times[name]
+        else:
+            self.acc_times[name] += time.time() - self.start_times[name]
+
+    def procent(self):
+        elapsed = self.time_elapsed
+        R = sum([item for key,item in self.acc_times.items()])
+        return ', '.join([key + f' {item/elapsed:.1%}' for key,item in self.acc_times.items()]) +\
+                f', others {1-R/elapsed:.1%}'
+        
+class My_Simple_DataLoader:
+    def __init__(self, data, batch_size=32):
+        self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data] #convert to torch?
+        self.ids = np.arange(len(data[0]),dtype=int)
+        self.batch_size = batch_size
+    
+    def __iter__(self):
+        np.random.shuffle(self.ids)
+        return My_Simple_DataLoaderIterator(self.data, self.ids, self.batch_size)
+    
+class My_Simple_DataLoaderIterator:
+    def __init__(self, data, ids, batch_size):
+        self.ids = ids #already shuffled
+        self.data = data
+        self.L = len(data[0])
+        self.i = 0
+        self.batch_size = batch_size
+    def __iter__(self):
+        return self
+    def __next__(self):
+        self.i += self.batch_size
+        if self.i>self.L:
+            raise StopIteration
+        ids_now = self.ids[self.i-self.batch_size:self.i]
+        return [d[ids_now] for d in self.data]
+
 
 if __name__ == '__main__':
-    sys = deepSI.fit_systems.SS_encoder(nx=3,na=5,nb=5)
+    # sys = deepSI.fit_systems.SS_encoder(nx=3,na=5,nb=5)
+    sys = deepSI.fit_systems.Torch_io_siso(10,10)
     train, test = deepSI.datasets.CED()
-    sys.fit(train,sim_val=test,epochs=500,batch_size=64,concurrent_val=True)
+    print(train,test)
+    # exit()
+    sys.fit(train,sim_val=test,epochs=500,batch_size=126,concurrent_val=True)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)
