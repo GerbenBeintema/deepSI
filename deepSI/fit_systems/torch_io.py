@@ -19,8 +19,8 @@ class Torch_io(System_torch, System_io):
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        return sys_data.to_hist_future_data(na=self.na,nb=self.nb, nf=nf, force_multi_u=True, force_multi_y=True,pre_construct=pre_construct) #returns np.array(uhist),np.array(yhist),np.array(ufuture),np.array(yfuture)
+        online_construct = Loss_kwargs.get('online_construct',False)
+        return sys_data.to_hist_future_data(na=self.na,nb=self.nb, nf=nf, force_multi_u=True, force_multi_y=True,online_construct=online_construct) #returns np.array(uhist),np.array(yhist),np.array(ufuture),np.array(yfuture)
     
     def init_nets(self, nu, ny): # a bit weird
         self.ny_real = ny
@@ -64,8 +64,8 @@ class Torch_io_siso(System_torch, System_io):
 
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        return sys_data.to_IO_data(na=self.na,nb=self.nb,pre_construct=pre_construct) #np.array(hist), np.array(Y)
+        online_construct = Loss_kwargs.get('online_construct',False)
+        return sys_data.to_IO_data(na=self.na,nb=self.nb,online_construct=online_construct) #np.array(hist), np.array(Y)
 
     def init_nets(self, nu, ny):
         assert ny==None
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     sys = Torch_io()
     train, test = deepSI.datasets.sista_database.winding()
     print(train.nu,test.ny)
-    sys.fit(train,sim_val=test,batch_size=16,loss_kwargs=dict(pre_construct=True))
+    sys.fit(train,sim_val=test,batch_size=16,loss_kwargs=dict(online_construct=False))
     sys.save_system('../../development/torchIO.system')
     sys = deepSI.load_system('../../development/torchIO.system')
     test_predict = sys.apply_experiment(test)

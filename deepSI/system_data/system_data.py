@@ -236,7 +236,7 @@ class System_data(object):
     ############################
     ###### Transformations #####
     ############################
-    def to_IO_data(self,na=10,nb=10,dilation=1,pre_construct=True):
+    def to_IO_data(self,na=10,nb=10,dilation=1,online_construct=False):
         '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
 
         Parameters
@@ -253,7 +253,7 @@ class System_data(object):
         Y    : ndarray (Samples, features) or (Samples)
             array of single step ahead [y]
         '''
-        if not pre_construct:
+        if online_construct:
             return IO_dataset(self.u, self.y, na=na, nb=nb)
 
         u, y = np.copy(self.u), np.copy(self.y)
@@ -264,7 +264,7 @@ class System_data(object):
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -289,7 +289,7 @@ class System_data(object):
         yfuture : ndarray (samples, nf, ny) or (sample, nf) if ny=None
             array of [y[k],....,y[k+nf-1]]
         '''
-        if not pre_construct:
+        if online_construct:
             return hist_future_dataset(self.u, self.y, na=na, nb=nb, nf=nf, force_multi_u=force_multi_u, force_multi_y=force_multi_y)
 
         u, y = np.copy(self.u), np.copy(self.y)
@@ -312,8 +312,8 @@ class System_data(object):
         return uhist, yhist, ufuture, yfuture
 
 
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
-        if not pre_construct:
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+        if online_construct:
             return ss_dataset(self.u, self.y, nf=nf, force_multi_u=force_multi_u,force_multi_y=force_multi_y)
 
         u, y = np.copy(self.u), np.copy(self.y)
@@ -330,7 +330,7 @@ class System_data(object):
         return ufuture, yfuture
 
 
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         '''Transforms the system data to encoder structure as structure (hist,ufuture,yfuture) of 
 
         Parameters
@@ -357,7 +357,7 @@ class System_data(object):
         yfuture :  ndarray (samples, nf, ny) or (sample, nf) if ny=None
             array of [y[k],....,y[k+nf-1]]
         '''
-        if not pre_construct:
+        if online_construct:
             return encoder_dataset(self.u, self.y, na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y)
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
@@ -630,21 +630,21 @@ class System_data_list(System_data):
             return System_data_list([sd.reshape_as(other) for sd in self.sdl])
 
     ## Transformations ##
-    def to_IO_data(self,na=10,nb=10,dilation=1,pre_construct=True):
-        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=dilation,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in  zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+    def to_IO_data(self,na=10,nb=10,dilation=1,online_construct=False):
+        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=dilation,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in  zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
-                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+                force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
-                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,pre_construct=True):
+                force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
-                force_multi_y=force_multi_y,pre_construct=pre_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
-        return [np.concatenate(o,axis=0) for o in zip(*out)] if pre_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
+                force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+        return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
 
     def save(self,file):
         '''Saves data'''
@@ -867,7 +867,7 @@ if __name__=='__main__':
     sys_data3 = System_data(u=np.random.normal(size=(100,2)),y=np.random.normal(size=(100,2)))
     sdl = System_data_list([sys_data,sys_data2])
 
-    dataset = sdl.to_encoder_data(pre_construct=False)
+    dataset = sdl.to_encoder_data(online_construct=True)
     dataset = DataLoader(dataset, batch_size=40, drop_last=True, shuffle=True)
     for hist, ufuture,yfuture in dataset:
         print(hist.shape, ufuture.dtype,yfuture.shape)

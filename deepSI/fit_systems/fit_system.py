@@ -211,7 +211,7 @@ class System_torch(System_fittable):
             Dsize = sum([d.nbytes for d in data_full])
             if Dsize>2**30: 
                 dstr = f'{Dsize/2**30:.1f} GB!'
-                dstr += '\nConsider using pre_construct=False or let make_training_data return a Dataset to reduce data-usage'
+                dstr += '\nConsider using online_construct=True or let make_training_data return a Dataset to reduce data-usage'
             elif Dsize>2**20: 
                 dstr = f'{Dsize/2**20:.1f} MB'
             else:
@@ -554,7 +554,7 @@ if __name__ == '__main__':
     print(train,test)
     # exit()
     # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
-    sys.fit(train,sim_val=test,loss_kwargs=dict(pre_construct=True),epochs=500,batch_size=126,\
+    sys.fit(train,sim_val=test,loss_kwargs=dict(online_construct=True),epochs=500,batch_size=126,\
             concurrent_val=True,num_workers_data_loader=0,sim_val_fun='NRMS_mean_channels')
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
