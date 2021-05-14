@@ -555,7 +555,8 @@ if __name__ == '__main__':
     print(train,test)
     # exit()
     # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
-    sys.fit(train,sim_val=test,loss_kwargs=dict(pre_construct=True),epochs=500,batch_size=126,concurrent_val=True,num_workers_data_loader=0)
+    sys.fit(train,sim_val=test,loss_kwargs=dict(pre_construct=True),epochs=500,batch_size=126,\
+            concurrent_val=True,num_workers_data_loader=0,sim_val_fun='NRMS_mean_channels')
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)

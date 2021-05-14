@@ -439,10 +439,15 @@ class System_data(object):
         # return 100*(1 - np.sum((y-yhat)**2)**0.5/np.sum((y-np.mean(y))**2)**0.5)
         return 100*(1 - self.NRMS(real,multi_average=multi_average))
 
-    def NRMS(self,real,multi_average=True):
+    def NRMS(self,real,multi_average=True,per_channel=True):
         '''Normalized root mean square i.e. np.sum((y-yhat)**2)**0.5/np.std(y) (0 = best fit possible)'''
         RMS = self.RMS(real,multi_average=False) #RMS list
-        y_std = np.std(real.y,axis=0) #this breaks when real.y is constant but self is not
+        if per_channel:
+            y_std = np.std(real.y,axis=0) #this breaks when real.y is constant but self is not
+        else:
+            y_std = np.std(real.y)
+            return np.mean(RMS/y_std) if multi_average else RMS/y_std
+        
         if y_std.ndim==0: #if there is only one dim than normal equation
             return RMS/y_std
 
@@ -454,6 +459,14 @@ class System_data(object):
             y_std = y_std[np.logical_not(filt)]
             RMS = RMS[np.logical_not(filt)]
         return np.mean(RMS/y_std) if multi_average else RMS/y_std
+
+    def NRMS_per_channel(self,real,multi_average=True):
+        '''Normalized root mean square i.e. np.sum((y-yhat)**2)**0.5/np.std(y) (0 = best fit possible)'''
+        return self.NRMS(real,multi_average=multi_average,per_channel=True)
+
+    def NRMS_mean_channels(self,real,multi_average=True):
+        '''Normalized root mean square i.e. np.sum((y-yhat)**2)**0.5/np.std(y) (0 = best fit possible)'''
+        return self.NRMS(real,multi_average=multi_average,per_channel=False)
 
     def RMS(self,real, multi_average=True):
         '''Root mean square error'''
