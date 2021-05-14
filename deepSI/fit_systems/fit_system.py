@@ -126,7 +126,7 @@ class System_torch(System_fittable):
 
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
             sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
-            sim_val_fun='NRMS', sqrt_train=True, val_data=None, num_workers_data_loader=0, \
+            sim_val_fun='NRMS', sqrt_train=True, loss_val=None, num_workers_data_loader=0, \
             print_full_time_profile=False):
         '''The batch optimization method with parallel validation, 
 
@@ -223,9 +223,12 @@ class System_torch(System_fittable):
         if sim_val is not None:
             data_train = data_full
             data_val = None
-        else: #is not used that often
+        elif loss_val is not None: #is not used that often
+            data_train = data_full
+            data_val = [torch.tensor(a, dtype=torch.float32) for a in self.make_training_data(self.norm.transform(loss_val), **loss_kwargs)]
+        else: #split off some data from the main dataset
             from sklearn.model_selection import train_test_split
-            assert isinstance(data_full,Dataset) is False, 'not yet implemented'
+            assert isinstance(data_full, Dataset)==False, 'not yet implemented, give a sim_val or loss_val dataset to '
             datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
             data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
             data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
@@ -245,7 +248,9 @@ class System_torch(System_fittable):
         batch_id_start = self.batch_counter
         
         if isinstance(data_train, Dataset):
-            data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
+            persistent_workers = False if num_workers_data_loader==0 else True
+            data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, \
+                                   num_workers=num_workers_data_loader, persistent_workers=persistent_workers)
         else: #add my basic DataLoader
             #slow old way
             # data_train_loader = DataLoader(default_dataset(data_train), batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
@@ -360,6 +365,7 @@ class System_torch(System_fittable):
                         break
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
+        del data_train_loader
         #end of training
         if concurrent_val:
             if verbose: print(f'Waiting for started validation process to finish and one last validation... (receiving = {remote.receiving})',end='')
@@ -548,7 +554,8 @@ if __name__ == '__main__':
     train, test = deepSI.datasets.CED()
     print(train,test)
     # exit()
-    sys.fit(train,sim_val=test,epochs=500,batch_size=126,concurrent_val=False)
+    # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
+    sys.fit(train,sim_val=test,loss_kwargs=dict(pre_construct=True),epochs=500,batch_size=126,concurrent_val=True,num_workers_data_loader=0)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)
