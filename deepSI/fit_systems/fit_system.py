@@ -206,8 +206,7 @@ class System_torch(System_fittable):
         self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
         extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct time counting after restart
 
-        sys_data = self.norm.transform(sys_data)
-        data_full = self.make_training_data(sys_data, **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
+        data_full = self.make_training_data(self.norm.transform(sys_data), **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
         if not isinstance(data_full, Dataset) and verbose:
             Dsize = sum([d.nbytes for d in data_full])
             if Dsize>2**30: 
@@ -350,9 +349,9 @@ class System_torch(System_fittable):
                     else: #else print validation time use
                         valfeqstr = f''
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
-                    Loss_str = f'Epoch {epoch+1:4}, Train {trainstr}, Val {val_str} {Loss_val_now:6.4}'
+                    Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {val_str} {Loss_val_now:6.4}'
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
-                    time_str = f'Time Loss: {loss_time:.1%}, data get: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
+                    time_str = f'Time Loss: {loss_time:.1%}, data: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
                     batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
                     batch_str = (f'{batch_feq:4.1f} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.1f} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
@@ -523,7 +522,7 @@ class Tictoctimer(object):
         
 class My_Simple_DataLoader:
     def __init__(self, data, batch_size=32):
-        self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data] #convert to torch?
+        self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data] #this copies the data again
         self.ids = np.arange(len(data[0]),dtype=int)
         self.batch_size = batch_size
     
