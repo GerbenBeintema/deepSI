@@ -211,7 +211,7 @@ class System_torch(System_fittable):
             Dsize = sum([d.nbytes for d in data_full])
             if Dsize>2**30: 
                 dstr = f'{Dsize/2**30:.1f} GB!'
-                dstr += '\nConsider using online_construct=True or let make_training_data return a Dataset to reduce data-usage'
+                dstr += '\nConsider using online_construct=True (in loss_kwargs) or let make_training_data return a Dataset to reduce data-usage'
             elif Dsize>2**20: 
                 dstr = f'{Dsize/2**20:.1f} MB'
             else:
