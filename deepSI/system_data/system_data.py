@@ -168,9 +168,10 @@ class System_data(object):
         assert (y is not None) or (u is not None), 'either y or u requires to be not None or'
         N_samples = len(u) if u is not None else len(y)
         
-        self.u = np.array(u) if u is not None else np.zeros((N_samples,0)) #if y exists than u will always exists
-        self.x = np.array(x) if x is not None else None
-        self.y = np.array(y) if y is not None else None
+        #do not make a copy if they are already an ndarray, saves some memory
+        self.u = (u if isinstance(u,np.ndarray) else np.array(u)) if u is not None else np.zeros((N_samples,0)) #if y exists than u will always exists
+        self.x = (x if isinstance(x,np.ndarray) else np.array(x)) if x is not None else None
+        self.y = (y if isinstance(y,np.ndarray) else np.array(y)) if y is not None else None
         self.cheat_n = cheat_n #when the real simulation starts, used in evaluation
         self.multi_u = self.u.ndim>1
         self.multi_y = self.y.ndim>1 if self.y is not None else True
