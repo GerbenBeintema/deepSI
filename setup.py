@@ -18,14 +18,3 @@ setup(name = 'deepSI',
         docs = ['sphinx>=1.6','sphinx-rtd-theme>=0.5']
         )
     )
-
-  # extras_require = dict(
-  #   docs=['Sphinx>=1.6','scipy>=0.13','matplotlib>=1.3'],
-  #   matrix_scipy=['scipy>=0.13'],
-  #   matrix_mkl=['mkl'],
-  #   export_mpl=['matplotlib>=1.3','pillow>2.6'],
-  #   import_gmsh=['meshio'],
-  # ),
-  # command_options = dict(
-  #   test=dict(test_loader=('setup.py', 'unittest:TestLoader')),
-  # ),
