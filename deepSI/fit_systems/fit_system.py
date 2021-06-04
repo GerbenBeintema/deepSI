@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 import os.path
 from torch.utils.data import Dataset, DataLoader
+import itertools
 
 class System_fittable(System):
     """Subclass of system which introduces a .fit method which calls ._fit to fit the systems
@@ -213,7 +214,7 @@ class System_torch(System_fittable):
             Dsize = sum([d.nbytes for d in data_full])
             if Dsize>2**30: 
                 dstr = f'{Dsize/2**30:.1f} GB!'
-                dstr += '\nConsider using pre_construct=False or let make_training_data return a Dataset to reduce data-usage'
+                dstr += '\nConsider using online_construct=True (in loss_kwargs) or let make_training_data return a Dataset to reduce data-usage'
             elif Dsize>2**20: 
                 dstr = f'{Dsize/2**20:.1f} MB'
             else:
@@ -276,7 +277,6 @@ class System_torch(System_fittable):
             Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
             print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
-            import itertools
             t = Tictoctimer()
             start_t = time.time() #time keeping
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
@@ -449,36 +449,50 @@ class System_torch(System_fittable):
             if isinstance(attribute,nn.Module):
                 attribute.train()
 
+
+import signal
+import logging
+
+import signal
+class IgnoreKeyboardInterrupt:
+    def __enter__(self):
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+                
+    def handler(self, sig, frame):
+        print('Validation process received SIGINT but was ignored in favour of finishing computations.')
+    
+    def __exit__(self, type, value, traceback): #on exit it will raise the keyboard interpurt
+        signal.signal(signal.SIGINT, self.old_handler)
+
 def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRMS', loss_kwargs={}):
     '''Utility function used by .fit for concurrent validation'''
     
     parent_remote.close()
     while True:
         try:
-            sys, append, Loss_train, time_now = remote.recv() #gets the current network
-            #put deepcopy here?
-            sys.eval(); sys.cpu()
-            if sim_val is not None:
-                sim_val_sim = sys.apply_experiment(sim_val)
-                Loss_val = sim_val_sim.__getattribute__(sim_val_fun)(sim_val)
-            else:
-                with torch.no_grad():
-                    Loss_val = sys.loss(*data_val,**loss_kwargs).item()
+            with IgnoreKeyboardInterrupt():
+                sys, append, Loss_train, time_now = remote.recv() #gets the current network
+                #put deepcopy here?
+                sys.eval(); sys.cpu()
+                if sim_val is not None:
+                    sim_val_sim = sys.apply_experiment(sim_val)
+                    Loss_val = sim_val_sim.__getattribute__(sim_val_fun)(sim_val)
+                else:
+                    with torch.no_grad():
+                        Loss_val = sys.loss(*data_val,**loss_kwargs).item()
 
-            if append:
-                sys.Loss_val.append(Loss_val)
-                sys.Loss_train.append(Loss_train)
-                sys.batch_id.append(sys.batch_counter)
-                sys.time.append(time_now)
-                sys.epoch_id.append(sys.epoch_counter)
+                if append:
+                    sys.Loss_val.append(Loss_val)
+                    sys.Loss_train.append(Loss_train)
+                    sys.batch_id.append(sys.batch_counter)
+                    sys.time.append(time_now)
+                    sys.epoch_id.append(sys.epoch_counter)
 
-            sys.train() #back to training mode
-            if sys.bestfit >= Loss_val:
-                sys.bestfit = Loss_val
-                sys.checkpoint_save_system('_best')
-            out = (Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)
-            del sys
-            remote.send(out) #sends back arrays
+                sys.train() #back to training mode
+                if sys.bestfit >= Loss_val:
+                    sys.bestfit = Loss_val
+                    sys.checkpoint_save_system('_best')
+                remote.send((Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
         except EOFError: #main process stopped
             break
         except Exception as err: #some other error
@@ -487,19 +501,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
                 f.write(traceback.format_exc())
             raise err
 
-class default_dataset(Dataset):
-    """docstring for default_dataset"""
-    def __init__(self, data):
-        super(default_dataset, self).__init__()
-        self.data = [np.array(d,dtype=np.float32) for d in data]
 
-    def __getitem__(self, i):
-        return [d[i] for d in self.data]
-
-    def __len__(self):
-        return len(self.data[0])
-
-import time
 class Tictoctimer(object):
     def __init__(self):
         self.time_acc = 0
@@ -570,7 +572,7 @@ if __name__ == '__main__':
     print(train,test)
     # exit()
     # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
-    sys.fit(train,sim_val=test,loss_kwargs=dict(pre_construct=True),epochs=500,batch_size=126,\
+    sys.fit(train,sim_val=test,loss_kwargs=dict(online_construct=False),epochs=500,batch_size=126,\
             concurrent_val=True,num_workers_data_loader=0,sim_val_fun='NRMS_mean_channels')
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)

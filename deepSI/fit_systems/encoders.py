@@ -33,8 +33,8 @@ class SS_encoder(System_torch):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
         dilation = Loss_kwargs.get('dilation',1)
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True,pre_construct=pre_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
+        online_construct = Loss_kwargs.get('online_construct',False)
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
@@ -147,8 +147,8 @@ class SS_encoder_general(System_torch):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
         dilation = Loss_kwargs.get('dilation',1)
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,pre_construct=pre_construct) #uhist, yhist, ufuture, yfuture
+        online_construct = Loss_kwargs.get('online_construct',False)
+        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
 
     def init_nets(self, nu, ny): # a bit weird
         self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
@@ -253,8 +253,8 @@ class SS_encoder_rnn(System_torch):
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,pre_construct=pre_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
+        online_construct = Loss_kwargs.get('online_construct',False)
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
         # print(nu,ny)
@@ -363,8 +363,8 @@ class SS_par_start(System_torch): #this is not implemented in a nice manner, the
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
         dilation = Loss_kwargs.get('dilation',1)
-        pre_construct = Loss_kwargs.get('pre_construct',True)
-        assert pre_construct==True, 'to be implemented'
+        online_construct = Loss_kwargs.get('online_construct',False)
+        assert online_construct==False, 'to be implemented'
         hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True)
         nsamples = hist.shape[0]
         ids = np.arange(nsamples,dtype=int)
