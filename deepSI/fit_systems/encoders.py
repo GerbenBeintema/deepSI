@@ -211,38 +211,29 @@ class SS_encoder_general(System_torch):
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
-    def __init__(self, nx=10, na=20, nb=20, dt_norm=0.1, \
+    def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
         super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
         self.integrator_net = integrator_net
         self.integrator_net_kwargs = integrator_net_kwargs
-        self.dt_norm = dt_norm
+        self.f_norm = f_norm
+        self.dt_base = dt_base #freal = f_norm/dt_base simple rescale factor which is often used
 
     def init_nets(self, nu, ny): # a bit weird
-        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) #
-        self.derivn = self.fn 
-        self.fn = self.integrator_net(self.derivn, dt_norm=self.dt_norm, **self.integrator_net_kwargs) #has no torch parameters?
+        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) 
+        self.derivn = self.fn  #move fn to become the deriviative net
+        self.fn = self.integrator_net(self.derivn, f_norm=self.f_norm, dt_base=self.dt_base, **self.integrator_net_kwargs) #has no torch parameters?
         return par
 
     @property
     def dt(self):
-        return self._dt
+        return self._dt 
 
     @dt.setter
     def dt(self,dt):
         self._dt = dt
         self.fn.dt = dt
-
-    # def set_dt(self,dt): #is called on start of .fit and apply_experiment and alike
-    #     self.dt = dt
-    #     self.fn.dt = dt
-
-    def set_dt_0(self, dt_0): #is called on first call of .fit
-        self.fn.dt_0 = dt_0  #used for time normalization
-        self.dt = dt_0
-        # self.set_dt(dt_0)
-
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -540,6 +531,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_deriv_general_V2(nx=2,dt_norm=0.025)
+    sys = SS_encoder_deriv_general_V2(nx=2,f_norm=0.025)
     # sys = SS_par_start()
     sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)

@@ -202,9 +202,7 @@ class System_torch(System_fittable):
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
-            self.set_dt_0(sys_data.dt)
         self.dt = sys_data.dt
-        # self.set_dt(sys_data.dt)
 
         self.epoch_counter = 0 if len(self.epoch_id)==0 else self.epoch_id[-1]
         self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
@@ -308,11 +306,9 @@ class System_torch(System_fittable):
                         t.tic('stepping')
                         return Loss
 
-                    # t.tic('optimizer')
                     t.tic('optimizer start')
                     training_loss = self.optimizer.step(closure).item()
                     t.toc('stepping')
-                    # t.toc('optimizer')
                     Loss_acc_val += training_loss
                     Loss_acc_epoch += training_loss
                     N_batch_acc_val += 1
@@ -418,20 +414,6 @@ class System_torch(System_fittable):
         Consider manually creating a save_system function for a long term solution. (maybe utilize checkpoint_save_system)
         '''
         torch.save(self, file)
-
-    # @dt.setter
-    # def dt(self,dt):
-    #     self._dt = dt
-
-    # ######### Continuous Time #########
-    # def set_dt(self,dt_now):
-    #     self.dt = dt_now #do not change this manually, thing will break
-    #     # raise NotImplementedError('set_dt should be implemented in subclass')
-
-    # ######### Continuous Time #########
-    def set_dt_0(self,dt_0): #also sets dt?
-        pass #called during the first .fit call.
-        # raise NotImplementedError('set_dt_0 should be implemented in subclass')
 
     ### CPU & CUDA ###
     def cuda(self):
