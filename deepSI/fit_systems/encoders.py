@@ -225,9 +225,9 @@ class SS_encoder_deriv_general(SS_encoder_general):
         self.fn = self.integrator_net(self.derivn, dt_norm=self.dt_norm, **self.integrator_net_kwargs) #has no torch parameters?
         return par
 
-    def set_dt(self,dt_now): #is called on start of .fit and apply_experiment and alike
-        self.dt = dt_now
-        self.fn.dt_now = dt_now
+    def set_dt(self,dt): #is called on start of .fit and apply_experiment and alike
+        self.dt = dt
+        self.fn.dt = dt
 
     def set_dt_0(self, dt_0): #is called on first call of .fit
         self.fn.dt_0 = dt_0  #used for time normalization

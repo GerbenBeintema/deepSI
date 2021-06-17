@@ -99,9 +99,8 @@ class System(object):
         Y = []
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
         
-        if sys_data.dt is not None: #dt check
-            dt_old = self.dt
-            self.set_dt(sys_data.dt)
+        dt_old = self.dt
+        self.set_dt(sys_data.dt)
 
         U = sys_data_norm.u
         if sys_data_norm.y is not None: #if y is not None than init state
@@ -121,8 +120,7 @@ class System(object):
                 if save_state:
                     X.append(self.get_state())
         
-        if sys_data.dt is not None:
-            self.set_dt(dt_old)
+        self.set_dt(dt_old)
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
     
     def apply_controller(self,controller,N_samples):
