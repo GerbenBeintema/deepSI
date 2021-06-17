@@ -55,7 +55,7 @@ class System(object):
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
         self.seed = 42
         self.use_norm = True #can be changed later
-        self.dt = None
+        self._dt = None
 
     @property
     def name(self):
@@ -100,7 +100,7 @@ class System(object):
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
         
         dt_old = self.dt
-        self.set_dt(sys_data.dt)
+        self.dt = sys_data.dt #calls the setter
 
         U = sys_data_norm.u
         if sys_data_norm.y is not None: #if y is not None than init state
@@ -120,7 +120,7 @@ class System(object):
                 if save_state:
                     X.append(self.get_state())
         
-        self.set_dt(dt_old)
+        self.dt = dt_old
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
     
     def apply_controller(self,controller,N_samples):
@@ -135,9 +135,9 @@ class System(object):
         -----
         This method is in a very early state and will probably be changed in the near future.
         '''
-        if sys_data.dt is not None: #dt check
-            dt_old = self.dt
-            self.set_dt(sys_data.dt)
+        # if sys_data.dt is not None: #dt check
+        dt_old = self.dt
+        self.dt = sys_data.dt
         Y = []
         U = []
         obs = self.reset() #normed obs
@@ -147,8 +147,8 @@ class System(object):
             U.append(action)
             obs = self.step(action)
         # Y = Y[:-1]
-        if sys_data.dt is not None:
-            self.set_dt(dt_old)
+        # if sys_data.dt is not None:
+        self.dt = dt_old
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
 
     def init_state(self, sys_data):
@@ -196,22 +196,25 @@ class System(object):
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
-    def set_dt(self,dt_now):
-        self.dt = dt_now
+    @property
+    def dt(self):
+        return self._dt
+    
+    @dt.setter
+    def dt(self,dt):
+        self._dt = dt
 
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
             return System_data_list([self.apply_experiment(sd) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data)
-        if sys_data.dt is not None: #dt check
-            dt_old = self.dt
-            self.set_dt(sys_data.dt)
+        dt_old = self.dt
+        self.dt = sys_data.dt
 
         obs, k0 = self.init_state_multi(sys_data_norm,nf=1)
         Y = np.concatenate([sys_data_norm.y[:k0],obs],axis=0)
-        if sys_data.dt is not None:
-            self.set_dt(dt_old)
+        self.dt = dt_old
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
@@ -232,9 +235,8 @@ class System(object):
             sys_data = System_data_list(sys_data)
             # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
 
-        if sys_data.dt is not None: #dt check
-            dt_old = self.dt #may not exist
-            self.set_dt(sys_data.dt)
+        dt_old = self.dt
+        self.dt = sys_data.dt
 
         sys_data = self.norm.transform(sys_data)
         obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
@@ -253,8 +255,7 @@ class System(object):
         else:
             self.init_state(sys_data) #remove large state
 
-        if sys_data.dt is not None:
-            self.set_dt(dt_old)
+        self.dt = dt_old
         
         return np.array(Losses)
     def n_step_error_plot(self, sys_data, nf=100, dilation=1, RMS=False, show=True):
@@ -368,7 +369,7 @@ class System_deriv(System_ss):
 
     def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK4'):
         super(System_deriv, self).__init__(nx, nu, ny)
-        self.set_dt(dt)
+        self.dt = dt
         self.method = method
 
     def f(self,x,u):

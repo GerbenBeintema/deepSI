@@ -87,21 +87,9 @@ class time_integrators(nn.Module):
     def deriv(self,x,u):
         return self.deriv_base(x,u)*self.dt_norm/self.dt_0 if self.dt_0 is not None else self.deriv_base(x,u)*self.dt_norm
 
-
     @property
     def dt(self):
-        #does this need a check?
         return self._dt
-        # if not self.dt_checked:
-        #     self.dt_checked = True
-        #     self.dt_valued = False if self._dt is None else True
-        # else:
-        #     assert self.dt_valued==(self._dt is not None), 'are you mixing valued dt and none valued datasets?'
-        # return 1 if self._dt is None else self._dt #could be None
-        #I want to warn the user if dt is None but a dt was expected
-        # if self.dt_0 is None: #no time constant set, assuming no changes in dt
-        #     return self.dt_norm
-        # return self.dt_norm*self.dt_now/self.dt_0
 
     @dt.setter
     def dt(self,dt):
@@ -128,6 +116,7 @@ class integrator_euler(time_integrators):
     def forward(self, x, u): #u constant on segment
         return x + self.dt*self.deriv(x,u)
 
+
 if __name__ == '__main__':
     import deepSI
     import numpy as np
@@ -142,8 +131,8 @@ if __name__ == '__main__':
     from deepSI.utils import integrator_euler, integrator_RK4
     def get_sys_epoch(dt=0.12,nf=30,epochs=200,n_hidden_layers=1,n_nodes_per_layer=64,euler=False):
         test, train = deepSI.datasets.CED() #switch
-        test.dt = None
-        train.dt = None
+        test.dt = 1
+        train.dt = 1
         f_net_kwargs=dict(n_hidden_layers=n_hidden_layers,n_nodes_per_layer=n_nodes_per_layer)
         integrator = integrator_euler if euler else integrator_RK4
         sys = deepSI.fit_systems.SS_encoder_deriv_general(nx=3,na=7,nb=7,dt_norm=dt,\
@@ -162,5 +151,5 @@ if __name__ == '__main__':
     np.random.seed(5)
     manual_seed(5)
     sys = get_sys_epoch(nf=30, epochs=400, n_hidden_layers=1, n_nodes_per_layer=64)
-    test.dt = None
+    test.dt = 1
     sys.apply_experiment(test)
