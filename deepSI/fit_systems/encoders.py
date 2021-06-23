@@ -211,7 +211,7 @@ class SS_encoder_general(System_torch):
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
-    def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., \
+    def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., cutt_off=1.5, \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
         super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
@@ -219,6 +219,7 @@ class SS_encoder_deriv_general(SS_encoder_general):
         self.integrator_net_kwargs = integrator_net_kwargs
         self.f_norm = f_norm
         self.dt_base = dt_base #freal = f_norm/dt_base simple rescale factor which is often used
+        self.cutt_off = cutt_off
 
     def init_nets(self, nu, ny): # a bit weird
         par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) 
@@ -234,6 +235,19 @@ class SS_encoder_deriv_general(SS_encoder_general):
     def dt(self,dt):
         self._dt = dt
         self.fn.dt = dt
+
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        x = self.encoder(uhist, yhist) #this fails if dt starts to change
+        diff = []
+        for u,y in zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1)): #iterate over time
+            yhat = self.hn(x)
+            dy = yhat-y # (Nbatch, ny)
+            with torch.no_grad(): #break if the 
+                if torch.mean(dy**2).item()**0.5>self.cutt_off:
+                    break
+            diff.append(dy)
+            x = self.fn(x,u)
+        return torch.mean((torch.stack(diff,dim=1))**2)
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
