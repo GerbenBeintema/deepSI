@@ -239,15 +239,16 @@ class SS_encoder_deriv_general(SS_encoder_general):
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         x = self.encoder(uhist, yhist) #this fails if dt starts to change
         diff = []
-        for u,y in zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1)): #iterate over time
+        for i,(u,y) in enumerate(zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1))): #iterate over time
             yhat = self.hn(x)
-            dy = yhat-y # (Nbatch, ny)
+            dy = (yhat - y)**2 # (Nbatch, ny)
             with torch.no_grad(): #break if the 
-                if torch.mean(dy**2).item()**0.5>self.cutt_off:
+                if torch.mean(dy).item()**0.5>self.cutt_off:
+                    print(f'breaking in loss function at step {i}')
                     break
             diff.append(dy)
             x = self.fn(x,u)
-        return torch.mean((torch.stack(diff,dim=1))**2)
+        return torch.mean((torch.stack(diff,dim=1)))
 
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
@@ -545,6 +546,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_deriv_general_V2(nx=2,f_norm=0.025)
+    sys = SS_encoder_deriv_general(nx=2,f_norm=0.025)
     # sys = SS_par_start()
     sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)
