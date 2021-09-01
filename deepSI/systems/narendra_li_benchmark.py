@@ -31,7 +31,7 @@ if __name__ == '__main__':
     sys = NarendraLiBenchmark()
     sys_data = sys.get_train_data()
 
-    SYS = fit_systems.System_IO_fit_linear
+    SYS = fit_systems.Sklearn_io_linear
     # sys_fit, score, kwargs = fit_systems.fit_system_tuner(SYS, sys_data, dict(na=range(0,7),nb=range(1,7)))
     score, sys_fit, kwargs, _ = fit_systems.grid_search(SYS, sys_data, dict(na=range(0,7),nb=range(1,7)))
     sys_data_predict = sys_fit.apply_experiment(sys_data)

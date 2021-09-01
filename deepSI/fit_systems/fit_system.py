@@ -125,10 +125,27 @@ class System_torch(System_fittable):
             optimizer = torch.optim.Adam
         return optimizer(parameters,**optimizer_kwargs) 
 
+    def init_scheduler(self, **scheduler_kwargs):
+        '''Optionally defined in subclass to create the optimizer
+
+        Parameters
+        ----------
+        optimizer_kwargs : dict
+            If 'scheduler' is defined than that scheduler will be used otherwise no scheduler will be used.
+        '''
+        if not scheduler_kwargs:
+            return None
+        from copy import deepcopy
+        scheduler_kwargs = deepcopy(scheduler_kwargs)
+        scheduler = scheduler_kwargs['scheduler']
+        del scheduler_kwargs['scheduler']
+        return scheduler(self.optimizer,**scheduler_kwargs)
+
+
     def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
             sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
             sim_val_fun='NRMS', sqrt_train=True, loss_val=None, num_workers_data_loader=0, \
-            print_full_time_profile=False):
+            print_full_time_profile=False, scheduler_kwargs={}):
         '''The batch optimization method with parallel validation, 
 
         Parameters
@@ -199,6 +216,7 @@ class System_torch(System_fittable):
             self.ny = sys_data.ny
             self.parameters = list(self.init_nets(self.nu,self.ny))
             self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs)
+            self.scheduler = self.init_scheduler(**scheduler_kwargs)
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
@@ -305,11 +323,13 @@ class System_torch(System_fittable):
                         t.tic('stepping')
                         return Loss
 
-                    # t.tic('optimizer')
                     t.tic('optimizer start')
                     training_loss = self.optimizer.step(closure).item()
                     t.toc('stepping')
-                    # t.toc('optimizer')
+                    if self.scheduler is not None:
+                        t.tic('scheduler')
+                        self.scheduler.step()
+                        t.tic('scheduler')
                     Loss_acc_val += training_loss
                     Loss_acc_epoch += training_loss
                     N_batch_acc_val += 1
@@ -321,7 +341,9 @@ class System_torch(System_fittable):
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
                         #deepcopy(self) costs time due to the arrays that are passed?
-                        remote.send((deepcopy(self), True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
+                        copy_self = deepcopy(self)
+                        del copy_self.scheduler
+                        remote.send((copy_self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
                     t.toc('val')
@@ -330,6 +352,10 @@ class System_torch(System_fittable):
 
                 #end of epoch clean up
                 train_loss_epoch = Loss_acc_epoch/N_batch_updates_per_epoch
+                if np.isnan(train_loss_epoch):
+                    if verbose>0: 
+                        print(f'&&&&&&&&&&&&& Encountered a NaN value in the training loss at epoch {epoch}, breaking from loop &&&&&&&&&&')
+                    break
                 t.tic('val')
                 if not concurrent_val:
                     Loss_val_now = validation(append=True,train_loss=train_loss_epoch, \

@@ -770,7 +770,7 @@ class System_data_norm(object):
 
     @property
     def is_id(self):
-        return self.u0 is 0 and self.ustd is 1 and self.y0 is 0 and self.ystd is 1
+        return self.u0==0 and self.ustd==1 and self.y0==0 and self.ystd==1
 
     def make_training_data(self,sys_data):
         if isinstance(sys_data,(list,tuple)):
