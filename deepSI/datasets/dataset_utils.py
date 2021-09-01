@@ -1,6 +1,7 @@
 
 
 import urllib.request
+from urllib import request
 import os
 import os.path
 from pathlib import Path
@@ -87,10 +88,10 @@ class MyProgressBar():
             self.pbar.finish()
 
 
-def cashed_download(url,name_dir,dir_placement=None,download_size=None,force_download=False,zipped=True):
+def cashed_download(url,name_dir,zip_name=None,dir_placement=None,download_size=None,force_download=False,zipped=True):
     '''url is the file to be downloaded
     name_dir is the directory name where the file and the contents of the file will be saved
-    dir_placement is an optinal argument that gives the location of the downloaded file 
+    dir_placement is an optional argument that gives the location of the downloaded file 
     if it is none it will download to the temp dir
     if dir_name is None it will be saved in the temp directory of the system'''
 
@@ -102,30 +103,34 @@ def cashed_download(url,name_dir,dir_placement=None,download_size=None,force_dow
     save_dir = os.path.join(p,Path(name_dir))
     if os.path.isdir(save_dir) is False:
         os.mkdir(save_dir)
-    file_name = url.split('/')[-1]
-    save_loc = os.path.join(save_dir,file_name)
+    file_name = url.split('/')[-1] if zip_name==None else zip_name
+    save_loc = os.path.join(save_dir,file_name) 
 
 
     if os.path.isfile(save_loc) and not force_download:
         return save_dir
 
     print(f'file not found downloading from {url} \n in {save_loc}')
-    from http.client import IncompleteRead
-    tries = 0
-    while True:
-        try:
-            if download_size is None:
-                urllib.request.urlretrieve(url, save_loc)# MyProgressBar() is a steam so no length is given
-                break
-            else:
-                urllib.request.urlretrieve(url, save_loc,MyProgressBar(download_size=int(download_size)))
-                break
-        except IncompleteRead:
-            tries += 1
-            print('IncompleteRead download failed, re-downloading file')
-            download_size = None
-            if tries==5:
-                assert False, 'Download Fail 5 times exiting.'
+
+    if 'drive.google' in url:
+        download_file_from_google_drive(url, save_loc)
+    else:
+        from http.client import IncompleteRead
+        tries = 0
+        while True:
+            try:
+                if download_size is None:
+                    urllib.request.urlretrieve(url, save_loc)# MyProgressBar() is a steam so no length is given
+                    break
+                else:
+                    urllib.request.urlretrieve(url, save_loc, MyProgressBar(download_size=int(download_size)))
+                    break
+            except IncompleteRead:
+                tries += 1
+                print('IncompleteRead download failed, re-downloading file')
+                download_size = None
+                if tries==5:
+                    assert False, 'Download Fail 5 times exiting.'
 
 
     if not zipped: return save_dir
@@ -147,6 +152,39 @@ def cashed_download(url,name_dir,dir_placement=None,download_size=None,force_dow
         raise NotImplementedError(f'file {file_name} type not implemented')
     return save_dir
 
+
+
+import requests
+
+def download_file_from_google_drive(url, destination):
+    id = url.split('/')[-2]
+    URL = "https://docs.google.com/uc?export=download"
+
+    session = requests.Session()
+
+    response = session.get(URL, params = { 'id' : id }, stream = True)
+    token = get_confirm_token(response)
+
+    if token:
+        params = { 'id' : id, 'confirm' : token }
+        response = session.get(URL, params = params, stream = True)
+
+    save_response_content(response, destination)    
+
+def get_confirm_token(response):
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            return value
+
+    return None
+
+def save_response_content(response, destination):
+    CHUNK_SIZE = 32768
+
+    with open(destination, "wb") as f:
+        for chunk in response.iter_content(CHUNK_SIZE):
+            if chunk: # filter out keep-alive new chunks
+                f.write(chunk)
 
 if __name__ == '__main__':
     import deepSI

@@ -32,9 +32,10 @@ def EMPS(dir_placement=None,vir_as_u=True,force_download=False,split_data=True):
     #t time
     #vir applied the vector of motor force expressed in the load side i.e. in N;
 
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/EMPS/EMPS.zip'
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/EMPS/EMPS.zip'
+    url = 'https://drive.google.com/file/d/1zwoXYa9-3f8NQ0ohzmjpF7UxbNgRTHkS/view'
     download_size = 1949929
-    save_dir = cashed_download(url,'EMPS',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = cashed_download(url,'EMPS',zip_name='EMPS.zip', dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     matfile = loadmat(os.path.join(save_dir,'DATA_EMPS.mat'))
     q_cur, q_ref, t, vir = [matfile[a][:,0] for a in ['qm','qg','t','vir']] #qg is reference, either, q_ref is input or vir is input
     out_data = System_data(u=vir,y=q_cur) if vir_as_u else System_data(u=q_ref,y=q_cur)
@@ -108,9 +109,10 @@ def F16(dir_placement=None,yn=0,force_download=False,split_data=True):
     Special thanks to Bart Peeters (Siemens Industry Software) for his help in creating this benchmark.'''
     #todo this is still broken for some mat files
     # assert False, 'this is still broken for some files where y has many more dimensions than expected'
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/F16/F16GVT_Files.zip'
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/F16/F16GVT_Files.zip'
+    url = 'https://data.4tu.nl/ndownloader/files/24675560'
     download_size=148455295
-    save_dir = cashed_download(url,'F16',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = cashed_download(url,'F16',zip_name='F16GVT_Files.zip',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     save_dir = os.path.join(save_dir,'F16GVT_Files/BenchmarkData') #matfiles location
     matfiles = [os.path.join(save_dir,a).replace('\\','/') for a in os.listdir(save_dir) if a.split('.')[-1]=='mat']
     datasets = []
@@ -121,15 +123,16 @@ def F16(dir_placement=None,yn=0,force_download=False,split_data=True):
         #y = one of the ys, multi objective regression?
         name = file.split('/')[-1]
         if 'SpecialOddMSine' not in name:
-            datasets.append(System_data(u=Force,y=[y1,y2,y3][yn],system_dict={'name':name}))
+            datasets.append(System_data(u=Force,y=[y1,y2,y3][yn]))
     datasets = System_data_list(datasets)
     return datasets if not split_data else datasets.train_test_split()
 
 
 def Cascaded_Tanks(dir_placement=None,force_download=False,split_data=True):
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/CASCADEDTANKS/CascadedTanksFiles.zip'
-    download_size=7520592
-    save_dir = cashed_download(url,'Cascaded_Tanks',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/CASCADEDTANKS/CascadedTanksFiles.zip'
+    url = 'https://data.4tu.nl/ndownloader/files/24686327'
+    download_size = 7520592
+    save_dir = cashed_download(url,'Cascaded_Tanks',zip_name='CascadedTanksFiles.zip',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     save_dir = os.path.join(save_dir,'CascadedTanksFiles')
 
     out = loadmat(os.path.join(save_dir,'dataBenchmark.mat'))
@@ -141,9 +144,10 @@ def Cascaded_Tanks(dir_placement=None,force_download=False,split_data=True):
 
 def WienerHammerstein_Process_Noise(dir_placement=None, force_download=False, split_data=True):
     '''Warning this is a quite a bit of data'''
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/WIENERHAMMERSTEINPROCESS/WienerHammersteinFiles.zip'
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/WIENERHAMMERSTEINPROCESS/WienerHammersteinFiles.zip'
+    url = 'https://data.4tu.nl/ndownloader/files/24671987'
     download_size=423134764
-    save_dir = cashed_download(url,'WienHammer',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = cashed_download(url,'WienHammer',zip_name='WienerHammersteinFiles.zip',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     save_dir = os.path.join(save_dir,'WienerHammersteinFiles') #matfiles location
     matfiles = [os.path.join(save_dir,a).replace('\\','/') for a in os.listdir(save_dir) if a.split('.')[-1]=='mat']
     dataset = []
@@ -167,10 +171,11 @@ def BoucWen(dir_placement=None, force_download=False, split_data=True):
 
     #todo: dot p file integration as system for training data
     #generate more data
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/BOUCWEN/BoucWenFiles.zip'
-    download_size=5284363
-    save_dir = cashed_download(url,'BoucWen',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
-    save_dir = os.path.join(save_dir,'BoucWenFiles\\Test signals\\Validation signals') #matfiles location
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/BOUCWEN/BoucWenFiles.zip'
+    url = 'https://data.4tu.nl/ndownloader/files/24703124'
+    download_size = 5284363
+    save_dir = cashed_download(url,'BoucWen',zip_name='BoucWenFiles.zip',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = os.path.join(save_dir,'BoucWenFiles/Test signals/Validation signals') #matfiles location
 
     datafiles = []
 
@@ -194,9 +199,10 @@ def BoucWen(dir_placement=None, force_download=False, split_data=True):
 
 def ParWHF(dir_placement=None,force_download=False, split_data=True):
     '''Parallel Wienner-Hammerstein'''
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/PARWH/ParWHFiles.zip'
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/PARWH/ParWHFiles.zip'
+    url = 'https://data.4tu.nl/ndownloader/files/24666227'
     download_size=58203304
-    save_dir = cashed_download(url,'ParWHF',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = cashed_download(url,'ParWHF',zip_name='ParWHFiles.zip',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
     save_dir = os.path.join(save_dir,'ParWHFiles') #matfiles location
 
     out = loadmat(os.path.join(save_dir,'ParWHData.mat'))
@@ -217,15 +223,18 @@ def ParWHF(dir_placement=None,force_download=False, split_data=True):
     uEst = out['uEst'].reshape((16384,-1))
     yEst = out['yEst'].reshape((16384,-1))
     datafiles.extend([System_data(u=ui,y=yi) for ui,yi in zip(uEst.T,yEst.T)])
+    
     uVal = out['uVal'].reshape((16384,-1))
     yVal = out['yVal'].reshape((16384,-1))
     data = [System_data(u=ui,y=yi) for ui,yi in zip(uVal.T,yVal.T)]
     datafiles_test.extend(data) if split_data else datafiles.extend(data)
+    
     uValArr = out['uValArr'].reshape((16384,-1))
     yValArr = out['yValArr'].reshape((16384,-1))
     data = [System_data(u=ui,y=yi) for ui,yi in zip(uValArr.T,yValArr.T)]
     datafiles_test.extend(data) if split_data else datafiles.extend(data)
-    datasets = System_data_list(datasets)
+
+    datafiles = System_data_list(datafiles)
     if split_data:
         datafiles_test = System_data_list(datafiles_test)
         return (datafiles, datafiles_test)
@@ -263,9 +272,11 @@ def Silverbox(dir_placement=None,force_download=False, split_data=True):
 
     Special thanks to Johan Schoukens for creating this benchmark, and to Torbjörn Wigren for hosting this benchmark.
     '''
-    url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/SILVERBOX/SilverboxFiles.zip'
+    # url = 'http://www.nonlinearbenchmark.org/FILES/BENCHMARKS/SILVERBOX/SilverboxFiles.zip' #old
+    url = 'https://drive.google.com/file/d/17iS-6oBUUgrmiAcrZoG9S5sOaljZnDSy/view'
     download_size=5793999
-    save_dir = cashed_download(url,'Silverbox',dir_placement=dir_placement,download_size=download_size,force_download=force_download)
+    save_dir = cashed_download(url, 'Silverbox', zip_name='SilverboxFiles.zip',\
+        dir_placement=dir_placement, download_size=download_size, force_download=force_download)
     save_dir = os.path.join(save_dir,'SilverboxFiles') #matfiles location
 
 
