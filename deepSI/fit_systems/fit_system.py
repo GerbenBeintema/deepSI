@@ -369,7 +369,7 @@ class System_torch(System_fittable):
                     if bestfit_old > self.bestfit:
                         print(f'########## New lowest validation loss achieved ########### {val_str} = {self.bestfit}')
                         best_epoch = epoch+1
-                    if concurrent_val: #if concurrent val then print validation freq
+                    if concurrent_val: #if concurrent val than print validation freq
                         val_feq = val_counter/(epoch+1)
                         valfeqstr = f', {val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f', {1/val_feq:4.3} epochs/val'
                     else: #else print validation time use
@@ -379,6 +379,7 @@ class System_torch(System_fittable):
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
                     time_str = f'Time Loss: {loss_time:.1%}, data: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
                     batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
+                    self.batch_feq = batch_feq #batches per second
                     batch_str = (f'{batch_feq:4.1f} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.1f} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
                     if print_full_time_profile:

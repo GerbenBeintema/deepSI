@@ -22,7 +22,7 @@ class Nonlinear_rlc(System_deriv): #discrate system single system
     """
     def __init__(self):
         '''Noise, system setting and x0 settings'''
-        super(nonlinear_RLC, self).__init__(nx=2,dt=5e-7)
+        super(Nonlinear_rlc, self).__init__(nx=2,dt=5e-7)
         # self.dt = 5e-7 #0.5 mus #dt is quite short so prediction error will not perform
         self.L0 = 50e-6 #50 muH
         self.C = 270e-9 #270 nF
@@ -43,22 +43,22 @@ class Nonlinear_rlc(System_deriv): #discrate system single system
         vC,iL = x
         return iL #or vC
 
-    def get_train_data(self):
+    def get_train_data(self,N=4000):
         from scipy import signal
         band = 150e3
         order = 6
         self.b, self.a = signal.butter(order,band,analog=False,fs=1/self.dt)
-        u0 = np.random.normal(scale=80,size=4000)
+        u0 = np.random.normal(scale=80,size=N)
         u = signal.lfilter(self.b,self.a,u0)
         exp = deepSI.System_data(u=u)
         return self.apply_experiment(exp)
 
-    def get_test_data(self):
+    def get_test_data(self,N=4000):
         from scipy import signal
         band = 200e3
         order = 6
         self.b, self.a = signal.butter(order,band,analog=False,fs=1/self.dt)
-        u0 = np.random.normal(scale=60,size=4000)
+        u0 = np.random.normal(scale=60,size=N)
         u = signal.lfilter(self.b,self.a,u0)
         exp = deepSI.System_data(u=u)
         return self.apply_experiment(exp)

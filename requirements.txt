@@ -6,3 +6,4 @@ progressbar
 torch
 scikit-learn
 gym
+opencv-python
