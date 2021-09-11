@@ -157,11 +157,12 @@ class SS_encoder_general(System_torch):
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         x = self.encoder(uhist, yhist)
-        y_predict = []
-        for u in torch.transpose(ufuture,0,1): #iterate over time
-            y_predict.append(self.hn(x)) 
+        errors = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            errors.append(nn.functional.mse_loss(y, self.hn(x)))
+            # y_predict.append(y-self.hn(x)) 
             x = self.fn(x,u)
-        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
+        return torch.mean(torch.stack(errors))
 
     ########## How to use ##############
     def init_state(self,sys_data): #put nf here for n-step error?
@@ -424,6 +425,30 @@ class SS_encoder_affine_input(SS_encoder_general):
         super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,f_net=affine_forward_layer, h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), h_net_kwargs=h_net_kwargs)
+
+
+from deepSI.utils import CNN_chained_upscales
+class SS_encoder_CNN_video(SS_encoder_general):
+    """
+
+    """
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=CNN_chained_upscales, \
+                                            e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_CNN_video, self).__init__(nx=nx,na=na,nb=nb,\
+            e_net=e_net,               f_net=f_net,                h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+
+from deepSI.utils import FC_video
+class SS_encoder_FC_video(SS_encoder_general):
+    """
+
+    """
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=FC_video, \
+                                            e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_FC_video, self).__init__(nx=nx,na=na,nb=nb,\
+            e_net=e_net,               f_net=f_net,                h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+
 
 
 class default_ino_state_net(nn.Module):
