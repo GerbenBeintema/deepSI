@@ -242,11 +242,10 @@ class SS_encoder_deriv_general(SS_encoder_general):
         for i,(u,y) in enumerate(zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1))): #iterate over time
             yhat = self.hn(x)
             dy = (yhat - y)**2 # (Nbatch, ny)
+            diff.append(dy)
             with torch.no_grad(): #break if the 
                 if torch.mean(dy).item()**0.5>self.cutt_off:
-                    print(f'breaking in loss function at step {i}')
                     break
-            diff.append(dy)
             x = self.fn(x,u)
         return torch.mean((torch.stack(diff,dim=1)))
 
