@@ -97,7 +97,8 @@ class default_encoder_net(nn.Module):
         from deepSI.utils import simple_res_net
         self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
         self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
-        self.net = simple_res_net(n_in=nb*np.prod(self.nu,dtype=int) + na*np.prod(self.ny,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+        self.net = simple_res_net(n_in=nb*np.prod(self.nu,dtype=int) + na*np.prod(self.ny,dtype=int), \
+            n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
 
     def forward(self, upast, ypast):
         net_in = torch.cat([upast.view(upast.shape[0],-1),ypast.view(ypast.shape[0],-1)],axis=1)
@@ -108,7 +109,8 @@ class default_state_net(nn.Module):
         super(default_state_net, self).__init__()
         from deepSI.utils import simple_res_net
         self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
-        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int), n_out=nx, n_nodes_per_layer=n_nodes_per_layer, \
+            n_hidden_layers=n_hidden_layers, activation=activation)
 
     def forward(self, x, u):
         net_in = torch.cat([x,u.view(u.shape[0],-1)],axis=1)
@@ -119,7 +121,8 @@ class default_output_net(nn.Module):
         super(default_output_net, self).__init__()
         from deepSI.utils import simple_res_net
         self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
-        self.net = simple_res_net(n_in=nx, n_out=np.prod(self.ny,dtype=int), n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+        self.net = simple_res_net(n_in=nx, n_out=np.prod(self.ny,dtype=int), n_nodes_per_layer=n_nodes_per_layer, \
+            n_hidden_layers=n_hidden_layers, activation=activation)
 
     def forward(self, x):
         return self.net(x).view(*((x.shape[0],)+self.ny))
@@ -427,27 +430,27 @@ class SS_encoder_affine_input(SS_encoder_general):
             e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), h_net_kwargs=h_net_kwargs)
 
 
-from deepSI.utils import CNN_chained_upscales
+from deepSI.utils import CNN_chained_upscales, CNN_encoder
 class SS_encoder_CNN_video(SS_encoder_general):
     """
 
     """
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=CNN_chained_upscales, \
+    def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=CNN_chained_upscales, \
                                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
         super(SS_encoder_CNN_video, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
 
-from deepSI.utils import FC_video
-class SS_encoder_FC_video(SS_encoder_general):
-    """
+# from deepSI.utils import FC_video #you can use the general for this
+# class SS_encoder_FC_video(SS_encoder_general):
+#     """
 
-    """
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=FC_video, \
-                                            e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_FC_video, self).__init__(nx=nx,na=na,nb=nb,\
-            e_net=e_net,               f_net=f_net,                h_net=h_net, \
-            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+#     """
+#     def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=FC_video, \
+#                                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+#         super(SS_encoder_FC_video, self).__init__(nx=nx,na=na,nb=nb,\
+#             e_net=e_net,               f_net=f_net,                h_net=h_net, \
+#             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
 
 
 

@@ -283,7 +283,7 @@ class System_data(object):
         -------
         uhist : ndarray (samples, nb, nu) or (sample, nb) if nu=None
             array of [u[k-nb],....,u[k-1]]
-        yhist : ndarray (samples, na, nu) or (sample, na) if nu=None
+        yhist : ndarray (samples, na, ny) or (sample, na) if ny=None
             array of [y[k-nb],....,y[k-1]]
         ufuture : ndarray (samples, nf, nu) or (sample, nf) if nu=None
             array of [u[k],....,u[k+nf-1]]
