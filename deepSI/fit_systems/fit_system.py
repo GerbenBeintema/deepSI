@@ -11,6 +11,7 @@ from pathlib import Path
 import os.path
 from torch.utils.data import Dataset, DataLoader
 import itertools
+from copy import deepcopy
 
 class System_fittable(System):
     """Subclass of system which introduces a .fit method which calls ._fit to fit the systems
@@ -117,7 +118,6 @@ class System_torch(System_fittable):
             The other parameters will be passed to the optimizer as a kwarg.
         '''
         if optimizer_kwargs.get('optimizer') is not None:
-            from copy import deepcopy
             optimizer_kwargs = deepcopy(optimizer_kwargs) #do not modify the original kwargs, is this necessary
             optimizer = optimizer_kwargs['optimizer']
             del optimizer_kwargs['optimizer']
@@ -135,7 +135,6 @@ class System_torch(System_fittable):
         '''
         if not scheduler_kwargs:
             return None
-        from copy import deepcopy
         scheduler_kwargs = deepcopy(scheduler_kwargs)
         scheduler = scheduler_kwargs['scheduler']
         del scheduler_kwargs['scheduler']
@@ -186,7 +185,7 @@ class System_torch(System_fittable):
         The default checkpoint location is "C:/Users/USER/AppData/Local/deepSI/checkpoints" for windows and ~/.deepSI/checkpoints/ for unix like.
         These can be loaded manually using sys.load_checkpoint("_best") or "_last". (For this to work the sys.unique_code needs to be set to the correct string)
         '''
-        def validation(append=True, train_loss=None, time_elapsed_total=None):
+        def validation(train_loss=None, time_elapsed_total=None):
             self.eval(); self.cpu();
             if sim_val is not None:
                 sim_val_predict = self.apply_experiment(sim_val)
@@ -194,12 +193,11 @@ class System_torch(System_fittable):
             else:
                 with torch.no_grad():
                     Loss_val = self.loss(*data_val,**loss_kwargs).item()
-            if append: 
-                self.Loss_val.append(Loss_val) 
-                self.Loss_train.append(train_loss)
-                self.time.append(time_elapsed_total)
-                self.batch_id.append(self.batch_counter)
-                self.epoch_id.append(self.epoch_counter)
+            self.Loss_val.append(Loss_val)
+            self.Loss_train.append(train_loss)
+            self.time.append(time_elapsed_total)
+            self.batch_id.append(self.batch_counter)
+            self.epoch_id.append(self.epoch_counter)
             if self.bestfit>=Loss_val:
                 self.bestfit = Loss_val
                 self.checkpoint_save_system()
@@ -208,6 +206,7 @@ class System_torch(System_fittable):
             self.train()
             return Loss_val
         
+        ########## Initialization ##########
         if self.fitted==False:
             if self.use_norm: #if the norm is not used you can also manually initialize it.
                 #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
@@ -215,29 +214,27 @@ class System_torch(System_fittable):
             self.nu = sys_data.nu
             self.ny = sys_data.ny
             self.parameters = list(self.init_nets(self.nu,self.ny))
-            self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs)
+            self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs) #cuda should be done here or not?
             self.scheduler = self.init_scheduler(**scheduler_kwargs)
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
+        if self.scheduler==False and verbose:
+            print('!!!! Your might be continuing from a save which had scheduler but which was removed during saving... check this !!!!!!')
+
+        if cuda: 
+            self.cuda()
+        self.train()
 
         self.epoch_counter = 0 if len(self.epoch_id)==0 else self.epoch_id[-1]
         self.batch_counter = 0 if len(self.batch_id)==0 else self.batch_id[-1]
-        extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct time counting after restart
+        extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct timer after restart
 
+        ########## Getting the data ##########
         data_full = self.make_training_data(self.norm.transform(sys_data), **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
-        if not isinstance(data_full, Dataset) and verbose:
-            Dsize = sum([d.nbytes for d in data_full])
-            if Dsize>2**30: 
-                dstr = f'{Dsize/2**30:.1f} GB!'
-                dstr += '\nConsider using online_construct=True (in loss_kwargs) or let make_training_data return a Dataset to reduce data-usage'
-            elif Dsize>2**20: 
-                dstr = f'{Dsize/2**20:.1f} MB'
-            else:
-                dstr = f'{Dsize/2**10:.1f} kB'
-            print('Size of the training array = ', dstr)
+        if not isinstance(data_full, Dataset) and verbose: print_array_byte_size(sum([d.nbytes for d in data_full]))
 
-
+        ########## datasplitting ##########
         if sim_val is not None:
             data_train = data_full
             data_val = None
@@ -251,62 +248,43 @@ class System_torch(System_fittable):
             data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
             data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
 
-        #transforming it back to a list to be able to append.
+        #### transforming it back to a list to be able to append. ########
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
 
-        Loss_acc_val, N_batch_acc_val = 0, 0
+        #### init monitoring values ########
+        Loss_acc_val, N_batch_acc_val, val_counter, best_epoch, batch_id_start = 0, 0, 0, 0, self.batch_counter #to print the frequency of the validation step.
         N_training_samples = len(data_train) if isinstance(data_train, Dataset) else len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
+        val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         if verbose>0: 
             print(f'N_training_samples = {N_training_samples}, batch_size = {batch_size}, N_batch_updates_per_epoch = {N_batch_updates_per_epoch}')
-        val_counter = 0  #to print the frequency of the validation step.
-        val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
-        best_epoch = 0
-        batch_id_start = self.batch_counter
         
+        ### convert to dataset ###
         if isinstance(data_train, Dataset):
             persistent_workers = False if num_workers_data_loader==0 else True
             data_train_loader = DataLoader(data_train, batch_size=batch_size, drop_last=True, shuffle=True, \
                                    num_workers=num_workers_data_loader, persistent_workers=persistent_workers)
         else: #add my basic DataLoader
-            #slow old way
-            # data_train_loader = DataLoader(default_dataset(data_train), batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_workers_data_loader)
-            #fast new way
             data_train_loader = My_Simple_DataLoader(data_train, batch_size=batch_size) #is quite a bit faster for low data situations
 
         if concurrent_val:
-            from multiprocessing import Process, Pipe
-            from copy import deepcopy
-            remote, work_remote = Pipe()
-            remote.receiving = False
-            process = Process(target=_worker, args=(work_remote, remote, sim_val, data_val, sim_val_fun, loss_kwargs))
-            process.daemon = True  # if the main process crashes, we should not cause things to hang
-            process.start()
-            work_remote.close()
+            self.remote_start(sim_val, data_val, sim_val_fun, loss_kwargs)
+            self.remote_send(float('nan'), extra_t)
+        else: #start with the initial validation 
+            validation(train_loss=float('nan'), time_elapsed_total=extra_t) #also sets current model to cuda
+            print(f'Initial Validation {val_str}=', self.Loss_val[-1])
 
-            copy_self = deepcopy(self)
-            del copy_self.scheduler # dumplication code, I should make this a method.
-            del copy_self.optimizer
-            remote.send((copy_self, True, float('nan'), extra_t)) #time here does not matter
-            if cuda: self.cuda()
-            #            sys, append, Loss_train, time_now
-            remote.receiving = True
-            #           sys, append, Loss_acc, time_now, epoch
-            Loss_val_now = float('nan')
-        else: #do it now
-            Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t) #also sets current model to cuda
-            print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
             t = Tictoctimer()
             start_t = time.time() #time keeping
             epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
             if timeout is not None and verbose>0: 
                 print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
+
             for epoch in (tqdm(epochsrange) if verbose>0 else epochsrange):
                 bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
                 Loss_acc_epoch = 0.
-
                 t.start()
                 t.tic('data get')
                 for train_batch in data_train_loader:
@@ -331,7 +309,7 @@ class System_torch(System_fittable):
                     t.tic('optimizer start')
                     training_loss = self.optimizer.step(closure).item()
                     t.toc('stepping')
-                    if self.scheduler is not None:
+                    if self.scheduler:
                         t.tic('scheduler')
                         self.scheduler.step()
                         t.tic('scheduler')
@@ -342,36 +320,27 @@ class System_torch(System_fittable):
                     self.epoch_counter += 1/N_batch_updates_per_epoch
 
                     t.tic('val')
-                    if concurrent_val and remote.poll():
-                        if cuda: self.cpu()
-                        Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
-                        remote.receiving = False
-                        #deepcopy(self) costs time due to the arrays that are passed?
-                        copy_self = deepcopy(self)
-                        del copy_self.scheduler
-                        del copy_self.optimizer
-                        remote.send((copy_self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
-                        remote.receiving = True
-                        Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
-                        if cuda: self.cuda()
+                    if concurrent_val and self.remote_recv(): ####### validation #######
+                        self.remote_send(Loss_acc_val/N_batch_acc_val, time.time()-start_t+extra_t)
+                        Loss_acc_val, N_batch_acc_val, val_counter = 0., 0, val_counter + 1
                     t.toc('val')
                     t.tic('data get')
                 t.toc('data get')
 
-                #end of epoch clean up
+                ########## end of epoch clean up ##########
                 train_loss_epoch = Loss_acc_epoch/N_batch_updates_per_epoch
                 if np.isnan(train_loss_epoch):
-                    if verbose>0: 
-                        print(f'&&&&&&&&&&&&& Encountered a NaN value in the training loss at epoch {epoch}, breaking from loop &&&&&&&&&&')
+                    if verbose>0: print(f'&&&&&&&&&&&&& Encountered a NaN value in the training loss at epoch {epoch}, breaking from loop &&&&&&&&&&')
                     break
+
                 t.tic('val')
                 if not concurrent_val:
-                    Loss_val_now = validation(append=True,train_loss=train_loss_epoch, \
-                                        time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit and goes back to cpu and back
+                    validation(train_loss=train_loss_epoch, \
+                               time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit and goes back to cpu and back
                 t.toc('val')
                 t.pause()
 
-                #printing routine
+                ######### Printing Routine ##########
                 if verbose>0:
                     time_elapsed = time.time() - start_t
                     if bestfit_old > self.bestfit:
@@ -383,38 +352,35 @@ class System_torch(System_fittable):
                     else: #else print validation time use
                         valfeqstr = f''
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
+                    Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)!=0 else float('nan')
                     Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {val_str} {Loss_val_now:6.4}'
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
                     time_str = f'Time Loss: {loss_time:.1%}, data: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
-                    batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
-                    self.batch_feq = batch_feq #batches per second
-                    batch_str = (f'{batch_feq:4.1f} batches/sec' if (batch_feq>1 or batch_feq==0) else f'{1/batch_feq:4.1f} sec/batch')
+                    self.batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
+                    batch_str = (f'{self.batch_feq:4.1f} batches/sec' if (self.batch_feq>1 or self.batch_feq==0) else f'{1/self.batch_feq:4.1f} sec/batch')
                     print(f'{Loss_str}, {time_str}, {batch_str}')
                     if print_full_time_profile:
                         print('Time profile:',t.percent())
 
-                #breaking on timeout
+                ####### Timeout Breaking ##########
                 if timeout is not None:
                     if time.time() >= start_t+timeout:
                         break
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
+
         self.train(); self.cpu();
         del data_train_loader
-        #end of training
+
+        ####### end of training concurrent things #####
         if concurrent_val:
-            if verbose: print(f'Waiting for started validation process to finish and one last validation... (receiving = {remote.receiving})',end='')
-            if remote.receiving:
-                #add poll here?
-                Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here
+            if verbose: print(f'Waiting for started validation process to finish and one last validation... (receiving = {self.remote.receiving})',end='')
+            if self.remote_recv(wait=True):
                 if verbose: print('Recv done... ',end='')
-            if N_batch_acc_val>0: #there might be some trained but not yet tested
-                copy_self = deepcopy(self)
-                del copy_self.scheduler # dumplication from what is above, I should make this a method.
-                del copy_self.optimizer
-                remote.send((copy_self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
-                Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
-            remote.close(); process.join()
+                if N_batch_acc_val>0:
+                    self.remote_send(Loss_acc_val/N_batch_acc_val, time.time()-start_t+extra_t)
+                    self.remote_recv(wait=True)
+            self.remote_close()
             if verbose: print('Done!')
 
         
@@ -439,10 +405,8 @@ class System_torch(System_fittable):
                 for i in np.where(np.isnan(self.Loss_train))[0]:
                     if i!=len(self.Loss_train)-1: #if the last is NaN than I will leave it there. Something weird happened like breaking before one validation loop was completed. 
                         self.Loss_train[i] = self.Loss_train[i+1]
-
         except FileNotFoundError:
             raise FileNotFoundError(f'No such file at {file}, did you set sys.unique_code correctly?')
-
     def save_system(self, file):
         '''Save the system using pickle provided by torch
 
@@ -453,7 +417,7 @@ class System_torch(System_fittable):
         '''
         torch.save(self, file)
 
-    ### CPU & CUDA ###
+    ### CPU & CUDA Transfers ###
     def cuda(self):
         self.to_device('cuda')
     def cpu(self):
@@ -463,6 +427,11 @@ class System_torch(System_fittable):
             attribute = self.__getattribute__(d)
             if isinstance(attribute,nn.Module):
                 attribute.to(device)
+            elif isinstance(attribute, torch.optim.Optimizer):
+                for key,item in attribute.state.items():
+                    for name,item2 in item.items():
+                        if isinstance(item2, torch.Tensor):
+                            item[name] = item2.to(device)
     def eval(self):
         for d in dir(self):
             attribute = self.__getattribute__(d)
@@ -474,11 +443,46 @@ class System_torch(System_fittable):
             if isinstance(attribute,nn.Module):
                 attribute.train()
 
+    ########## Remote ##########
+    def remote_start(self, sim_val, data_val, sim_val_fun, loss_kwargs):
+        from multiprocessing import Process, Pipe
+        self.remote, work_remote = Pipe()
+        self.remote.receiving = False
+        process = Process(target=_worker, args=(work_remote, self.remote, sim_val, data_val, sim_val_fun, loss_kwargs))
+        process.daemon = True  # if the main process crashes, we should not cause things to hang
+        process.start()
+        work_remote.close()
+        self.remote.process = process
+
+    def remote_send(self, Loss_acc_val, time_optimize):
+        assert self.remote.receiving==False
+        remote = self.remote
+        del self.remote #remote cannot be copyied by deepcopy
+        copy_self = deepcopy(self)
+        self.remote = remote
+        copy_self.cpu(); copy_self.eval()
+        import pickle
+        if b'__main__' in pickle.dumps(copy_self.scheduler):
+            print('setting scheduler to None for there is some main function found')
+            copy_self.scheduler = False
+        self.remote.send((copy_self, Loss_acc_val, time_optimize)) #time here does not matter
+        self.remote.receiving = True
+
+    def remote_recv(self,wait=False):
+        if self.remote.receiving and (self.remote.poll() or wait):
+            self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = self.remote.recv()
+            self.remote.receiving = False
+            return True
+        else:
+            return False
+
+    def remote_close(self):
+        self.remote.close()
+        self.remote.process.join()
+        del self.remote
 
 import signal
 import logging
-
-import signal
 class IgnoreKeyboardInterrupt:
     def __enter__(self):
         self.old_handler = signal.signal(signal.SIGINT, self.handler)
@@ -496,9 +500,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
     while True:
         try:
             with IgnoreKeyboardInterrupt():
-                sys, append, Loss_train, time_now = remote.recv() #gets the current network
-                #put deepcopy here?
-                sys.eval(); sys.cpu()
+                sys, Loss_train, time_now = remote.recv() #gets the current network
                 if sim_val is not None:
                     sim_val_sim = sys.apply_experiment(sim_val)
                     Loss_val = sim_val_sim.__getattribute__(sim_val_fun)(sim_val)
@@ -506,18 +508,17 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
                     with torch.no_grad():
                         Loss_val = sys.loss(*data_val,**loss_kwargs).item()
 
-                if append:
-                    sys.Loss_val.append(Loss_val)
-                    sys.Loss_train.append(Loss_train)
-                    sys.batch_id.append(sys.batch_counter)
-                    sys.time.append(time_now)
-                    sys.epoch_id.append(sys.epoch_counter)
+                sys.Loss_val.append(Loss_val)
+                sys.Loss_train.append(Loss_train)
+                sys.batch_id.append(sys.batch_counter)
+                sys.time.append(time_now)
+                sys.epoch_id.append(sys.epoch_counter)
 
                 sys.train() #back to training mode
                 if sys.bestfit >= Loss_val:
                     sys.bestfit = Loss_val
                     sys.checkpoint_save_system('_best')
-                remote.send((Loss_val, sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
+                remote.send((sys.Loss_val, sys.Loss_train, sys.batch_id, sys.time, sys.epoch_id, sys.bestfit)) #sends back arrays
         except EOFError: #main process stopped
             break
         except Exception as err: #some other error
@@ -589,6 +590,15 @@ class My_Simple_DataLoaderIterator:
         ids_now = self.ids[self.i-self.batch_size:self.i]
         return [d[ids_now] for d in self.data]
 
+def print_array_byte_size(Dsize):
+    if Dsize>2**30: 
+        dstr = f'{Dsize/2**30:.1f} GB!'
+        dstr += '\nConsider using online_construct=True (in loss_kwargs) or let make_training_data return a Dataset to reduce data-usage'
+    elif Dsize>2**20: 
+        dstr = f'{Dsize/2**20:.1f} MB'
+    else:
+        dstr = f'{Dsize/2**10:.1f} kB'
+    print('Size of the training array = ', dstr)
 
 if __name__ == '__main__':
     # sys = deepSI.fit_systems.SS_encoder(nx=3,na=5,nb=5)

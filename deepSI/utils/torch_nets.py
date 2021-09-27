@@ -204,10 +204,10 @@ class Down_Conv_block(nn.Module):
         X_shortcut = self.shortcut(X) # (N, Cout, H/r, W/r)
         
         #main line
-        X = self.activation(X) # (N, Cin, H, W)
+        X = self.activation(X)  # (N, Cin, H, W)
         X = self.conv(X)        # (N, Cout, H, W)
-        X = self.activation(X) # (N, Cout, H, W/r)
-        X = self.downscale(X)       # (N, Cout, H/r, W/r)
+        X = self.activation(X)  # (N, Cout, H, W/r)
+        X = self.downscale(X)   # (N, Cout, H/r, W/r)
         
         #combine
         X = X + X_shortcut
