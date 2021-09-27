@@ -5,7 +5,36 @@ from torch import nn
 import numpy as np
 
 class SS_encoder(System_torch):
-    """docstring for SS_encoder"""
+    '''The basic implementation of the subspace encoder, with neural networks.
+
+    Attributes
+    ----------
+    nx : int
+        order of the system
+    na : int
+        length of the past outputs (y) considered as input for the encoder
+    nb : int
+        length of the past inputs (u) considered as input for the encoder
+    k0 : int
+        length of the encoder max(na,nb)
+    e_net : 
+
+
+    observation_space : gym.space or None
+        The input shape of output y. (None is a single unbounded float)
+    norm : instance of System_data_norm
+        Used in most fittable systems to normalize the input output.
+    fitted : Boole
+    unique_code : str
+        Some random unique 4 digit code (can be used for saving/loading)
+    name : str
+        concatenation of the the class name and the unique code
+    use_norm : bool
+    seed : int
+        random seed
+    random : np.random.RandomState
+        unique random generated initialized with seed (only created ones called)
+    '''
     def __init__(self, nx=10, na=20, nb=20):
         super(SS_encoder, self).__init__()
         self.nx, self.na, self.nb = nx, na, nb
@@ -28,28 +57,29 @@ class SS_encoder(System_torch):
         self.h_activation = nn.Tanh
 
     ########## How to fit #############
-    def make_training_data(self, sys_data, **Loss_kwargs):
+    def make_training_data(self, sys_data, **loss_kwargs):
         assert sys_data.normed == True
-        nf = Loss_kwargs.get('nf',25)
-        dilation = Loss_kwargs.get('dilation',1)
-        online_construct = Loss_kwargs.get('online_construct',False)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
+        nf = loss_kwargs.get('nf',25)
+        dilation = loss_kwargs.get('dilation',1)
+        online_construct = loss_kwargs.get('online_construct',False)
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,\
+        force_multi_u=True,force_multi_y=True,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
-        self.encoder = self.e_net(n_in=self.nb*nu+self.na*ny, n_out=self.nx, n_nodes_per_layer=self.e_n_nodes_per_layer, n_hidden_layers=self.e_n_hidden_layers, activation=self.e_activation)
-        self.fn =      self.f_net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
-        self.hn =      self.h_net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
+        self.encoder = self.e_net(self.nb*nu+self.na*ny, self.nx, n_nodes_per_layer=self.e_n_nodes_per_layer, n_hidden_layers=self.e_n_hidden_layers, activation=self.e_activation)
+        self.fn =      self.f_net(self.nx+nu,            self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
+        self.hn =      self.h_net(self.nx,               ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
-    def loss(self, hist, ufuture, yfuture, **Loss_kwargs):
-        x = self.encoder(hist)
+    def loss(self, hist, ufuture, yfuture, **loss_kwargs):
+        x = self.encoder(hist) #(N, nb*nu + na*ny) -> (N, nx)
         y_predict = []
         for u in torch.transpose(ufuture,0,1):
             y_predict.append(self.hn(x)) #output prediction
-            fn_in = torch.cat((x,u),dim=1)
-            x = self.fn(fn_in)
+            fn_in = torch.cat((x,u),dim=1) #construc the input of the f function
+            x = self.fn(fn_in) #calculate the next state
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
 
     ########## How to use ##############
@@ -130,7 +160,10 @@ class default_output_net(nn.Module):
 
 class SS_encoder_general(System_torch):
     """docstring for SS_encoder_general"""
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+    def __init__(self, nx=10, na=20, nb=20, \
+        e_net=default_encoder_net, f_net=default_state_net, h_net=default_output_net, \
+        e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}):
+
         super(SS_encoder_general, self).__init__()
         self.nx, self.na, self.nb = nx, na, nb
         self.k0 = max(self.na,self.nb)
@@ -424,10 +457,12 @@ class SS_encoder_affine_input(SS_encoder_general):
 
     Hence, g_net produces a vector which is reshaped into a matrix (See deepSI.utils.torch_nets.affine_forward_layer for details).
     """
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, g_net=simple_res_net, h_net=default_output_net, e_net_kwargs={}, g_net_kwargs={}, h_net_kwargs={}):
+    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, g_net=simple_res_net, \
+                 h_net=default_output_net, e_net_kwargs={}, g_net_kwargs={}, h_net_kwargs={}):
         super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,f_net=affine_forward_layer, h_net=h_net, \
-            e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), h_net_kwargs=h_net_kwargs)
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), \
+            h_net_kwargs=h_net_kwargs)
 
 
 from deepSI.utils import CNN_chained_upscales, CNN_encoder

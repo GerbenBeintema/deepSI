@@ -17,7 +17,7 @@ class feed_forward_nn(nn.Module): #for encoding
             if isinstance(m, nn.Linear):
                 nn.init.constant_(m.bias, val=0) #bias
     def forward(self,X):
-        return self.net(X)        
+        return self.net(X)  
 
 
 class simple_res_net(nn.Module):
@@ -46,10 +46,12 @@ class affine_input_net(nn.Module):
 
 
 class ConvShuffle(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding='same', upscale_factor=2, padding_mode='zeros'):
+    def __init__(self, in_channels, out_channels, kernel_size, padding='same', upscale_factor=2, \
+        padding_mode='zeros'):
         super(ConvShuffle, self).__init__()
         self.upscale_factor = upscale_factor
-        self.conv = nn.Conv2d(in_channels, out_channels*upscale_factor**2, kernel_size, padding=padding, padding_mode=padding_mode)
+        self.conv = nn.Conv2d(in_channels, out_channels*upscale_factor**2, kernel_size, padding=padding, \
+            padding_mode=padding_mode)
     
     def forward(self, X):
         X = self.conv(X) #(N, Cout*upscale**2, H, W)
@@ -117,13 +119,21 @@ class Upscale_Conv_block(nn.Module):
         X = self.conv(X)       # (N, Cout, H*r, W*r)
         
         #combine
-        X = X + X_shortcut
+        # X.shape[:,Cout,H,W]
+        H,W = X.shape[2:]
+        H2,W2 = X_shortcut.shape[2:]
+        if H2>H or W2>W:
+            padding_height = (H2-H)//2
+            padding_width = (W2-W)//2
+            X = X + X_shortcut[:,:,padding_height:padding_height+H,padding_width:padding_width+W]
+        else:
+            X = X + X_shortcut
         return X[:,:,self.Ch:,self.Cw:] #slice if needed
         #Nnodes = W*H*N(Cout*4*r**2 + Cin)
 
 class CNN_chained_upscales(nn.Module):
     def __init__(self, nx, ny, features_out = 1, kernel_size=3, padding='same', \
-                 upscale_factor=2, main_upscale=ConvShuffle, shortcut=ConvShuffle, \
+                 upscale_factor=2, feature_scale_factor=2, final_padding=4, main_upscale=ConvShuffle, shortcut=ConvShuffle, \
                  padding_mode='zeros', activation=nn.functional.relu):
 
         super(CNN_chained_upscales, self).__init__()
@@ -138,8 +148,9 @@ class CNN_chained_upscales(nn.Module):
             self.nchannels, self.height_target, self.width_target = ny
         
         #work backwards
-        height_now = self.height_target
-        width_now = self.width_target
+        self.final_padding = final_padding
+        height_now = self.height_target + 2*self.final_padding
+        width_now  = self.width_target  + 2*self.final_padding
         features_now = features_out
         
         self.upblocks = []
@@ -148,11 +159,11 @@ class CNN_chained_upscales(nn.Module):
             Ch = (-height_now)%upscale_factor
             Cw = (-width_now)%upscale_factor
             # print(height_now, width_now, features_now, Ch, Cw)
-            B = Upscale_Conv_block(features_now*upscale_factor, features_now, kernel_size, padding=padding, \
+            B = Upscale_Conv_block(int(features_now*feature_scale_factor), int(features_now), kernel_size, padding=padding, \
                  upscale_factor=upscale_factor, main_upscale=main_upscale, shortcut=shortcut, \
                  padding_mode=padding_mode, activation=activation, Cw=Cw, Ch=Ch)
             self.upblocks.append(B)
-            features_now *= upscale_factor
+            features_now *= feature_scale_factor
             #implement slicing 
             
             height_now += Ch
@@ -162,7 +173,7 @@ class CNN_chained_upscales(nn.Module):
         # print(height_now, width_now, features_now)
         self.width0 = width_now
         self.height0 = height_now
-        self.features0 = features_now
+        self.features0 = int(features_now)
         
         self.upblocks = nn.Sequential(*list(reversed(self.upblocks)))
         self.FC = simple_res_net(n_in=nx,n_out=self.width0*self.height0*self.features0, n_hidden_layers=1)
@@ -173,6 +184,8 @@ class CNN_chained_upscales(nn.Module):
         X = self.upblocks(X)
         X = self.activation(X)
         Xout = self.final_conv(X)
+        if self.final_padding>0:
+            Xout = Xout[:,:,self.final_padding:-self.final_padding,self.final_padding:-self.final_padding]
         return Xout[:,0,:,:] if self.None_nchannels else Xout
 
 class Down_Conv_block(nn.Module):

@@ -75,7 +75,7 @@ class System(object):
         return None
 
     def apply_experiment(self, sys_data, save_state=False): #can put this in apply controller
-        '''Do a experiment with for given system data (fixed u)
+        '''Does an experiment with for given a system data (fixed u)
 
         Parameters
         ----------
@@ -252,12 +252,14 @@ class System(object):
         else:
             s = copy.deepcopy(self.action_space)
             if isinstance(s,gym.spaces.Box):
-                if np.isscalar(s.low):
+                if np.isscalar(s.low) or (isinstance(s.low,np.ndarray) and s.low.ndim==0): #check if it is a 
+                    if not np.isfinite(s.low):
+                        s.low = np.array(-2.)
+                    if not np.isfinite(s.high):
+                        s.high = np.array(2.)
+                else: #is a vector
                     s.low[1 - np.isfinite(s.low)] = -2
                     s.high[1 - np.isfinite(s.high)] = 2
-                else:
-                    s.low = np.max([s.low, -2])
-                    s.high = np.min([s.high, 2])
             exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
 

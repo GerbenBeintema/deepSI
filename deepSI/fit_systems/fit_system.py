@@ -126,11 +126,11 @@ class System_torch(System_fittable):
         return optimizer(parameters,**optimizer_kwargs) 
 
     def init_scheduler(self, **scheduler_kwargs):
-        '''Optionally defined in subclass to create the optimizer
+        '''Optionally defined in subclass to create the scheduler
 
         Parameters
         ----------
-        optimizer_kwargs : dict
+        scheduler_kwargs : dict
             If 'scheduler' is defined than that scheduler will be used otherwise no scheduler will be used.
         '''
         if not scheduler_kwargs:
@@ -155,9 +155,9 @@ class System_torch(System_fittable):
         epochs : int
         batch_size : int
         loss_kwargs : dict
-            Kwargs to be passed to make_training_data and loss.
+            The Keyword Arguments to be passed to the self.make_training_data and self.loss of the current fit_system.
         optimizer_kwargs : dict
-            Kwargs to be passed on to init_optimizer.
+            The Keyword Arguments to be passed on to init_optimizer.
         sim_val : System_data or System_data_list
             The system data to be used as simulation validation using apply_experiment (if absent than a portion of the training data will be used)
         concurrent_val : boole
@@ -284,13 +284,18 @@ class System_torch(System_fittable):
             process.daemon = True  # if the main process crashes, we should not cause things to hang
             process.start()
             work_remote.close()
-            remote.send((deepcopy(self), True, float('nan'), extra_t)) #time here does not matter
+
+            copy_self = deepcopy(self)
+            del copy_self.scheduler # dumplication code, I should make this a method.
+            del copy_self.optimizer
+            remote.send((copy_self, True, float('nan'), extra_t)) #time here does not matter
+            if cuda: self.cuda()
             #            sys, append, Loss_train, time_now
             remote.receiving = True
             #           sys, append, Loss_acc, time_now, epoch
             Loss_val_now = float('nan')
         else: #do it now
-            Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t)
+            Loss_val_now = validation(append=True, train_loss=float('nan'), time_elapsed_total=extra_t) #also sets current model to cuda
             print(f'Initial Validation {val_str}=', Loss_val_now)
         try:
             t = Tictoctimer()
@@ -338,14 +343,17 @@ class System_torch(System_fittable):
 
                     t.tic('val')
                     if concurrent_val and remote.poll():
+                        if cuda: self.cpu()
                         Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
                         remote.receiving = False
                         #deepcopy(self) costs time due to the arrays that are passed?
                         copy_self = deepcopy(self)
                         del copy_self.scheduler
+                        del copy_self.optimizer
                         remote.send((copy_self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                         remote.receiving = True
                         Loss_acc_val, N_batch_acc_val, val_counter = 0, 0, val_counter + 1
+                        if cuda: self.cuda()
                     t.toc('val')
                     t.tic('data get')
                 t.toc('data get')
@@ -359,7 +367,7 @@ class System_torch(System_fittable):
                 t.tic('val')
                 if not concurrent_val:
                     Loss_val_now = validation(append=True,train_loss=train_loss_epoch, \
-                                        time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit
+                                        time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit and goes back to cpu and back
                 t.toc('val')
                 t.pause()
 
@@ -391,6 +399,7 @@ class System_torch(System_fittable):
                         break
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
+        self.train(); self.cpu();
         del data_train_loader
         #end of training
         if concurrent_val:
@@ -400,12 +409,15 @@ class System_torch(System_fittable):
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv() #recv dead lock here
                 if verbose: print('Recv done... ',end='')
             if N_batch_acc_val>0: #there might be some trained but not yet tested
-                remote.send((self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
+                copy_self = deepcopy(self)
+                del copy_self.scheduler # dumplication from what is above, I should make this a method.
+                del copy_self.optimizer
+                remote.send((copy_self, True, Loss_acc_val/N_batch_acc_val, time.time() - start_t + extra_t))
                 Loss_val_now, self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id, self.bestfit = remote.recv()
             remote.close(); process.join()
             if verbose: print('Done!')
 
-        self.train(); self.cpu();
+        
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
         self.checkpoint_save_system(name='_last')
         self.checkpoint_load_system(name='_best')

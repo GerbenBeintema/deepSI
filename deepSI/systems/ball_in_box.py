@@ -46,19 +46,20 @@ class Ball_in_box_video(Ball_in_box): #discrate system single system
     Fmax < a
     Fmin > -a
     """
-    def __init__(self, Fmax=0.25):
-        self.ny_vid, self.nx_vid = 25, 25
+    def __init__(self, Fmax=0.25, image_height=25, image_width=25):
+        self.image_height, self.image_width = image_height, image_width
         super(Ball_in_box_video, self).__init__(Fmax=Fmax)
-        self.observation_space = Box(0.,1.,shape=(self.nx_vid,self.ny_vid))
+        self.observation_space = Box(0.,1.,shape=(self.image_height,self.image_width))
         
 
     def h(self,x):
-        # A = np.zeros((self.nx_vid,self.ny_vid))
-        Y = np.linspace(0,1,num=self.ny_vid)
-        X = np.linspace(0,1,num=self.nx_vid)
-        Y,X = np.meshgrid(Y,X)
+        # A = np.zeros((self.image_width,self.image_height))
+        Y = np.linspace(0,1,num=self.image_height)
+        X = np.linspace(0,1,num=self.image_width)
+        X,Y = np.meshgrid(X,Y)
+        # self.X = X[y,x]
         r = 0.22
-        A = np.clip((r**2-(X-x[1])**2-(Y-x[0])**2)/r**2,0,1)
+        A = np.clip((r**2-(X-x[0])**2-(Y-x[1])**2)/r**2,0,1)
         return A #return position
 
 if __name__ == '__main__':
