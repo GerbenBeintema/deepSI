@@ -214,6 +214,8 @@ class System_torch(System_fittable):
             self.nu = sys_data.nu
             self.ny = sys_data.ny
             self.parameters = list(self.init_nets(self.nu,self.ny))
+            if cuda:
+                self.cuda() #for some models I have to do this for other I can create the optimizer before moving to cuda?
             self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs) #cuda should be done here or not?
             self.scheduler = self.init_scheduler(**scheduler_kwargs)
             self.bestfit = float('inf')

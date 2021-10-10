@@ -459,6 +459,7 @@ class SS_encoder_affine_input(SS_encoder_general):
     """
     def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, g_net=simple_res_net, \
                  h_net=default_output_net, e_net_kwargs={}, g_net_kwargs={}, h_net_kwargs={}):
+    
         super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,f_net=affine_forward_layer, h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), \

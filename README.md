@@ -78,6 +78,12 @@ Feel free to contact me directly for any question or issues related to deepSI.
 
 Main developer: PhD candidate Gerben Beintema at the TU/e. Control Systems. g.i.beintema@tue.nl
 
+## Citation
+
+When citing deepSI please use
+
+> Gerben Beintema, Roland Toth, Maarten Schoukens. Nonlinear State-Space Identification using Deep Encoder Networks; Proceedings of the 3rd Conference on Learning for Dynamics and Control, PMLR 144:241-250, 2021. [Github](https://github.com/GerbenBeintema/deepSI), [Published version](http://proceedings.mlr.press/v144/beintema21a/beintema21a.pdf)
+
 ## License
 
 BSD 3-Clause License

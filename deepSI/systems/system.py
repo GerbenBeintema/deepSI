@@ -93,7 +93,7 @@ class System(object):
         '''
 
         if isinstance(sys_data,(tuple,list,System_data_list)):
-            return System_data_list([self.apply_experiment(sd) for sd in sys_data])
+            return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
         Y = []
         sys_data_norm = self.norm.transform(sys_data)
         
