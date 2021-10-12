@@ -148,7 +148,7 @@ class CNN_chained_upscales(nn.Module):
             self.nchannels, self.height_target, self.width_target = ny
         
         #work backwards
-        features_out *= self.nchannels
+        features_out = int(features_out*self.nchannels)
         self.final_padding = final_padding
         height_now = self.height_target + 2*self.final_padding
         width_now  = self.width_target  + 2*self.final_padding

@@ -183,6 +183,9 @@ class System(object):
         '''Should reset the internal state and return the current obs'''
         raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
+
+    #todo implement multi_step_ahead with (Nsamps, nf, ny) and make one_step_ahead a edge case
+
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
@@ -193,7 +196,7 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data,nf=100,dilation=1,RMS=False):
+    def n_step_error(self,sys_data,nf=100,dilation=1,mode='NRMS',mean_channels=True):
         '''Calculate the expected error after taking n=1...nf steps.
 
         Parameters
@@ -203,29 +206,63 @@ class System(object):
             upper bound of n.
         dilation : int
             passed to init_state_multi to reduce memory cost.
-        RMS : boole
-            flag to toggle between NRMS and RMS
-         '''
+        unit : str or System_data_norm
+            'NRMS', 'RMS', 'RMS_sys_norm' or a System_data_norm for 
+            norm obtained from the sys_data, 
+            no norm
+            norm obtained from the provided data, 
+            given norm
+        mean_channels : boole
+            return (nf) shape if true and (nf,ny) alike if false.
+        '''
+        norm = System_data_norm()
+        if unit=='NRMS':
+            norm.fit(sys_data)
+        elif unit=='RMS':
+            pass
+        elif unit=='RMS_sys_norm':
+            norm = self.norm
+        elif isinstance(unit,System_data_norm):
+            norm = unit
+        else:
+            raise ValueError("The unit of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
+
+        Losses = n_step_error_per_channel(sys_data, nf=nf, dilation=dilation)/norm.ystd
+        if mean_channels==False:
+            return Losses
+        else:
+            return np.array([np.mean(a) for a in Losses])
+
+
+    def n_step_error_per_channel(self, sys_data, nf=100, dilation=1):
+        '''Calculate the expected error after taking n=1...nf steps, returns the shape (nf, ny) or nf if ny is None
+
+        Parameters
+        ----------
+        sys_data : System_data
+        nf : int
+            upper bound of n.
+        dilation : int
+            passed to init_state_multi to reduce memory costs.
+        '''
         if isinstance(sys_data,(list,tuple)):
             sys_data = System_data_list(sys_data)
             # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
         sys_data = self.norm.transform(sys_data)
         obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
-        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0,nb=k0,nf=nf,dilation=dilation)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=dilation)
 
         Losses = []
         for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
-            if RMS: #todo check this
-                Losses.append(np.mean((ynow-obs)**2*self.norm.ystd**2)**0.5)
-            else:
-                Losses.append(np.mean((ynow-obs)**2)**0.5)
+            Losses.append(np.mean((ynow-obs)**2,axis=0)**0.5)
             obs = self.step_multi(unow)
 
         if isinstance(sys_data,System_data_list):
-            self.init_state(sys_data[0]) #remove large state
+            self.init_state(sys_data[0]) #removes large state
         else:
-            self.init_state(sys_data) #remove large state
-        return np.array(Losses)
+            self.init_state(sys_data) #removes large state
+        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
+
 
     def save_system(self,file):
         '''Save the system using pickle
