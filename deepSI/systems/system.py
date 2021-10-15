@@ -186,6 +186,44 @@ class System(object):
 
     #todo implement multi_step_ahead with (Nsamps, nf, ny) and make one_step_ahead a edge case
 
+    def multi_step_ahead(self, sys_data, nf, full=False):
+        '''calculates the n-step precition
+
+        Parameters
+        ----------
+        sys_data : System_data
+        n : int
+        full : boole
+            if full not only the final n step prediction will be return but also the steps inbetween
+        '''
+        if isinstance(sys_data,(list,tuple)):
+            sys_data = System_data_list(sys_data)
+        if isinstance(sys_data, System_data_list):
+            if not full:
+                return System_data_list([self.multi_step_ahead(sd, nf, full=False) for sd in sys_data.sdl])
+            else:
+                #self.multi_step_ahead(sd, nf, full=False) returns a list [sd step 1, sd step 2, ...]
+                return [System_data_list(o) for o in zip(*[self.multi_step_ahead(sd, nf, full=True) for sd in sys_data.sdl])]
+
+        sys_data = self.norm.transform(sys_data)
+        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=1)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=1)
+
+        assert full==False
+        for i,unow in enumerate(np.swapaxes(ufuture,0,1)[:-1]):
+            obs = self.step_multi(unow)
+        obs = np.concatenate([sys_data.y[:k0+nf-1], obs],axis=0)
+
+        sys_data_nstep = System_data(u=sys_data.u, y=obs, normed=True, cheat_n=k0+nf)
+
+        if isinstance(sys_data,System_data_list):
+            self.init_state(sys_data[0]) #removes large state
+        else:
+            self.init_state(sys_data) #removes large state
+
+        return self.norm.inverse_transform(sys_data_nstep)
+
+
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
         if isinstance(sys_data,(list,tuple,System_data_list)): #requires validation
@@ -206,7 +244,7 @@ class System(object):
             upper bound of n.
         dilation : int
             passed to init_state_multi to reduce memory cost.
-        unit : str or System_data_norm
+        mode : str or System_data_norm
             'NRMS', 'RMS', 'RMS_sys_norm' or a System_data_norm for 
             norm obtained from the sys_data, 
             no norm
@@ -216,18 +254,18 @@ class System(object):
             return (nf) shape if true and (nf,ny) alike if false.
         '''
         norm = System_data_norm()
-        if unit=='NRMS':
+        if mode=='NRMS':
             norm.fit(sys_data)
-        elif unit=='RMS':
+        elif mode=='RMS':
             pass
-        elif unit=='RMS_sys_norm':
+        elif mode=='RMS_sys_norm':
             norm = self.norm
-        elif isinstance(unit,System_data_norm):
-            norm = unit
+        elif isinstance(mode,System_data_norm):
+            norm = mode
         else:
-            raise ValueError("The unit of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
+            raise ValueError("The mode of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
 
-        Losses = n_step_error_per_channel(sys_data, nf=nf, dilation=dilation)/norm.ystd
+        Losses = self.n_step_error_per_channel(sys_data, nf=nf, dilation=dilation)/norm.ystd
         if mean_channels==False:
             return Losses
         else:
