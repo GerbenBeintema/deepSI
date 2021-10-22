@@ -11,7 +11,7 @@ from deepSI.systems.nonlinear_rlc import Nonlinear_rlc
 all_systems = [Test_ss_linear1, Double_bath, Cheby1, Butter, Pendulum,Nonlin_io_normals,Nonlin_io_example_2,Hammerstein_sysid_book,Wiener_sysid_book,
                 Wiener2_sysid_book, NDE_squared_sysid_book, Dynamic_nonlin_sysid_book, Nonlinear_rlc]
 from deepSI.systems.nonlin_drag import Nonlin_drag, Coupled_electric_drive
-from deepSI.systems.lorenz_attractor import Lorenz_attractor
+from deepSI.systems.lorenz_attractor import Lorenz_attractor, Lorenz_attractor_sincos
 from deepSI.systems.van_der_pol_oscillator import Van_der_pol_oscillator
 from deepSI.systems.double_well import Double_potential_well, Double_potential_well_video
 from deepSI.systems.ball_in_box import Ball_in_box, Ball_in_box_video

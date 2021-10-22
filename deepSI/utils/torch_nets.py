@@ -3,8 +3,8 @@ from torch import nn, optim
 import numpy as np
 
 
-class feed_forward_nn(nn.Module): #for encoding
-    def __init__(self,n_in=6,n_out=5,n_nodes_per_layer=64,n_hidden_layers=2,activation=nn.Tanh):
+class feed_forward_nn(nn.Module): #a simple MLP
+    def __init__(self,n_in=6, n_out=5, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
         super(feed_forward_nn,self).__init__()
         seq = [nn.Linear(n_in,n_nodes_per_layer),activation()]
         assert n_hidden_layers>0
@@ -28,6 +28,38 @@ class simple_res_net(nn.Module):
         self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
     def forward(self,x):
         return self.net_lin(x) + self.net_non_lin(x)
+
+class MLP_res_block(nn.Module):
+    def __init__(self, n_in=64, n_out=64, activation=nn.Tanh, force_linear_res=False):
+        super(MLP_res_block,self).__init__()
+        if n_in==n_out and not force_linear_res:
+            self.skipper = True
+        else:
+            self.skipper = False
+            self.res = nn.Linear(n_in, n_out) 
+        self.nonlin = nn.Linear(n_in, n_out)
+        self.activation = activation()
+
+    def forward(self,x):
+        if self.skipper:
+            return x + self.activation(self.nonlin(x))
+        else:
+            return self.res(x) + self.activation(self.nonlin(x))
+
+class complete_MLP_res_net(nn.Module):
+    def __init__(self, n_in=6, n_out=5, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh, force_linear_res=False):
+        super(complete_MLP_res_net,self).__init__()
+        assert n_hidden_layers>0, 'just use nn.Linear lol'
+        seq = [MLP_res_block(n_in, n_nodes_per_layer, activation=activation, force_linear_res=force_linear_res)]
+        for i in range(n_hidden_layers-1):
+            seq.append(MLP_res_block(n_nodes_per_layer, n_nodes_per_layer, activation=activation, force_linear_res=force_linear_res))
+        seq.append(nn.Linear(n_nodes_per_layer, n_out))
+        self.net = nn.Sequential(*seq)
+        for m in self.net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.constant_(m.bias, val=0) #bias zero
+    def forward(self,X):
+        return self.net(X)  
 
 
 class affine_input_net(nn.Module):
@@ -279,6 +311,73 @@ class CNN_encoder(nn.Module):
         # print('ypast_encode.shape=',ypast_encode.shape)
         net_in = torch.cat([upast.view(upast.shape[0],-1),ypast_encode.view(ypast.shape[0],-1)],axis=1)
         return self.net(net_in)
+
+class Shotgun_MLP(nn.Module):
+    def __init__(self, nx, ny, positional_encoding=True, n_nodes_per_layer=256, n_hidden_layers=3):
+        super(Shotgun_MLP,self).__init__()
+        if len(ny)==2:
+            self.H, self.W = ny
+            self.C = 1
+            self.Cnone = True
+        else:
+            self.C, self.H, self.W = ny
+            self.Cnone = False
+        
+        self.positional_encoding = positional_encoding
+        if positional_encoding:
+            self.kh = torch.arange(1,int(np.ceil(np.log2(self.H))))
+            self.kw = torch.arange(1,int(np.ceil(np.log2(self.W))))
+        else:
+            self.kh, self.kw = [], []
+            
+        self.net = complete_MLP_res_net(n_in=nx+len(self.kh)*2+len(self.kw)*2+2, n_out=self.C, \
+                                        n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers)
+        
+        
+    def forward(self, x): #produces the full image
+        h = torch.arange(start=0, end=self.H)
+        w = torch.arange(start=0, end=self.W)
+        h,w = torch.meshgrid(h,w)
+        h,w = h.flatten(), w.flatten()
+        Nb = x.shape[0]
+        Ngrid = len(h)
+        h = torch.broadcast_to(h[None,:], (Nb, Ngrid))
+        w = torch.broadcast_to(w[None,:], (Nb, Ngrid))
+        out = self.sampler(x, h, w) #(Nb, H*W, C or None)
+        if self.Cnone:
+            return out.reshape(Nb,self.H,self.W)
+        else:
+            return out.swapaxes(1,2).reshape(Nb,self.C,self.H,self.W)
+        
+    
+    def sampler(self, x, h, w):
+        # x = (Nb, nx)    -> (Nb, 1,    nx)
+        # w = (Nb, Nsamp) -> (Nb, Nsamp, 1) or (Nb, Nsamp, 1 + log2(W)) if positional encoding
+        # h = (Nb, Nsamp) -> (Nb, Nsamp, 1) or (Nb, Nsamp, 1 + log2(W)) if positional encoding
+        # concat x:
+        #                   (Nb, Nsamp, nx + 2)
+        #                   (Nb*Nsamp, nx + 2) pulled through network to (Nb*Nsamp, C)
+        #  Reshape back     (Nb, Nsamp, C) 
+        Nb, nx = x.shape
+        _, Nsamp = w.shape
+        S = (Nb, Nsamp, nx)
+        
+        h = h/(self.H-1) #0 to 1
+        w = w/(self.W-1) #0 to 1
+        if self.positional_encoding:
+            sincosargh = np.pi*(self.kh[None,None,:]*h[:,:,None])
+            sincosargw = np.pi*(self.kw[None,None,:]*w[:,:,None])
+            h = torch.cat([torch.sin(sincosargh), torch.cos(sincosargh), h[:,:,None]],dim=2)
+            w = torch.cat([torch.sin(sincosargw), torch.cos(sincosargw), w[:,:,None]],dim=2)
+        else:
+            h = h[:,:,None]
+            w = w[:,:,None]
+        
+        x = torch.broadcast_to(x[:,None,:], S)
+        X = torch.cat((x,h,w),dim=2).flatten(end_dim=-2)
+        Y = self.net(X)
+        return Y.view(Nb, Nsamp) if self.Cnone else Y.view(Nb, Nsamp, self.C)
+
 
 
 if __name__ == '__main__':

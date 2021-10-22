@@ -78,8 +78,14 @@ class Lorenz_attractor(System_deriv): #discrate system single system
         zp = x*y-self.beta*z
         return np.array([xp,yp,zp])
 
+class Lorenz_attractor_sincos(Lorenz_attractor):
+    def h(self,x):
+        x,y,z = x
 
-
+        A = x*np.sin(x)
+        B = y*np.cos(y)
+        C = z*np.sin(z)
+        return A,B,C
 
 
 if __name__=='__main__':

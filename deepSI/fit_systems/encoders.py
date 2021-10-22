@@ -319,9 +319,8 @@ class SS_encoder_rnn(System_torch):
         return self.state[0].numpy()
 
 
-
 class par_start_encoder(nn.Module):
-    """docstring for par_start_encoder"""
+    """A network which makes the initial states a parameter of the network"""
     def __init__(self, nx, nsamples):
         super(par_start_encoder, self).__init__()
         self.start_state = nn.parameter.Parameter(data=torch.as_tensor(np.random.normal(scale=0.1,size=(nsamples,nx)),dtype=torch.float32))
@@ -329,8 +328,7 @@ class par_start_encoder(nn.Module):
     def forward(self,ids):
         return self.start_state[ids]
         
-
-class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs.
+class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs be careful!
     """docstring for SS_par_start"""
     def __init__(self, nx=10):
         super(SS_par_start, self).__init__()
@@ -468,7 +466,11 @@ class SS_encoder_affine_input(SS_encoder_general):
 
 from deepSI.utils import CNN_chained_upscales, CNN_encoder
 class SS_encoder_CNN_video(SS_encoder_general):
-    """
+    """The subspace encoder convolutonal neural network 
+
+    Notes
+    -----
+    The subspace encoder
 
     """
     def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=CNN_chained_upscales, \
@@ -477,18 +479,54 @@ class SS_encoder_CNN_video(SS_encoder_general):
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
 
-# from deepSI.utils import FC_video #you can use the general for this
-# class SS_encoder_FC_video(SS_encoder_general):
-#     """
+from deepSI.utils import Shotgun_MLP
+class SS_encoder_shotgun_MLP(SS_encoder_general):
+    def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=Shotgun_MLP, \
+                            e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        '''Todo: fix cuda with all the arrays'''
+        super(SS_encoder_shotgun_MLP, self).__init__(nx=nx,na=na,nb=nb,\
+            e_net=e_net,               f_net=f_net,                h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+    
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        # I can pre-sample it or sample it when passed. Which one is faster?
+        # I'm doing it here for now, maybe later I will do it in the dataset on a shuffle or something.
+        if len(self.ny)==3:
+            C,H,W = self.ny
+        else:
+            H,W = self.ny
+            C = None
+        Nb = uhist.shape[0]
+        Nsamp = Loss_kwargs.get('Nsamp',100) #int(800/Nb) is approx the best for speed for CPU
+        batchselector = torch.broadcast_to(torch.arange(Nb)[:,None],(Nb,Nsamp))
+        
+        x = self.encoder(uhist, yhist)
+        mse_losses = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            h = torch.randint(low=0, high=H, size=(Nb,Nsamp))
+            w = torch.randint(low=0, high=W, size=(Nb,Nsamp))
+            ysamps = y[batchselector,:,h,w] if C!=None else y[batchselector,h,w]
+            yhat = self.hn.sampler(x, h, w)
+            mse_losses.append(nn.functional.mse_loss(yhat, ysamps))
+            x = self.fn(x,u)
+        return torch.mean(torch.stack(mse_losses))
 
-#     """
-#     def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_state_net, h_net=FC_video, \
-#                                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-#         super(SS_encoder_FC_video, self).__init__(nx=nx,na=na,nb=nb,\
-#             e_net=e_net,               f_net=f_net,                h_net=h_net, \
-#             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+class nonlin_ino_state_net(nn.Module):
+    def __init__(self, nx, nu, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh): 
+        super(nonlin_ino_state_net, self).__init__()
+        from deepSI.utils import simple_res_net
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
+        self.nx = nx
+        self.net = simple_res_net(n_in=nx+np.prod(self.nu,dtype=int)+np.prod(self.ny,dtype=int), \
+                                  n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, \
+                                  activation=activation)
 
-
+    def forward(self, x, u, eps=None):
+        if eps==None:
+            eps = torch.zeros((u.shape[0],np.prod(self.ny,dtype=int)),dtype=torch.float32)
+        net_in = torch.cat([x,u.view(u.shape[0],-1),eps.view(u.shape[0],-1)],axis=1)            
+        return self.net(net_in)
 
 class default_ino_state_net(nn.Module):
     def __init__(self, nx, nu, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh): #ny here?

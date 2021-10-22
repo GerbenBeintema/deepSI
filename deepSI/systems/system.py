@@ -184,8 +184,6 @@ class System(object):
         raise NotImplementedError('one_step_ahead should be implemented in subclass')
 
 
-    #todo implement multi_step_ahead with (Nsamps, nf, ny) and make one_step_ahead a edge case
-
     def multi_step_ahead(self, sys_data, nf, full=False):
         '''calculates the n-step precition
 
@@ -416,6 +414,7 @@ class System_deriv(System_ss):
             k2 = self.dt*np.array(self.deriv(x+k1/2,u))
             k3 = self.dt*np.array(self.deriv(x+k2/2,u))
             k4 = self.dt*np.array(self.deriv(x+k3,u))
+            xnew = x + (k1+2*k2+2*k3+k4)/6
             return x + (k1+2*k2+2*k3+k4)/6
         else:
             f = lambda t,x: self.deriv(x,u)
