@@ -313,7 +313,7 @@ class CNN_encoder(nn.Module):
         return self.net(net_in)
 
 class Shotgun_MLP(nn.Module):
-    def __init__(self, nx, ny, positional_encoding=True, n_nodes_per_layer=256, n_hidden_layers=3):
+    def __init__(self, nx, ny, positional_encoding=1.3, n_nodes_per_layer=256, n_hidden_layers=3):
         super(Shotgun_MLP,self).__init__()
         if len(ny)==2:
             self.H, self.W = ny
@@ -325,8 +325,11 @@ class Shotgun_MLP(nn.Module):
         
         self.positional_encoding = positional_encoding
         if positional_encoding:
-            self.kh = torch.arange(1,int(np.ceil(np.log2(self.H))))
-            self.kw = torch.arange(1,int(np.ceil(np.log2(self.W))))
+            assert positional_encoding>1
+            nh = int(np.ceil((np.log(self.H) - np.log(1))/np.log(positional_encoding)))
+            nw = int(np.ceil((np.log(self.W) - np.log(1))/np.log(positional_encoding)))
+            self.kh = nn.Parameter(positional_encoding**torch.arange(0,nh),requires_grad=False)
+            self.kw = nn.Parameter(positional_encoding**torch.arange(0,nw),requires_grad=False)
         else:
             self.kh, self.kw = [], []
             
@@ -335,8 +338,8 @@ class Shotgun_MLP(nn.Module):
         
         
     def forward(self, x): #produces the full image
-        h = torch.arange(start=0, end=self.H)
-        w = torch.arange(start=0, end=self.W)
+        h = torch.arange(start=0, end=self.H,device=x.device)
+        w = torch.arange(start=0, end=self.W,device=x.device)
         h,w = torch.meshgrid(h,w)
         h,w = h.flatten(), w.flatten()
         Nb = x.shape[0]
