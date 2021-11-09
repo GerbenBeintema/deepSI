@@ -375,7 +375,7 @@ class System_data(object):
             yfuture = yfuture[:,:,None]
         return hist, ufuture, yfuture
 
-    def to_video(self, file_name='video.mp4', scale_factor=10, vmin=0, vmax=1):
+    def to_video(self, file_name='video.mp4', scale_factor=10, vmin=0, vmax=1, fps=60):
         '''Used cv2 to create a video from y of shape y.shape = (frames, ny1, ny2)'''
         import cv2
         from PIL import Image
@@ -386,7 +386,7 @@ class System_data(object):
         nx,ny = self.y.shape[1], self.y.shape[2] #resolution of simulation
         nx_out,ny_out = round(nx*scale_factor),round(ny*scale_factor) #resolution of video produced
 
-        video = cv2.VideoWriter(file_name, 0, 60, (ny_out,nx_out))
+        video = cv2.VideoWriter(file_name, 0, fps, (ny_out,nx_out))
 
         resize = lambda x: np.array(Image.fromarray(x).resize((ny_out, nx_out)))
         to_img = lambda x: resize((((np.clip(x,vmin,vmax) - vmin)/(vmax - vmin)).copy()[:,:,None]*255*np.ones((1,1,3))).astype(np.uint8))

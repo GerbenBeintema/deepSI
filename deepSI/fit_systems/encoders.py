@@ -1,8 +1,10 @@
 
 from deepSI.fit_systems.fit_system import System_fittable, System_torch
+from deepSI.system_data.system_data import System_data_norm, System_data, System_data_list
 import torch
 from torch import nn
 import numpy as np
+import time
 
 class SS_encoder(System_torch):
     '''The basic implementation of the subspace encoder, with neural networks.
@@ -487,6 +489,8 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
         super(SS_encoder_shotgun_MLP, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+        self.encoder_time = 0
+        self.forward_time = 0
     
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         # I can pre-sample it or sample it when passed. Which one is faster?
@@ -499,8 +503,13 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
         Nb = uhist.shape[0]
         Nsamp = Loss_kwargs.get('Nsamp',100) #int(800/Nb) is approx the best for speed for CPU
         batchselector = torch.broadcast_to(torch.arange(Nb)[:,None],(Nb,Nsamp))
-        
+        time.time()
+
+        t_start = time.time()
         x = self.encoder(uhist, yhist)
+        self.encoder_time += time.time() - t_start
+
+        t_start = time.time()
         mse_losses = []
         for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
             h = torch.randint(low=0, high=H, size=(Nb,Nsamp))
@@ -509,7 +518,132 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
             yhat = self.hn.sampler(x, h, w)
             mse_losses.append(nn.functional.mse_loss(yhat, ysamps))
             x = self.fn(x,u)
+        self.forward_time += time.time() - t_start
         return torch.mean(torch.stack(mse_losses))
+
+    def apply_experiment(self, sys_data, save_state=False): #can put this in apply controller
+        '''Does an experiment with for given a system data (fixed u)
+
+        Parameters
+        ----------
+        sys_data : System_data or System_data_list (or list or tuple)
+            The experiment which should be applied
+
+        Notes
+        -----
+        This will initialize the state using self.init_state if sys_data.y (and u)
+        is not None and skip the appropriate number of steps associated with it.
+        If either is missing than self.reset() is used to initialize the state. 
+        Afterwards this state is advanced using sys_data.u and the output is saved at each step.
+        Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
+        that it can be accounted for later.
+        '''
+        if isinstance(sys_data,(tuple,list,System_data_list)):
+            return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
+        #check if sys_data.x holds the 
+        #u = (Ns)
+        #x = (Ns, C, H, W) or (Ns, H, W)
+        #y = (Ns, Np, C), (Ns, Np, C)
+        #h = (Ns, Np)
+        #w = (Ns, Np)
+        if not (hasattr(sys_data,'h') and hasattr(sys_data,'w')):
+            return super(SS_encoder_shotgun_MLP, self).apply_experiment(sys_data, save_state=save_state)
+        h, w = sys_data.h, sys_data.w
+
+        Y = []
+        sys_data.x, sys_data.y = sys_data.y, sys_data.x #move image to y
+        sys_data_norm = self.norm.transform(sys_data) #transform image if needed
+        sys_data.x, sys_data.y = sys_data.y, sys_data.x #move image back to x
+        sys_data_norm.x, sys_data_norm.y = sys_data_norm.y, sys_data_norm.x #move image back to x
+        sys_data_norm.h, sys_data_norm.w = h, w #set h and w on the normed version
+
+        U = sys_data_norm.u #get the input
+        Images = sys_data_norm.x #get the images
+
+        assert sys_data_norm.y is not None, 'not implemented' #if y is not None than init state
+        obs, k0 = self.init_state(sys_data_norm) #normed obs in the shape of y in the last step. 
+        Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
+
+        if save_state:
+            X = [self.get_state()]*(k0+1)
+
+        for k in range(k0,len(U)):
+            Y.append(obs)
+            if k < len(U)-1: #skip last step
+                obs = self.step(U[k], h=h[k+1], w=w[k+1])
+                if save_state:
+                    X.append(self.get_state())
+
+        #how the norm? the Y need to be transformed from (Ns, Np, C) with the norm
+        #norm.y0 has shape (C, W, H) or (C, 1, 1) or similar
+        Y = np.array(Y) #(Ns, Np, C)
+        # if self.norm.y0 is 1:
+            # return System_data(u=sys_data.u, y=Y, x=np.array(X) if save_state else None,normed=False,cheat_n=k0)
+        #has the shape of a constant or (1, 1) or (C, 1, 1) the possiblity of (C, H, W) I will exclude for now. 
+        from copy import deepcopy
+        norm_sampler = deepcopy(self.norm)
+        if isinstance(self.norm.y0,(int,float)):
+            pass
+        elif self.norm.y0.shape==(1,1):
+            norm_sampler.y0 = norm_sampler.y0[0,0]
+            norm_sampler.ystd = norm_sampler.ystd[0,0] #ystd to a float
+        elif self.norm.y0.shape==(sys_data.x.shape[0],1,1):
+            norm_sampler.y0 = norm_sampler.y0[:,0,0]
+            norm_sampler.ystd = norm_sampler.ystd[:,0,0] #ystd to (C,) such that it can divide #(Ns, Np, C)
+        else:
+            raise NotImplementedError(f'norm of {norm} is not yet implemented for sampled simulations')
+        sys_data_sim =  norm_sampler.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0))
+        sys_data_sim.h, sys_data_sim.w = sys_data.h, sys_data.w
+        return sys_data_sim
+
+    def init_state(self, sys_data):
+        #sys_data is already normed
+        if not hasattr(sys_data,'h'):
+            return super(SS_encoder_shotgun_MLP, self).init_state(sys_data)
+
+        sys_data.x, sys_data.y = sys_data.y, sys_data.x #switch image to be y
+        uhist, yhist = sys_data[:self.k0].to_hist_future_data(na=self.na,nb=self.nb,nf=0)[:2]
+        sys_data.x, sys_data.y = sys_data.y, sys_data.x #switch image to be x
+
+        uhist = torch.tensor(uhist, dtype=torch.float32)
+        yhist = torch.tensor(yhist, dtype=torch.float32)
+        h,w = torch.as_tensor(sys_data.h[self.k0]), torch.as_tensor(sys_data.w[self.k0]) #needs dtype?
+        with torch.no_grad():
+            self.state = self.encoder(uhist, yhist)
+            # h = (Np)
+            # w = (Np)
+            # state = (1, nx)
+            # sampler(self, x, h, w) goes to (Nb, Nsamp, C)
+            y_predict = self.hn.sampler(x=self.state, h=h[None], w=w[None])[0].numpy() #output: (Nb, Nsamp, C) -> (Nsamp, C)
+        return y_predict, max(self.na,self.nb)
+
+    def step(self,action, h=None, w=None):
+        if h is None:
+            return super(SS_encoder_shotgun_MLP, self).step(action)
+        action = torch.tensor(action,dtype=torch.float32)[None] #(1,...)
+        h,w = torch.as_tensor(h), torch.as_tensor(w) #needs dtype?
+        with torch.no_grad():
+            self.state = self.fn(self.state,action)
+            y_predict = self.hn.sampler(x=self.state, h=h[None], w=w[None])[0].numpy() #output: (Nb, Nsamp, C) -> (Nsamp, C)
+        return y_predict
+
+    def sys_data_sampler(self, sys_data, Ndots_per_image):
+        u, images = sys_data.u, sys_data.y
+        #images has shape (Ns, C, H, W) for (Ns, H, W)
+        if len(images.shape)==4:
+            Ns, C, W, H = images.shape
+        elif len(images.shape)==3:
+            Ns, W, H = images.shape
+            C = None
+        else:
+            assert False, 'check images.shape'
+        sampleselector = torch.broadcast_to(torch.arange(Ns)[:,None],(Ns,Ndots_per_image))
+        h = np.random.randint(low=0, high=H, size=(Ns,Ndots_per_image))
+        w = np.random.randint(low=0, high=W, size=(Ns,Ndots_per_image))
+        images_shots = images[sampleselector,:,h,w] if C!=None else images[sampleselector,h,w] #what shape does this have? I hope it has (Ns, Nshots, C)
+        sys_data = System_data(u=u, y=images_shots, x=images)
+        sys_data.h, sys_data.w = h, w
+        return sys_data
 
 class nonlin_ino_state_net(nn.Module):
     def __init__(self, nx, nu, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh): 

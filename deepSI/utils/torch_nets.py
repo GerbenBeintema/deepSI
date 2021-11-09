@@ -358,9 +358,9 @@ class Shotgun_MLP(nn.Module):
         # w = (Nb, Nsamp) -> (Nb, Nsamp, 1) or (Nb, Nsamp, 1 + log2(W)) if positional encoding
         # h = (Nb, Nsamp) -> (Nb, Nsamp, 1) or (Nb, Nsamp, 1 + log2(W)) if positional encoding
         # concat x:
-        #                   (Nb, Nsamp, nx + 2)
-        #                   (Nb*Nsamp, nx + 2) pulled through network to (Nb*Nsamp, C)
-        #  Reshape back     (Nb, Nsamp, C) 
+        #                (Nb, Nsamp, nx + 2)
+        #                (Nb*Nsamp, nx + 2) pulled through network to (Nb*Nsamp, C)
+        #  Reshape back  (Nb, Nsamp, C) 
         Nb, nx = x.shape
         _, Nsamp = w.shape
         S = (Nb, Nsamp, nx)
@@ -380,6 +380,29 @@ class Shotgun_MLP(nn.Module):
         X = torch.cat((x,h,w),dim=2).flatten(end_dim=-2)
         Y = self.net(X)
         return Y.view(Nb, Nsamp) if self.Cnone else Y.view(Nb, Nsamp, self.C)
+
+class Shotgun_encoder(nn.Module):
+    def __init__(self, nb, nu, na, ny, nx, Nsamp=256, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+        super(Shotgun_encoder, self).__init__()
+        self.nx = nx
+        self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+        assert isinstance(ny,(list,tuple)) and (len(ny)==2 or len(ny)==3), 'ny should have 2 or 3 dimentions in the form (nchannels, height, width) or (height, width)'
+        ny = (ny[0]*na, ny[1], ny[2]) if len(ny)==3 else (na, ny[0], ny[1])
+        #ny = (C, H, W)
+        self.c = nn.Parameter(torch.randint(0,ny[0],size=(Nsamp,)),requires_grad=False)
+        self.h = nn.Parameter(torch.randint(0,ny[1],size=(Nsamp,)),requires_grad=False)
+        self.w = nn.Parameter(torch.randint(0,ny[2],size=(Nsamp,)),requires_grad=False)
+        # self.CNN = CNN_chained_downscales(ny, features_ups_factor=features_ups_factor) 
+        self.net = simple_res_net(n_in=nb*np.prod(self.nu,dtype=int) + Nsamp, \
+            n_out=nx, n_nodes_per_layer=n_nodes_per_layer, n_hidden_layers=n_hidden_layers, activation=activation)
+
+
+    def forward(self, upast, ypast):
+        #ypast = (samples, na, H, W) or (samples, na, C, H, W) to (samples, na*C, H, W)
+        ypast = ypast.view(ypast.shape[0],-1,ypast.shape[-2],ypast.shape[-1])
+        ysamps = ypast[:,self.c, self.h, self.w]
+        net_in = torch.cat([upast.view(upast.shape[0],-1),ysamps.view(ysamps.shape[0],-1)],axis=1)
+        return self.net(net_in)
 
 
 
