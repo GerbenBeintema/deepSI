@@ -1,6 +1,7 @@
 
 from deepSI.fit_systems.fit_system import System_fittable, System_torch
 from deepSI.system_data.system_data import System_data_norm, System_data, System_data_list
+import deepSI
 import torch
 from torch import nn
 import numpy as np
@@ -38,7 +39,7 @@ class SS_encoder(System_torch):
         unique random generated initialized with seed (only created ones called)
     '''
     def __init__(self, nx=10, na=20, nb=20):
-        super(SS_encoder, self).__init__()
+        super(SS_encoder, self).__init__() #where does dt come into
         self.nx, self.na, self.nb = nx, na, nb
         self.k0 = max(self.na,self.nb)
         
@@ -245,6 +246,48 @@ class SS_encoder_general(System_torch):
         return self.state[0].numpy()
 
 
+############## Continuous time ##################
+from deepSI.utils import integrator_RK4, integrator_euler
+class SS_encoder_deriv_general(SS_encoder_general):
+    """For backwards compatibility fn is the advance function"""
+    def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., cutt_off=1.5, \
+                 e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
+                 e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
+        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+        self.integrator_net = integrator_net
+        self.integrator_net_kwargs = integrator_net_kwargs
+        self.f_norm = f_norm
+        self.dt_base = dt_base #freal = f_norm/dt_base simple rescale factor which is often used
+        self.cutt_off = cutt_off
+
+    def init_nets(self, nu, ny): # a bit weird
+        par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) 
+        self.derivn = self.fn  #move fn to become the deriviative net
+        self.fn = self.integrator_net(self.derivn, f_norm=self.f_norm, dt_base=self.dt_base, **self.integrator_net_kwargs) #has no torch parameters?
+        return par
+
+    @property
+    def dt(self):
+        return self._dt 
+
+    @dt.setter
+    def dt(self,dt):
+        self._dt = dt
+        self.fn.dt = dt
+
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        x = self.encoder(uhist, yhist) #this fails if dt starts to change
+        diff = []
+        for i,(u,y) in enumerate(zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1))): #iterate over time
+            yhat = self.hn(x)
+            dy = (yhat - y)**2 # (Nbatch, ny)
+            diff.append(dy)
+            with torch.no_grad(): #break if the 
+                if torch.mean(dy).item()**0.5>self.cutt_off:
+                    break
+            x = self.fn(x,u)
+        return torch.mean((torch.stack(diff,dim=1)))
+
 class SS_encoder_rnn(System_torch):
     """docstring for SS_encoder_rnn"""
     def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
@@ -320,7 +363,6 @@ class SS_encoder_rnn(System_torch):
     def get_state(self):
         return self.state[0].numpy()
 
-
 class par_start_encoder(nn.Module):
     """A network which makes the initial states a parameter of the network"""
     def __init__(self, nx, nsamples):
@@ -329,8 +371,9 @@ class par_start_encoder(nn.Module):
 
     def forward(self,ids):
         return self.start_state[ids]
-        
-class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs be careful!
+
+
+class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs.
     """docstring for SS_par_start"""
     def __init__(self, nx=10):
         super(SS_par_start, self).__init__()
@@ -721,8 +764,12 @@ class SS_encoder_inovation(SS_encoder_general):
 if __name__ == '__main__':
     # sys = SS_encoder_general()
     # from deepSI.datasets.sista_database import powerplant
-    from deepSI.datasets import Silverbox
-    train, test = Silverbox()#powerplant()
+    # from deepSI.datasets import Silverbox
+    from deepSI.datasets import Cascaded_Tanks
+    
+    train, test = Cascaded_Tanks()#powerplant()
+    train.dt = 0.1
+    test.dt = 0.1
     # train, test = train[:150], test[:50]
     # print(train, test)
     # # sys.fit(train, sim_val=test,epochs=50)
@@ -737,6 +784,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_inovation()
+    sys = SS_encoder_deriv_general(nx=2,f_norm=0.025)
     # sys = SS_par_start()
-    sys.fit(train, sim_val=test,epochs=50, concurrent_val=True)
+    sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)

@@ -221,9 +221,10 @@ class System_torch(System_fittable):
             self.bestfit = float('inf')
             self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
             self.fitted = True
+
         if self.scheduler==False and verbose:
             print('!!!! Your might be continuing from a save which had scheduler but which was removed during saving... check this !!!!!!')
-
+        self.dt = sys_data.dt
         if cuda: 
             self.cuda()
         self.train()
@@ -388,7 +389,10 @@ class System_torch(System_fittable):
         
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
         self.checkpoint_save_system(name='_last')
-        self.checkpoint_load_system(name='_best')
+        try:
+            self.checkpoint_load_system(name='_best')
+        except FileNotFoundError:
+            print('no best checkpoint found keeping last')
         if verbose: 
             print(f'Loaded model with best known validation {val_str} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
 
@@ -609,7 +613,7 @@ if __name__ == '__main__':
     print(train,test)
     # exit()
     # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
-    sys.fit(train,sim_val=test,loss_kwargs=dict(online_construct=True),epochs=500,batch_size=126,\
+    sys.fit(train,sim_val=test,loss_kwargs=dict(online_construct=False),epochs=500,batch_size=126,\
             concurrent_val=True,num_workers_data_loader=0,sim_val_fun='NRMS_mean_channels')
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)

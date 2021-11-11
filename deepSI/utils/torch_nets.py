@@ -25,9 +25,16 @@ class simple_res_net(nn.Module):
         #linear + non-linear part 
         super(simple_res_net,self).__init__()
         self.net_lin = nn.Linear(n_in,n_out)
-        self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
+        if n_hidden_layers>0:
+            self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
+        else:
+            self.net_non_lin = None
+
     def forward(self,x):
-        return self.net_lin(x) + self.net_non_lin(x)
+        if self.net_non_lin is not None:
+            return self.net_lin(x) + self.net_non_lin(x)
+        else: #linear
+            return self.net_lin(x)
 
 class MLP_res_block(nn.Module):
     def __init__(self, n_in=64, n_out=64, activation=nn.Tanh, force_linear_res=False):
@@ -469,19 +476,78 @@ class affine_forward_layer(nn.Module):
         u = u.view(u.shape[0],-1) #flatten
         return self.Apart(x) + self.gpart(x,u)
 
+class time_integrators(nn.Module):
+    """docstring for time_integrators"""
+    def __init__(self, deriv, f_norm=1, dt_base=1, dt=None):
+        '''include time normalization as dt = f_norm*dt, f_norm is often dx/dt'''
+        super(time_integrators,self).__init__()
+        self.dt_checked = False
+        self.dt_valued = None
 
-
-class integrators_RK4(nn.Module):
-    def __init__(self, dt):
-        super(integrators_RK4,self).__init__()
-        self.dt = dt
-    
-    def forward(self, x, u):
-        k1 = self.dt*self.deriv(x,u)
-        k2 = self.dt*self.deriv(x+k1/2,u)
-        k3 = self.dt*self.deriv(x+k2/2,u)
-        k4 = self.dt*self.deriv(x+k3,u)
-        return x + (k1 + 2*k2 + 2*k3 + k4)/6
+        self.f_norm = f_norm/dt_base if dt_base is not None else f_norm #normalized dt in units of x
+                                     #this a parameter?
+        self._dt = dt #the current time constant (most probably the same as dt_0)
+                             #should be set using set_dt before applying any dataset
+        self.deriv_base   = deriv #the deriv network
 
     def deriv(self,x,u):
-        raise NotImplementedError('deriv')        
+        return self.f_norm*self.deriv_base(x,u)
+
+    @property
+    def dt(self):
+        return self._dt
+
+    @dt.setter
+    def dt(self,dt):
+        if not self.dt_checked: #checking for mixing of None valued dt and valued dt 
+            self.dt_checked = True
+            self.dt_valued = False if dt is None else True
+        else:
+            assert self.dt_valued==(dt is not None), 'are you mixing valued dt and None dt valued datasets?'
+        self._dt = 1. if dt is None else dt
+
+class integrator_RK4(time_integrators):
+    def forward(self, x, u): #u constant on segment, zero-order hold
+        #put here a for loop
+        k1 = self.dt*self.deriv(x,u) #t=0
+        k2 = self.dt*self.deriv(x+k1/2,u) #t=dt/2
+        k3 = self.dt*self.deriv(x+k2/2,u) #t=dt/2
+        k4 = self.dt*self.deriv(x+k3,u) #t=dt
+        return x + (k1 + 2*k2 + 2*k3 + k4)/6
+
+class integrator_euler(time_integrators):
+    def forward(self, x, u): #u constant on segment
+        return x + self.dt*self.deriv(x,u)
+
+
+if __name__ == '__main__':
+    import deepSI
+    import numpy as np
+    from matplotlib import pyplot as plt
+    import torch
+    from torch import optim, nn
+    from tqdm.auto import tqdm
+    test, train = deepSI.datasets.CED() #switch
+    train.plot()
+    test.plot()
+    print(train,test)
+    from deepSI.utils import integrator_euler, integrator_RK4
+    def get_sys_epoch(f_norm=0.12,nf=30,epochs=200,n_hidden_layers=1,n_nodes_per_layer=64,euler=False):
+        test, train = deepSI.datasets.CED() #switch
+        test.dt = None
+        train.dt = None
+        f_net_kwargs=dict(n_hidden_layers=n_hidden_layers,n_nodes_per_layer=n_nodes_per_layer)
+        integrator = integrator_euler if euler else integrator_RK4
+        sys = deepSI.fit_systems.SS_encoder_deriv_general(nx=3,na=7,nb=7,f_norm=f_norm,dt_base=train.dt,\
+                f_net_kwargs=f_net_kwargs,h_net_kwargs=dict(n_hidden_layers=2),integrator_net=integrator)
+        sys.fit(train,sim_val=test,concurrent_val=True,batch_size=32,\
+                    epochs=epochs,verbose=2,loss_kwargs=dict(nf=nf))
+        sys.checkpoint_load_system(name='_best')
+        return sys
+
+    from torch import manual_seed
+    np.random.seed(5)
+    manual_seed(5)
+    sys = get_sys_epoch(nf=30, epochs=400, n_hidden_layers=1, n_nodes_per_layer=64,euler=True)
+    # test.dt = 4
+    sys.apply_experiment(test)
