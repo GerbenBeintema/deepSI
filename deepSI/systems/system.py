@@ -100,7 +100,8 @@ class System(object):
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
         
         dt_old = self.dt
-        self.dt = sys_data.dt #calls the setter
+        if sys_data.dt is not None:
+            self.dt = sys_data.dt #calls the setter
 
         U = sys_data_norm.u
         if sys_data_norm.y is not None: #if y is not None than init state
