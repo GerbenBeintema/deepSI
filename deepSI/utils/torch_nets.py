@@ -186,6 +186,11 @@ class CNN_chained_upscales(nn.Module):
             self.None_nchannels = False
             self.nchannels, self.height_target, self.width_target = ny
         
+        if self.nchannels>self.width_target or self.nchannels>self.height_target:
+            import warnings
+            text = f"Interpreting shape of data as (Nnchannels={self.nchannels}, Nheight={self.height_target}, Nwidth={self.width_target}), This might not be what you intended!"
+            warnings.warn(text)
+
         #work backwards
         features_out = int(features_out*self.nchannels)
         self.final_padding = final_padding
