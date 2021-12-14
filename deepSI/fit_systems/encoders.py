@@ -253,7 +253,11 @@ class SS_encoder_deriv_general(SS_encoder_general):
     def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., cutt_off=1.5, \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
-        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+        # dx/dt = f(x,u) = f_norm/dt_base f*(x,u)
+        # euler example: x(t+dt) = x(t) + f_norm*dt/dt_base f*(x,u)
+
+        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, \
+                                                       e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
         self.integrator_net = integrator_net
         self.integrator_net_kwargs = integrator_net_kwargs
         self.f_norm = f_norm
@@ -748,7 +752,7 @@ class SS_encoder_inovation(SS_encoder_general):
     def init_nets(self, nu, ny): # a bit weird
         self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.fn =      self.f_net(nx=self.nx, nu=nu, ny=self.ny,                    **self.f_net_kwargs)
-        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs) 
+        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs)
         return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):

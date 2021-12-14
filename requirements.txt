@@ -7,3 +7,4 @@ torch
 scikit-learn
 gym
 opencv-python
+requests
