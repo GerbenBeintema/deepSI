@@ -76,7 +76,7 @@ class System(object):
         warnings.warn('Calling sys.state but no state has been set')
         return None
 
-    def apply_experiment(self, sys_data, save_state=False): #can put this in apply controller
+    def apply_experiment(self, sys_data, save_state=False, dont_set_initial_state=False): #can put this in apply controller
         '''Does an experiment with for given a system data (fixed u)
 
         Parameters
@@ -95,22 +95,34 @@ class System(object):
         '''
 
         if isinstance(sys_data,(tuple,list,System_data_list)):
+            assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
-        Y = []
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
         
         dt_old = self.dt
         if sys_data.dt is not None:
-            self.dt = sys_data.dt #calls the setter
+            self.dt = sys_data.dt #calls the dt setter
 
-        U = sys_data_norm.u
-        if sys_data_norm.y is not None: #if y is not None than init state
+        U, Y = sys_data_norm.u, [] #Y hold the predicted output.
+        if dont_set_initial_state:
+            # x0 is already set correctly
+            # use u0 to get x1 and yhat1
+            # copy 1 element y0 to Y. 
+            if save_state: 
+                x0 = self.get_state()
+            k0 = 1
+            obs = self.step(U[0])
+            if save_state:
+                x1 = self.get_state()
+                X = [x0,x1]
+            Y.extend(sys_data_norm.y[:k0])           
+        elif sys_data_norm.y is not None: #if y is not None than init state
             obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
             Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
         else:
             obs, k0 = self.reset(), 0
 
-        if save_state:
+        if save_state and not dont_set_initial_state:
             X = [self.get_state()]*(k0+1)
 
         for k in range(k0,len(U)):
@@ -121,7 +133,8 @@ class System(object):
                 if save_state:
                     X.append(self.get_state())
         
-        self.dt = dt_old
+        if dt_old is not None:
+            self.dt = dt_old
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
     
     def apply_controller(self,controller,N_samples):
