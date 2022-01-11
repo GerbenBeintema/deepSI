@@ -592,18 +592,18 @@ class System_data_list(System_data):
     extend(list) adds elements to sdl
     __getitem__(number) get (ith system data, time slice) 
     '''
-    def __init__(self,sys_data_list):
-        assert len(sys_data_list)>0, 'At least one data set should be provided'
-        ny = sys_data_list[0].ny
-        nu = sys_data_list[0].nu
-        normed = sys_data_list[0].normed
-        for sys_data in sys_data_list:
+    def __init__(self,sys_data_list = None):
+        self.sdl = [] if sys_data_list is None else sys_data_list
+        self.sanity_check()
+    def sanity_check(self):
+        for sys_data in self.sdl:
             assert isinstance(sys_data,System_data)
-            assert sys_data.ny==ny
-            assert sys_data.nu==nu
-            assert sys_data.normed==normed
-        self.sdl = sys_data_list
-        self.normed = normed
+            assert sys_data.ny==self.ny
+            assert sys_data.nu==self.nu
+            assert sys_data.normed==self.normed
+    @property
+    def normed(self):
+        return self.sdl[0].normed
     @property
     def N_samples(self):
         return sum(sys_data.u.shape[0] for sys_data in self.sdl)
@@ -624,11 +624,7 @@ class System_data_list(System_data):
         return self.sdl[0].n_cheat
     @property
     def dt(self):
-        dt = self.sdl[0].dt
-        for l in self.sdl[1:]:
-            assert dt==l.dt, 'all dt need to be the same'
-        return dt #assume everything the same
-
+        return self.sdl[0].dt
     def flatten(self):
         return System_data_list([sdli.flatten() for sdli in self.sdl])
     def reshape_as(self, other):
@@ -661,7 +657,10 @@ class System_data_list(System_data):
         np.savez(file, sdl=out)
 
     def __repr__(self):
-        return f'System_data_list with {len(self.sdl)} series and total length {self.N_samples}, nu={self.nu}, ny={self.ny}, normed={self.normed} lengths={[sd.N_samples for sd in self.sdl]} dt={self.sdl[0].dt}'
+        if len(self)==0:
+            return f'System_data_list with {len(self.sdl)} series'
+        else:
+            return f'System_data_list with {len(self.sdl)} series and total length {self.N_samples}, nu={self.nu}, ny={self.ny}, normed={self.normed} lengths={[sd.N_samples for sd in self.sdl]} dt={self.sdl[0].dt}'
 
     def plot(self,show=False):
         '''Very simple plotting function'''
@@ -686,7 +685,7 @@ class System_data_list(System_data):
     def train_test_split(self,split_fraction=0.25):
         '''return 2 data sets of length n*(1-split_fraction) and n*split_fraction respectively (left, right) split'''
         out = list(zip(*[sd.train_test_split(split_fraction=split_fraction) for sd in self.sdl]))
-        left,right = System_data_list(out[0]), System_data_list(out[1])
+        left, right = System_data_list(out[0]), System_data_list(out[1])
         return left, right
 
     def __getitem__(self,arg): #by data set or by time?
@@ -710,13 +709,15 @@ class System_data_list(System_data):
         return System_data_list([sd.down_sample_by_average(factor) for sd in self.sdl])
 
     def append(self,other):
-        assert isinstance(other,System_data)
+        assert isinstance(other, System_data)
         self.sdl.append(other)
+        self.sanity_check()
 
     def extend(self,other):
         if isinstance(other,(list,tuple)):
             other = System_data_list(other)
         self.sdl.extend(other.sdl)
+        self.sanity_check()
 
 
     def down_sample_by_average(self,factor):

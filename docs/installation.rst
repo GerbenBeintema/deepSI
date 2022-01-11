@@ -1,13 +1,15 @@
 Installation
 ============
 
-You can use any python distribution but I recommend using anaconda for it reduces the number of installation complications to almost zero. 
+You can use any python distribution but I recommend using anaconda python (https://www.anaconda.com/products/individual) for it reduces the number of installation complications to almost zero. 
+
+deepSI has been verified to work for 3.7 <= python <= 3.9
 
 After installing anaconda (adding to path is not necessary) you can open the "anaconda promp" or "anaconda cmd" and type the following commands to install deepSI
 
 .. code:: sh
 
-    conda install torch torchvision torchaudio cudatoolkit=10.2 -c torch 
+    conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch 
     conda install -c anaconda git
     pip install git+git://github.com/GerbenBeintema/deepSI@master
 

@@ -110,7 +110,10 @@ def cashed_download(url,name_dir,zip_name=None,dir_placement=None,download_size=
     if os.path.isfile(save_loc) and not force_download:
         return save_dir
 
-    print(f'file not found downloading from {url} \n in {save_loc}')
+    if force_download:
+        print(f'(re-)downloading dataset from {url} \n in {save_loc}')
+    else:
+        print(f'dataset not found downloading from {url} \n in {save_loc}')
 
     if 'drive.google' in url:
         download_file_from_google_drive(url, save_loc)
