@@ -1,6 +1,6 @@
 from deepSI.systems.system import System, Systems_gyms, System_ss, System_io, load_system, System_deriv
 from deepSI.systems.test_systems import Test_ss_linear1, Test_ss_linear2
-from deepSI.systems.double_bath import Double_bath
+from deepSI.systems.double_bath import Double_bath, Cascaded_tanks_continuous
 from deepSI.systems.filter_systems import Cheby1, Butter
 from deepSI.systems.pendulum import Pendulum
 from deepSI.systems.narendra_li_benchmark import NarendraLiBenchmark

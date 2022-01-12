@@ -276,7 +276,8 @@ class System_torch(System_fittable):
             self.remote_send(float('nan'), extra_t)
         else: #start with the initial validation 
             validation(train_loss=float('nan'), time_elapsed_total=extra_t) #also sets current model to cuda
-            print(f'Initial Validation {val_str}=', self.Loss_val[-1])
+            if verbose: 
+                print(f'Initial Validation {val_str}=', self.Loss_val[-1])
 
         try:
             t = Tictoctimer()
