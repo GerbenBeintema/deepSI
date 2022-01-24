@@ -186,7 +186,7 @@ class System_torch(System_fittable):
         These can be loaded manually using sys.load_checkpoint("_best") or "_last". (For this to work the sys.unique_code needs to be set to the correct string)
         '''
         def validation(train_loss=None, time_elapsed_total=None):
-            self.eval(); self.cpu();
+            self.eval(); self.cpu()
             if sim_val is not None:
                 sim_val_predict = self.apply_experiment(sim_val)
                 Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)

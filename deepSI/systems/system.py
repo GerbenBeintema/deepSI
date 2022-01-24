@@ -73,7 +73,7 @@ class System(object):
         state : the user defined state
         '''
         import warnings
-        warnings.warn('Calling sys.state but no state has been set')
+        warnings.warn('Calling self.get_state but no state has been set')
         return None
 
     def apply_experiment(self, sys_data, save_state=False, dont_set_initial_state=False): #can put this in apply controller
@@ -93,7 +93,6 @@ class System(object):
         Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
         that it can be accounted for later.
         '''
-
         if isinstance(sys_data,(tuple,list,System_data_list)):
             assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
@@ -115,7 +114,7 @@ class System(object):
             if save_state:
                 x1 = self.get_state()
                 X = [x0,x1]
-            Y.extend(sys_data_norm.y[:k0])           
+            Y.extend(sys_data_norm.y[:k0])
         elif sys_data_norm.y is not None: #if y is not None than init state
             obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
             Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
@@ -137,34 +136,6 @@ class System(object):
             self.dt = dt_old
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
     
-    def apply_controller(self,controller,N_samples):
-        '''Same as self.apply_experiment but with a controller
-
-        Parameters
-        ----------
-        controller : callable
-            when called with the current output it return the next action/input that should be taken
-
-        Notes
-        -----
-        This method is in a very early state and will probably be changed in the near future.
-        '''
-        # if sys_data.dt is not None: #dt check
-        dt_old = self.dt
-        self.dt = sys_data.dt
-        Y = []
-        U = []
-        obs = self.reset() #normed obs
-        for i in range(N_samples):
-            Y.append(obs)
-            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd #transform y and inverse transform resulting action
-            U.append(action)
-            obs = self.step(action)
-        # Y = Y[:-1]
-        # if sys_data.dt is not None:
-        self.dt = dt_old
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
-
     def init_state(self, sys_data):
         '''Initialize the internal state of the model using the start of sys_data
 
