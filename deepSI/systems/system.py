@@ -65,6 +65,24 @@ class System(object):
         if not hasattr(self,'_random'):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
+
+    @property
+    def act_measure_sys(self):
+        if   self.measure_act_multi!=System.measure_act_multi or self.measure_act!=System.measure_act:
+            return False
+        elif self.act_measure_multi!=System.act_measure_multi or self.act_measure!=System.act_measure:
+            return True
+        else:
+            raise ValueError('this is neither a act_measure or a measure_act system, both methods undefined')
+
+    @property
+    def dt(self):
+        return self._dt
+    
+    @dt.setter
+    def dt(self,dt):
+        self._dt = dt
+
     def get_state(self):
         '''state of the system (not the parameters)
 
@@ -75,111 +93,135 @@ class System(object):
         import warnings
         warnings.warn('Calling self.get_state but no state has been set')
         return None
-
-    def apply_experiment(self, sys_data, save_state=False, dont_set_initial_state=False): #can put this in apply controller
-        '''Does an experiment with for given a system data (fixed u)
-
-        Parameters
-        ----------
-        sys_data : System_data or System_data_list (or list or tuple)
-            The experiment which should be applied
-
-        Notes
-        -----
-        This will initialize the state using self.init_state if sys_data.y (and u)
-        is not None and skip the appropriate number of steps associated with it.
-        If either is missing than self.reset() is used to initialize the state. 
-        Afterwards this state is advanced using sys_data.u and the output is saved at each step.
-        Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
-        that it can be accounted for later.
-        '''
+        
+    def apply_experiment(self, sys_data, save_state=False):
         if isinstance(sys_data,(tuple,list,System_data_list)):
-            assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
+            # assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
-        
+
         dt_old = self.dt
         if sys_data.dt is not None:
             self.dt = sys_data.dt #calls the dt setter
 
-        U, Y = sys_data_norm.u, [] #Y hold the predicted output.
-        if dont_set_initial_state:
-            # x0 is already set correctly
-            # use u0 to get x1 and yhat1
-            # copy 1 element y0 to Y. 
-            if save_state: 
-                x0 = self.get_state()
-            k0 = 1
-            obs = self.step(U[0])
-            if save_state:
-                x1 = self.get_state()
-                X = [x0,x1]
+        U, Y = sys_data_norm.u, []
+        if sys_data_norm.y is not None:
+            k0 = self.init_state(sys_data_norm)
             Y.extend(sys_data_norm.y[:k0])
-        elif sys_data_norm.y is not None: #if y is not None than init state
-            obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
-            Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
         else:
-            obs, k0 = self.reset(), 0
+            k0, _ = 0, self.reset_state()
+        
+        if save_state:
+            X = [self.get_state()]*k0
 
-        if save_state and not dont_set_initial_state:
-            X = [self.get_state()]*(k0+1)
-
-        for k in range(k0,len(U)):
-            Y.append(obs) 
-            if k<len(U)-1: #skip last step
-                action = U[k]
-                obs = self.step(action) #here
-                if save_state:
-                    X.append(self.get_state())
+        for u in U[k0:]:
+            if save_state:
+                X.append(self.get_state())
+            Y.append(self.measure_act(u)) #also advances state
         
         if dt_old is not None:
             self.dt = dt_old
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
-    
-    def init_state(self, sys_data):
-        '''Initialize the internal state of the model using the start of sys_data
+        
+        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))  
 
+    def measure_act(self, action):
+        '''
+        1. Measure giving the current state and action
+        2. advance state using action
+        
+        calls measure_act_multi if (measure_act_multi or act_measure_multi is overwritten) was overwritten
+
+        '''
+        if self.measure_act_multi!=System.measure_act_multi or self.act_measure_multi!=System.act_measure_multi: #check if it is overwritten
+            return self.measure_act_multi([action])[0]
+        
+        if self.act_measure!=System.act_measure:
+            last_output, self.current_output = self.current_output, self.act_measure_multi(action)
+            return last_output
+        raise NotImplementedError('measure_act or measure_act_multi or act_measure or act_measure_multi should be implemented in subclass')
+
+    def measure_act_multi(self, actions):
+        '''
+        calls act_measure if it was overwritten otherwise will throw an error
+        '''
+        if self.act_measure_multi!=System.act_measure_multi:
+            last_output, self.current_output = self.current_output, self.act_measure_multi(actions)
+            return last_output
+        raise NotImplementedError('measure_act_multi or act_measure_multi should be implemented in subclass')
+        
+    def act_measure(self, action):
+        raise NotImplementedError('act_measure should be implemented in subclass')
+    
+    def act_measure_multi(self, actions):
+        raise NotImplementedError('act_measure_multi should be implemented in subclass')
+
+    def reset_state(self):
+        '''Should reset the internal state
+        
+        if the system is act_measure it will call reset_state_and_measure and save the current output.
+        '''
+        if self.act_measure_sys:
+            self.current_output = self.reset_and_measure()
+            return #return None
+        raise NotImplementedError('reset should be implemented in subclass')
+    
+    def reset_state_and_measure(self):
+        '''Should reset the internal state and return the current measurement'''
+        raise NotImplementedError('reset_state_and_measure should be implemented in subclass if act_measure or act_measure_multi is defined')
+
+
+    #todo make init state chain.
+
+    def init_state(self, sys_data):
+        '''initalizes the interal state using the sys_data and returns the number of steps used in the initilization
+        
         Returns
         -------
-        Output : an observation (e.g. floats)
-            The observation/predicted state at time step k0
         k0 : int
-            number of steps that should be skipped
+            number of steps that have been skipped
 
         Notes
         -----
-        Example: x0 = encoder(u[t-k0:k0],yhist[t-k0:k0]), and return h(x0), k0
-        This function is often overwritten in child. As default it will return self.reset(), 0 
+        Example: x[k0] = encoder(u[t-k0:k0],yhist[t-k0:k0]), and k0
+        This function is often overwritten in child. As default it will call self.reset and return 0
         '''
-        return self.reset(), 0
 
+        #self.k0 #need to be given before the function start
+        if (self.init_state_multi!=System.init_state_multi and self.measure_act_multi!=System.measure_act_multi) or \
+            (self.init_state_and_measure_multi!=System.init_state_and_measure_multi and self.act_measure_multi!=System.act_measure_multi):
+            #hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32)
+            nf = len(sys_data) - self.k0
+            k0 = self.init_state_multi(sys_data,nf=nf)
+            return k0
+             
+            
+
+        #warning for if torch fittable?
+        if self.act_measure_sys:
+            self.current_output, k0 = self.init_state_and_measure(sys_data)
+            return k0
+        
+        #todo; insert warning if it is a system which expects the initial state to be set
+        self.reset_state() #this can give errors if multi_step is defined but not 
+        return 0
+    
     def init_state_multi(self, sys_data, nf=None, dilation=1):
-        '''Similar to init_state but to initialize multiple states 
-           (used in self.n_step_error and self.one_step_ahead)
+        #todo change dilation wording
+        if self.measure_act_multi!=System.measure_act_multi: 
+            raise NotImplementedError('init_state_multi should be defined in child if measure_act_multi also exist')
+        elif self.init_state_and_measure_multi!=System.init_state_and_measure_multi and self.act_measure_multi!=System.act_measure_multi:
+            self.current_output = self.init_state_and_measure_multi(sys_data, nf=nf, dilation=dilation)
+            return self.k0
+        else:
+            raise ValueError
 
-            Parameters
-            ----------
-            sys_data : System_data
-                Data used to initialize the state
-            nf : int
-                skip the nf last states
-            dilation: int
-                number of states between each state
-           '''
-        raise NotImplementedError('init_state_multi should be implemented in subclass')
-
-    def step(self, action):
-        '''Applies the action to the system and returns the new observation, 
-        should always be overwritten in subclass'''
-        raise NotImplementedError('one_step_ahead should be implemented in subclass')
-
-    def step_multi(self,actions):
-        '''Applies the actions to the system and returns the new observations'''
-        return self.step(actions)
-
-    def reset(self):
-        '''Should reset the internal state and return the current obs'''
-        raise NotImplementedError('one_step_ahead should be implemented in subclass')
+    def init_state_and_measure_multi(self, sys_data, nf=None, dilation=1):
+        if self.act_measure_multi==System.act_measure_multi:
+            raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
+    
+    def init_state_and_measure(self, sys_data):
+        #todo; insert warting if it is a system which expects the initial state to be set
+        return self.reset_state_and_measure(), 0
 
     def multi_step_ahead(self, sys_data, nf, full=False):
         '''calculates the n-step precition
@@ -218,13 +260,7 @@ class System(object):
 
         return self.norm.inverse_transform(sys_data_nstep)
 
-    @property
-    def dt(self):
-        return self._dt
-    
-    @dt.setter
-    def dt(self,dt):
-        self._dt = dt
+
 
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
