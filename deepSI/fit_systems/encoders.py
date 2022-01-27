@@ -38,11 +38,12 @@ class SS_encoder(System_torch):
     random : np.random.RandomState
         unique random generated initialized with seed (only created ones called)
     '''
-    def __init__(self, nx=10, na=20, nb=20):
-        super(SS_encoder, self).__init__() #where does dt come into
-        self.nx, self.na, self.nb = nx, na, nb
-        self.k0 = max(self.na,self.nb)
-        
+    def __init__(self, nx = 10, na=20, nb=20, feedthrough=False):
+        super(SS_encoder,self).__init__()
+        self.na, self.nb = na, nb
+        self.k0 = max(self.na, self.nb)
+        self.nx = nx
+
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.e_net = simple_res_net
         self.e_n_hidden_layers = 2
@@ -58,71 +59,56 @@ class SS_encoder(System_torch):
         self.h_n_hidden_layers = 2
         self.h_n_nodes_per_layer = 64
         self.h_activation = nn.Tanh
+        
+        self.feedthrough = feedthrough
 
-    ########## How to fit #############
     def make_training_data(self, sys_data, **loss_kwargs):
         assert sys_data.normed == True
         nf = loss_kwargs.get('nf',25)
-        dilation = loss_kwargs.get('dilation',1)
+        stride = loss_kwargs.get('stride',1)
         online_construct = loss_kwargs.get('online_construct',False)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,\
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,stride=stride,\
         force_multi_u=True,force_multi_y=True,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
-
+        
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
         self.encoder = self.e_net(self.nb*nu+self.na*ny, self.nx, n_nodes_per_layer=self.e_n_nodes_per_layer, n_hidden_layers=self.e_n_hidden_layers, activation=self.e_activation)
         self.fn =      self.f_net(self.nx+nu,            self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
-        self.hn =      self.h_net(self.nx,               ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
-        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
-
+        hn_in = self.nx + nu if self.feedthrough else self.nx
+        self.hn =      self.h_net(hn_in     ,            ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
+        return [{'params':self.encoder.parameters()}, {'params':self.fn.parameters()}, {'params':self.hn.parameters()}]
+    
     def loss(self, hist, ufuture, yfuture, **loss_kwargs):
         x = self.encoder(hist) #(N, nb*nu + na*ny) -> (N, nx)
-        y_predict = []
+        y_predicts = []
         for u in torch.transpose(ufuture,0,1):
-            y_predict.append(self.hn(x)) #output prediction
-            fn_in = torch.cat((x,u),dim=1) #construc the input of the f function
-            x = self.fn(fn_in) #calculate the next state
-        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
-
-    ########## How to use ##############
-    def init_state(self,sys_data): #put nf here for n-step error?
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        with torch.no_grad():
-            self.state = self.encoder(hist) #detach here?
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+            xu = torch.cat((x,u),dim=1)
+            y_predicts.append(self.hn(xu if self.feedthrough else x)) #output prediction
+            x = self.fn(xu) #calculate the next state
+        y_predicts = torch.stack(y_predicts,dim=1) #[Nt, Nb, ny] to [Nb, Nt, ny]
+        return torch.nn.functional.mse_loss(y_predicts, yfuture)
+    
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[0],dtype=torch.float32) #(1,)
         with torch.no_grad():
             self.state = self.encoder(hist)
-        y_predict = self.hn(self.state).detach().numpy()
-        return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
-
-    def reset(self): #to be able to use encoder network as a data generator
-        self.state = torch.randn(1,self.nx)
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number
-        action = action[None,None] if self.nu is None else action[None,:]
+        return max(self.na,self.nb)
+    
+    def measure_act_multi(self, actions):
+        actions = torch.tensor(actions,dtype=torch.float32) 
+        actions = actions[:,None] if self.nu is None else actions
         with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #array
-        action = action[:,None] if self.nu is None else action
-        with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()
+            xu = torch.cat([self.state, actions],dim=1)
+            y_predict = self.hn(xu if self.feedthrough else self.state).numpy()
+            self.state = self.fn(xu)
         return (y_predict[:,0] if self.ny is None else y_predict)
-
+    
+    def reset_state(self):
+        self.state = torch.zeros((1,self.nx), dtype=torch.float32)
+    
     def get_state(self):
-        return self.state[0].numpy()
+        return self.state.numpy()[0]
 
 class default_encoder_net(nn.Module):
     def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
@@ -184,9 +170,9 @@ class SS_encoder_general(System_torch):
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        dilation = Loss_kwargs.get('dilation',1)
+        stride = Loss_kwargs.get('stride',1)
         online_construct = Loss_kwargs.get('online_construct',False)
-        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
+        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
 
     def init_nets(self, nu, ny): # a bit weird
         self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
@@ -212,8 +198,8 @@ class SS_encoder_general(System_torch):
             y_predict = self.hn(self.state).numpy()[0]
         return y_predict, max(self.na,self.nb)
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[:2] #(1,)
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[:2] #(1,)
         uhist = torch.tensor(uhist,dtype=torch.float32)
         yhist = torch.tensor(yhist,dtype=torch.float32)
         with torch.no_grad():
@@ -348,8 +334,8 @@ class SS_encoder_rnn(System_torch):
         self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
         return self.hn(self.state[-1,:,:])[0,0].item(), max(self.na,self.nb) #some error is being made here
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[0],dtype=torch.float32) #(1,)
         self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
         return self.hn(self.state[-1,:,:])[:,0].detach().numpy(), max(self.na,self.nb)
 
@@ -420,10 +406,10 @@ class SS_par_start(System_torch): #this is not implemented in a nice manner, the
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        dilation = Loss_kwargs.get('dilation',1)
+        stride = Loss_kwargs.get('stride',1)
         online_construct = Loss_kwargs.get('online_construct',False)
         assert online_construct==False, 'to be implemented'
-        hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True)
+        hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,stride=stride,force_multi_u=True,force_multi_y=True)
         nsamples = hist.shape[0]
         ids = np.arange(nsamples,dtype=int)
         self.par_starter = par_start_encoder(nx=self.nx, nsamples=nsamples)
@@ -456,8 +442,8 @@ class SS_par_start(System_torch): #this is not implemented in a nice manner, the
         y_predict = self.hn(self.state).detach().numpy()[0,:]
         return (y_predict[0] if self.ny is None else y_predict), 0
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=0,nb=0,nf=nf,stride=stride)[0],dtype=torch.float32) #(1,)
         with torch.no_grad():
             self.state = torch.as_tensor(np.random.normal(scale=0.1,size=(hist.shape[0],self.nx)),dtype=torch.float32) #detach here?
         y_predict = self.hn(self.state).detach().numpy()

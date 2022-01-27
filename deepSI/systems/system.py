@@ -51,11 +51,30 @@ class System(object):
         '''
         self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
-        self.fitted = False
+        self.init_model_done = False
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
         self.seed = 42
-        self.use_norm = True #can be changed later
         self._dt = None
+        self.check_valid_system()
+
+    def exists(self, name):
+        return getattr(self,name).__func__!=getattr(System, name)
+
+    def check_valid_system(self):
+        count = 0
+        if self.exists('act_measure'):
+            count += 1
+            assert self.exists('init_state_and_measure') or self.exists('reset_state_and_measure'), 'act_measure is defined but neither init_state_and_measure or reset_state_and_measure is defined'
+        if self.exists('act_measure_multi'):
+            count += 1
+            assert self.exists('init_state_and_measure_multi'), 'act_measure_multi is defined but init_state_and_measure_multi is not defined'
+        if self.exists('measure_act'):
+            count += 1
+            assert self.exists('init_state') or self.exists('reset_state'), 'measure_act is defined but neither init_state or reset_state is defined'
+        if self.exists('measure_act_multi'):
+            count += 1
+            assert self.exists('init_state_multi'), 'measure_act_multi is defined but init_state_multi is not defined'
+        assert count>0, 'no valid method of using the system has been found. One of [act_measure, act_measure_multi, measure_act, measure_act_multi] should be defined'
 
     @property
     def name(self):
@@ -65,12 +84,11 @@ class System(object):
         if not hasattr(self,'_random'):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
-
     @property
     def act_measure_sys(self):
-        if   self.measure_act_multi!=System.measure_act_multi or self.measure_act!=System.measure_act:
+        if   self.measure_act_multi.__func__!=System.measure_act_multi or self.measure_act.__func__!=System.measure_act:
             return False
-        elif self.act_measure_multi!=System.act_measure_multi or self.act_measure!=System.act_measure:
+        elif self.act_measure_multi.__func__!=System.act_measure_multi or self.act_measure.__func__!=System.act_measure:
             return True
         else:
             raise ValueError('this is neither a act_measure or a measure_act system, both methods undefined')
@@ -78,7 +96,6 @@ class System(object):
     @property
     def dt(self):
         return self._dt
-    
     @dt.setter
     def dt(self,dt):
         self._dt = dt
@@ -132,11 +149,11 @@ class System(object):
         calls measure_act_multi if (measure_act_multi or act_measure_multi is overwritten) was overwritten
 
         '''
-        if self.measure_act_multi!=System.measure_act_multi or self.act_measure_multi!=System.act_measure_multi: #check if it is overwritten
+        if self.exists('measure_act_multi') or self.exists('act_measure_multi'):
             return self.measure_act_multi([action])[0]
         
-        if self.act_measure!=System.act_measure:
-            last_output, self.current_output = self.current_output, self.act_measure_multi(action)
+        if self.exists('act_measure'):
+            last_output, self.current_output = self.current_output, self.act_measure(action)
             return last_output
         raise NotImplementedError('measure_act or measure_act_multi or act_measure or act_measure_multi should be implemented in subclass')
 
@@ -144,7 +161,7 @@ class System(object):
         '''
         calls act_measure if it was overwritten otherwise will throw an error
         '''
-        if self.act_measure_multi!=System.act_measure_multi:
+        if self.exists('act_measure_multi'):
             last_output, self.current_output = self.current_output, self.act_measure_multi(actions)
             return last_output
         raise NotImplementedError('measure_act_multi or act_measure_multi should be implemented in subclass')
@@ -160,10 +177,11 @@ class System(object):
         
         if the system is act_measure it will call reset_state_and_measure and save the current output.
         '''
-        if self.act_measure_sys:
-            self.current_output = self.reset_and_measure()
-            return #return None
-        raise NotImplementedError('reset should be implemented in subclass')
+        if self.exists('reset_state_and_measure'):
+            self.current_output = self.reset_state_and_measure()
+            return
+        else:
+            raise NotImplementedError('reset should be implemented in subclass')
     
     def reset_state_and_measure(self):
         '''Should reset the internal state and return the current measurement'''
@@ -187,17 +205,13 @@ class System(object):
         '''
 
         #self.k0 #need to be given before the function start
-        if (self.init_state_multi!=System.init_state_multi and self.measure_act_multi!=System.measure_act_multi) or \
-            (self.init_state_and_measure_multi!=System.init_state_and_measure_multi and self.act_measure_multi!=System.act_measure_multi):
-            #hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32)
+        if self.exists('init_state_multi') or self.exists('init_state_and_measure_multi'):
             nf = len(sys_data) - self.k0
             k0 = self.init_state_multi(sys_data,nf=nf)
             return k0
-             
-            
 
         #warning for if torch fittable?
-        if self.act_measure_sys:
+        if self.exists('init_state_and_measure'):
             self.current_output, k0 = self.init_state_and_measure(sys_data)
             return k0
         
@@ -205,19 +219,15 @@ class System(object):
         self.reset_state() #this can give errors if multi_step is defined but not 
         return 0
     
-    def init_state_multi(self, sys_data, nf=None, dilation=1):
-        #todo change dilation wording
-        if self.measure_act_multi!=System.measure_act_multi: 
-            raise NotImplementedError('init_state_multi should be defined in child if measure_act_multi also exist')
-        elif self.init_state_and_measure_multi!=System.init_state_and_measure_multi and self.act_measure_multi!=System.act_measure_multi:
-            self.current_output = self.init_state_and_measure_multi(sys_data, nf=nf, dilation=dilation)
-            return self.k0
+    def init_state_multi(self, sys_data, nf=None, stride=1):
+        if self.exists('init_state_and_measure_multi'):
+            self.current_output, k0 = self.init_state_and_measure_multi(sys_data, nf=nf, stride=stride)
+            return k0
         else:
-            raise ValueError
+            raise NotImplementedError('init_state_multi should be defined in child if measure_act_multi also exist')
 
-    def init_state_and_measure_multi(self, sys_data, nf=None, dilation=1):
-        if self.act_measure_multi==System.act_measure_multi:
-            raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
+    def init_state_and_measure_multi(self, sys_data, nf=None, stride=1):
+        raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
     
     def init_state_and_measure(self, sys_data):
         #todo; insert warting if it is a system which expects the initial state to be set
@@ -243,12 +253,12 @@ class System(object):
                 return [System_data_list(o) for o in zip(*[self.multi_step_ahead(sd, nf, full=True) for sd in sys_data.sdl])]
 
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=1)
-        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=1)
+        obs, k0 = self.init_state_multi(sys_data, nf=nf, stride=1)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, stride=1)
 
         assert full==False
-        for i,unow in enumerate(np.swapaxes(ufuture,0,1)[:-1]):
-            obs = self.step_multi(unow)
+        for i,unow in enumerate(np.swapaxes(ufuture,0,1)):
+            obs = self.measure_act_multi(unow)
         obs = np.concatenate([sys_data.y[:k0+nf-1], obs],axis=0)
 
         sys_data_nstep = System_data(u=sys_data.u, y=obs, normed=True, cheat_n=k0+nf)
@@ -259,8 +269,6 @@ class System(object):
             self.init_state(sys_data) #removes large state
 
         return self.norm.inverse_transform(sys_data_nstep)
-
-
 
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
@@ -276,7 +284,7 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data,nf=100,dilation=1,mode='NRMS',mean_channels=True):
+    def n_step_error(self,sys_data,nf=100,stride=1,mode='NRMS',mean_channels=True):
         '''Calculate the expected error after taking n=1...nf steps.
 
         Parameters
@@ -284,7 +292,7 @@ class System(object):
         sys_data : System_data
         nf : int
             upper bound of n.
-        dilation : int
+        stride : int
             passed to init_state_multi to reduce memory cost.
         mode : str or System_data_norm
             'NRMS', 'RMS', 'RMS_sys_norm' or a System_data_norm for 
@@ -307,22 +315,22 @@ class System(object):
         else:
             raise ValueError("The mode of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
 
-        Losses = self.n_step_error_per_channel(sys_data, nf=nf, dilation=dilation)/norm.ystd
+        Losses = self.n_step_error_per_channel(sys_data, nf=nf, stride=stride)/norm.ystd
         if mean_channels==False:
             return Losses
         else:
             return np.array([np.mean(a) for a in Losses])
 
 
-    def n_step_error_per_channel(self, sys_data, nf=100, dilation=1):
-        '''Calculate the expected error after taking n=1...nf steps, returns the shape (nf, ny) or nf if ny is None
+    def n_step_error_per_channel(self, sys_data, nf=100, stride=1):
+        '''Calculate the expected error after taking n=0...nf-1 steps, returns the shape (nf, ny) or nf if ny is None
 
         Parameters
         ----------
         sys_data : System_data
         nf : int
             upper bound of n.
-        dilation : int
+        stride : int
             passed to init_state_multi to reduce memory costs.
         '''
         if isinstance(sys_data,(list,tuple)):
@@ -333,24 +341,26 @@ class System(object):
         self.dt = sys_data.dt
 
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
-        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=dilation)
+        k0 = self.init_state_multi(sys_data, nf=nf, stride=stride)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, stride=stride)
 
         Losses = []
         for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
+            obs = self.measure_act_multi(unow)
             Losses.append(np.mean((ynow-obs)**2,axis=0)**0.5)
-            obs = self.step_multi(unow)
 
         if isinstance(sys_data,System_data_list):
             self.init_state(sys_data[0]) #removes large state
         else:
             self.init_state(sys_data) #removes large state
-        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
-        self.dt = dt_old
         
-        return np.array(Losses)
-    def n_step_error_plot(self, sys_data, nf=100, dilation=1, RMS=False, show=True):
-        Losses = self.n_step_error(sys_data,nf=nf,dilation=dilation,RMS=RMS)
+        if dt_old is not None:
+            self.dt = dt_old
+
+        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
+
+    def n_step_error_plot(self, sys_data, nf=100, stride=1, RMS=False, show=True):
+        Losses = self.n_step_error(sys_data,nf=nf,stride=stride,RMS=RMS)
         if sys_data.dt is not None:
             dt = sys_data.dt
         else:
@@ -444,7 +454,6 @@ class System_ss(System): #simple state space systems
     def step(self,action):
         self.x = self.f(self.x,action)
         return self.h(self.x)
-    # def step_multi(self,actions)
 
     def f(self,x,u):
         '''x[k+1] = f(x[k],u[k])'''
@@ -521,10 +530,10 @@ class System_io(System):
         #when taking an action uhist gets appended to create the current state
         return sys_data.y[k0-1], k0
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
+    def init_state_multi(self,sys_data,nf=100,stride=1):
         k0 = max(self.na,self.nb)
-        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = 
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = 
         return self.yhist[:,-1], k0
 
     def step(self,action):

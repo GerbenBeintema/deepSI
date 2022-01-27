@@ -89,7 +89,7 @@ class NARX_basic(deepSI.fit_systems.System_torch):
 
 
 
-    def init_state_multi(self, sys_data, nf=None, dilation=1):
+    def init_state_multi(self, sys_data, nf=None, stride=1):
         '''Similar to init_state but to initialize multiple states 
            (used in self.n_step_error and self.one_step_ahead)
 
@@ -99,12 +99,12 @@ class NARX_basic(deepSI.fit_systems.System_torch):
                 Data used to initialize the state
             nf : int
                 skip the nf last states
-            dilation: int
+            stride: int
                 number of states between each state
            '''
         k0 = max(self.na,self.nb)
-        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = 
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = 
         return self.yhist[:,-1], k0
 
     def step(self, action):

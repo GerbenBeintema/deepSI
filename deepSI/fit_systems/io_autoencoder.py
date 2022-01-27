@@ -73,7 +73,7 @@ class IO_autoencoder(System_torch):
 
         return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
+    def init_state_multi(self,sys_data,nf=100,stride=1):
         uhist, yhist, ufuture, yfuture = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,force_multi_u=True,force_multi_y=True)
         yhist = torch.tensor(yhist,dtype=torch.float32)
         uhist = torch.tensor(uhist,dtype=torch.float32)
