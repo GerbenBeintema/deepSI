@@ -23,7 +23,6 @@ class Pendulum(System_deriv): #discrate system single system
         self.Fc = Fc #tau = 10
         self.lin = lin
 
-
     def deriv(self,x,u): #will be converted by 
         th,omega = x
         dthdt = omega
@@ -33,7 +32,7 @@ class Pendulum(System_deriv): #discrate system single system
             domegadt = -self.omega0**2*np.sin(th) + u - self.Fc*omega
         return [dthdt,domegadt]
 
-    def h(self,x):
+    def h(self,x,u):
         th,omega = x
         return th
 

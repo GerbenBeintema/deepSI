@@ -244,7 +244,7 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
     return x, y
 
 class SS_linear(System_ss, System_fittable):
-    def __init__(self,seed=None,A=None,B=None,C=None,D=None,nx=2):
+    def __init__(self,seed=None,A=None,B=None,C=None,D=None, nx=2, feedthrough=False):
         self.ny = None
         self.nu = None
         self.A, self.B, self.C, self.D = A, B, C, D
@@ -253,11 +253,11 @@ class SS_linear(System_ss, System_fittable):
             nx = A.shape[0]
             self.ny = C.shape[0] if C.shape[0]!=1 else None
             self.nu = B.shape[1]
+        self.feedthrough = feedthrough or (D is not None and np.sum(np.array(D)**2)!=0) #non-zero D
         super(SS_linear, self).__init__(nx=nx)
 
     def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
-        assert isinstance(sys_data,System_data), 'todo for multiple data sets'
-
+        assert isinstance(sys_data,System_data), 'Using multiple datasets to estimate ss_linear is not yet implemented'
 
         y = sys_data.y.T if sys_data.y.ndim==2 else sys_data.y.T[None,:] #work with (features,time)
         u = sys_data.u.T if sys_data.u.ndim==2 else sys_data.u.T[None,:] #work with (features,time)
@@ -266,8 +266,8 @@ class SS_linear(System_ss, System_fittable):
         SS_fixed_order = self.nx
         id_method = 'N4SID' #'N4SID' or 'MOESP' or 'CVA'
         SS_threshold = 0.1
-        SS_max_order=np.NaN
-        SS_D_required=False
+        SS_max_order = np.NaN
+        SS_D_required = self.feedthrough
         tsample = 1.
 
         #fit
@@ -276,7 +276,7 @@ class SS_linear(System_ss, System_fittable):
                                             SS_D_required, SS_A_stability)
         self.model = SS_model(A, B, C, D, K, Q, R, S, tsample, Vn) #useless?, wait....
         self.A, self.B, self.C, self.D = A, B, C, D
-        # sys_data_sim = self.apply_experiment(self.norm.inverse_transform(sys_data)) #multiple sys_data todo
+
         X = []
         x = np.zeros((self.nx,))
         for u in sys_data.u:
@@ -292,21 +292,21 @@ class SS_linear(System_ss, System_fittable):
         self.SS_f = SS_f
         self.SS_A_stability = SS_A_stability
 
-
     def f(self,x,u):
         u = np.array(u) 
         if u.ndim==0:
             u = u[None]
         return np.dot(self.A, x) + np.dot(self.B, u)
 
-    def h(self,x):
-        # u = np.array(u) 
-        # if u.ndim==0:
-        #     u = u[None]
-        yhat = np.dot(self.C, x) #+ np.dot(self.D, u)
+    def h(self,x,u):
+        if self.feedthrough:
+            u = np.array(u) 
+            if u.ndim==0:
+                u = u[None]
+            yhat = np.dot(self.C, x) + np.dot(self.D, u)
+        else:
+            yhat = np.dot(self.C, x)
         return yhat[0] if (self.ny==None) else yhat
-
-
 
 if __name__=='__main__':
     np.random.seed(42)

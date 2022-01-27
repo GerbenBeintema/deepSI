@@ -32,7 +32,6 @@ class SS_encoder(System_torch):
         Some random unique 4 digit code (can be used for saving/loading)
     name : str
         concatenation of the the class name and the unique code
-    use_norm : bool
     seed : int
         random seed
     random : np.random.RandomState

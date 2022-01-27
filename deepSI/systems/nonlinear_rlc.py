@@ -39,7 +39,7 @@ class Nonlinear_rlc(System_deriv): #discrate system single system
         diL_dt = (-vC - self.R*iL + vin)/L
         return [dvC_dt,diL_dt]
 
-    def h(self,x):
+    def h(self,x,u):
         vC,iL = x
         return iL #or vC
 
@@ -67,7 +67,7 @@ class Nonlinear_rlc(System_deriv): #discrate system single system
 
 if __name__=='__main__':
     from matplotlib import pyplot as plt
-    sys = nonlinear_RLC()
+    sys = Nonlinear_rlc()
     train = sys.get_train_data()
     test = sys.get_test_data()
     # fit_sys = deepSI.fit_systems.NN_ARX_multi(nf=60)

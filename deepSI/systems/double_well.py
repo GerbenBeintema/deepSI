@@ -38,7 +38,7 @@ class Double_potential_well(System_deriv): #discrate system single system
         dvdt -= self.gamma*v
         return [dxdt,dvdt]
 
-    def h(self,x):
+    def h(self,x,u):
         return x[0] #return position
 
 class Double_potential_well_video(Double_potential_well): #discrate system single system
@@ -55,8 +55,7 @@ class Double_potential_well_video(Double_potential_well): #discrate system singl
         super(Double_potential_well_video, self).__init__(a=a,Fmax=Fmax,Nresist=Nresist)
         self.observation_space = Box(0.,1.,shape=(20,100))
         
-
-    def h(self,x):
+    def h(self,x,u):
         A = np.zeros((self.nx_vid,self.ny_vid))
         Y = np.linspace(-2.5,2.5,num=self.ny_vid)
         dy = (Y[1]-Y[0])
@@ -72,7 +71,7 @@ if __name__=='__main__':
     import os
     from PIL import Image
     from matplotlib import pyplot as plt
-    sys = double_well_video_system()
+    sys = Double_potential_well_video()
     train = sys.get_train_data()
     test = sys.get_test_data()
     exp = deepSI.System_data(u=2*np.sin(np.arange(0,100,sys.dt)))

@@ -1,5 +1,5 @@
 
-from deepSI.systems.system import System, System_io, System_data, load_system, System_bj
+from deepSI.systems.system import System, System_io, System_data, load_system
 import numpy as np
 from deepSI.datasets import get_work_dirs
 import deepSI
@@ -19,18 +19,21 @@ class System_fittable(System):
 
     Notes
     -----
-    This function will automaticly fit the normalization in self.norm if self.use_norm is set to True (default). 
+    This function will automaticly fit the normalization in self.norm if auto_fit_norm is set to True (default). 
     Lastly it will set self.init_model_done to True which will keep the norm constant. 
     """
-    def fit(self, train_sys_data, **kwargs):
-        if self.init_model_done==False:
-            if self.use_norm: #if the norm is not used you can also manually initialize it.
-                #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
-                self.norm.fit(train_sys_data)
-            self.nu = train_sys_data.nu
-            self.ny = train_sys_data.ny
-        self._fit(self.norm.transform(train_sys_data), **kwargs)
+    def init_model(self, sys_data=None, nu=-1, ny=-1, auto_fit_norm=True):
+        if auto_fit_norm: #if the norm is not used you can also manually initialize it.
+            #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
+            self.norm.fit(sys_data)
+        self.nu = sys_data.nu
+        self.ny = sys_data.ny
         self.init_model_done = True
+
+    def fit(self, train_sys_data, auto_fit_norm=True, **kwargs):
+        if self.init_model_done==False:
+            self.init_model(train_sys_data, auto_fit_norm=auto_fit_norm)            
+        self._fit(self.norm.transform(train_sys_data), **kwargs)
 
     def _fit(self, normed_sys_data, **kwargs):
         raise NotImplementedError('_fit or fit should be implemented in subclass')
@@ -184,7 +187,6 @@ class System_torch(System_fittable):
         'loss'  #todo
         'sim-inno' #todo
         '''
-        #innovation todo
         if validation_measure.find('sim')==0:
             val_sys_data_sim = self.apply_experiment(val_sys_data)
             sim_val_fun = validation_measure.split('-')[1]

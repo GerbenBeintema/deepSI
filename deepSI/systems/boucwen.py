@@ -23,15 +23,15 @@ class Bouc_wen(System_deriv):
         zd = self.alpha*yd-self.beta*(self.gamma*abs(yd)*z+self.delta*yd*abs(z)) #nu=1
         return yd,ydd,zd
 
-    def h(self, x):
+    def h(self, x, u):
         return x[0]
 
     def get_train_data(self):
-        exp = Experiment(u=self.random.uniform(-1,1,size=10**5))
+        exp = System_data(u=self.random.uniform(-1,1,size=10**5))
         return self.apply_experiment(exp)
 
     def get_test_data(self):
-        exp = Experiment(u=self.random.uniform(-1,1,size=10**4))
+        exp = System_data(u=self.random.uniform(-1,1,size=10**4))
         return self.apply_experiment(exp)
 
     def apply_experiment(self,exp):

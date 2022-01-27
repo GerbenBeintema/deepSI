@@ -14,7 +14,7 @@ class Nonlin_drag(System_deriv):
         v, = x
         return (self.Fdrag(v) + u,)
 
-    def h(self, x):
+    def h(self, x, u):
         return x[0]
 
     def get_train_data(self):
@@ -31,7 +31,7 @@ class Coupled_electric_drive(Nonlin_drag):
         sign = lambda v: 1 if v>0 else (-1 if v<0 else 0)
         super(Coupled_electric_drive,self).__init__(Fdrag = lambda v: -0.1*v-0.2*sign(v)*math.exp(-abs(v)/1))
 
-    def h(self, x):
+    def h(self, x, u):
         return abs(x[0])
 
 if __name__=='__main__':

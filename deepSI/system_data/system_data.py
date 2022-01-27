@@ -238,7 +238,7 @@ class System_data(object):
     ############################
     ###### Transformations #####
     ############################
-    def to_IO_data(self,na=10,nb=10,stride=1,online_construct=False):
+    def to_IO_data(self,na=10,nb=10,stride=1,online_construct=False, feedthrough=False):
         '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
 
         Parameters
@@ -262,7 +262,7 @@ class System_data(object):
         hist = []
         Y = []
         for k in range(max(na,nb),len(u),stride):
-            hist.append(np.concatenate((u[k-nb:k].flat,y[k-na:k].flat))) #size = nb*nu + na*ny
+            hist.append(np.concatenate((u[k-nb:k+feedthrough].flat,y[k-na:k].flat))) #size = nb*nu + na*ny
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 

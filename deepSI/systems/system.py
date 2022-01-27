@@ -16,7 +16,6 @@ def load_system(file):
         import torch
         return torch.load(file)
 
-
 class System(object):
     '''The base System class
 
@@ -226,12 +225,12 @@ class System(object):
         else:
             raise NotImplementedError('init_state_multi should be defined in child if measure_act_multi also exist')
 
-    def init_state_and_measure_multi(self, sys_data, nf=None, stride=1):
-        raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
-    
     def init_state_and_measure(self, sys_data):
         #todo; insert warting if it is a system which expects the initial state to be set
         return self.reset_state_and_measure(), 0
+
+    def init_state_and_measure_multi(self, sys_data, nf=None, stride=1):
+        raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
 
     def multi_step_ahead(self, sys_data, nf, full=False):
         '''calculates the n-step precition
@@ -321,7 +320,6 @@ class System(object):
         else:
             return np.array([np.mean(a) for a in Losses])
 
-
     def n_step_error_per_channel(self, sys_data, nf=100, stride=1):
         '''Calculate the expected error after taking n=0...nf-1 steps, returns the shape (nf, ny) or nf if ny is None
 
@@ -359,19 +357,19 @@ class System(object):
 
         return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
 
-    def n_step_error_plot(self, sys_data, nf=100, stride=1, RMS=False, show=True):
-        Losses = self.n_step_error(sys_data,nf=nf,stride=stride,RMS=RMS)
+    def n_step_error_plot(self, sys_data, nf=100, stride=1, mode='NRMS', mean_channels=True, show=True):
+        Losses = self.n_step_error(sys_data, nf=nf, stride=stride, mode=mode, mean_channels=mean_channels)
         if sys_data.dt is not None:
             dt = sys_data.dt
         else:
             dt = self.dt if self.dt is not None else 1
         tar = np.arange(nf)*dt
         plt.plot(tar,Losses)
-        plt.xlabel('time-error' if dt!=1 else 'n-step-error')
-        plt.ylabel('NRMS' if RMS==False else 'RMS')
+        plt.xlabel(f'Time (sec) (dt={dt})' if dt!=1 else 'index time')
+        plt.ylabel(mode)
+        plt.grid()
         if show:
             plt.show()
-
 
     def save_system(self,file):
         '''Save the system using pickle
@@ -409,8 +407,8 @@ class System(object):
             exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
 
-class Systems_gyms(System):
-    """docstring for Systems_gyms"""
+class System_gym(System):
+    """docstring for System_gym"""
     def __init__(self, env, env_kwargs=dict(), n=None):
         if isinstance(env,gym.Env):
             assert n==None, 'if env is already a gym environment than n cannot be given'
@@ -420,12 +418,12 @@ class Systems_gyms(System):
             self.env = gym.make(env,**env_kwargs)
         else:
             raise NotImplementedError('n requires implementation later')
-        super(Systems_gyms, self).__init__(action_space=self.env.action_space, observation_space=self.env.observation_space)
+        super(System_gym, self).__init__(action_space=self.env.action_space, observation_space=self.env.observation_space)
 
-    def reset(self):
+    def reset_state_and_measure(self):
         return self.env.reset()
         
-    def step(self,action):
+    def act_measure(self,action):
         '''Applies the action to the systems and returns the new observation'''
         obs, reward, done, info = self.env.step(action)
         self.done = done
@@ -445,21 +443,19 @@ class System_ss(System): #simple state space systems
         self.nu = nu
         self.ny = ny
 
+    def reset_state(self):
         self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
 
-    def reset(self):
-        self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
-        return self.h(self.x)
-
-    def step(self,action):
+    def measure_act(self,action):
+        y = self.h(self.x, action)
         self.x = self.f(self.x,action)
-        return self.h(self.x)
+        return y
 
     def f(self,x,u):
         '''x[k+1] = f(x[k],u[k])'''
         raise NotImplementedError('f and h should be implemented in child')
-    def h(self,x):
-        '''y[k] = h(x[k])'''
+    def h(self,x,u): 
+        '''y[k] = h(x[k],u[k])'''
         raise NotImplementedError('f and h should be implemented in child')
 
     def get_state(self):
@@ -468,9 +464,8 @@ class System_ss(System): #simple state space systems
 
 from scipy.integrate import solve_ivp
 class System_deriv(System_ss):
-    ''''''
-
-    def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK4'):
+    '''ZOH integration for datageneration'''
+    def __init__(self, dt=None, nx=None, nu=None, ny=None, method='RK4'):
         super(System_deriv, self).__init__(nx, nu, ny)
         self.dt = dt
         self.method = method
@@ -498,7 +493,7 @@ class System_deriv(System_ss):
 
 
 class System_io(System):
-    def __init__(self,na, nb, nu=None, ny=None): #(u,y)
+    def __init__(self,na, nb, nu=None, ny=None, feedthrough=False): #(u,y)
         action_shape = tuple() if nu is None else (nu,) #repeated code
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'), float('inf'), shape=action_shape)
@@ -509,46 +504,53 @@ class System_io(System):
         self.na = na #hist length of y
         self.nu = nu
         self.ny = ny
+        self.feedthrough = feedthrough
         #y[k] = step(u[k-nb,k-1],y[k-na,...,k-1])
         #y[k+1] = step(u[k-nb+1,k],y[k-na-1,...,k])
         self.reset()
 
     def reset(self):
         self.yhist = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
-        self.uhist = [0]*(self.nb-1) if self.nu is None else [[0]*self.nu for i in range(self.nb-1)]
+        self.uhist = [0]*self.nb if self.nu is None else [[0]*self.nu for i in range(self.nb)]
         return 0
 
     @property
     def k0(self):
         return max(self.na,self.nb)
 
-    def init_state(self,sys_data):
+    def init_state(self, sys_data):
         #sys_data already normed
-        k0 = max(self.na,self.nb)
+        k0 = self.k0
         self.yhist = list(sys_data.y[k0-self.na:k0])
-        self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
+        self.uhist = list(sys_data.u[k0-self.nb:k0]) #how it is saved, len(yhist) = na, len(uhist) = nb-1 or nb if feedthrough
         #when taking an action uhist gets appended to create the current state
-        return sys_data.y[k0-1], k0
+        return k0
 
     def init_state_multi(self,sys_data,nf=100,stride=1):
-        k0 = max(self.na,self.nb)
+        k0 = self.k0
         self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = 
-        return self.yhist[:,-1], k0
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,nb-1(+1)) +1 if feedthrough
+        return k0
 
-    def step(self,action):
-        self.uhist.append(action)
+    def measure_act(self, action):
+        if self.feedthrough:
+            self.uhist.append(action) #add current output only when feedthrough is enabled
         uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhist).flat),axis=0) #might not be the quickest way
         yout = self.io_step(uy)
+        if not self.feedthrough:
+            self.uhist.append(action)
         self.yhist.append(yout)
         self.yhist.pop(0)
         self.uhist.pop(0)
         return yout
 
-    def step_multi(self,actions):
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
+    def measure_act_multi(self,actions):
+        if self.feedthrough:
+            self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         uy = np.concatenate([self.uhist.reshape(self.uhist.shape[0],-1),self.yhist.reshape(self.uhist.shape[0],-1)],axis=1) ######todo MIMO
         yout = self.multi_io_step(uy)
+        if not self.feedthrough:
+            self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
         self.uhist = self.uhist[:,1:]
         return yout
@@ -562,121 +564,10 @@ class System_io(System):
     def get_state(self):
         return [copy.copy(self.uhist), copy.copy(self.yhist)]
 
-class System_bj(System):
-    #work in progress, use at own risk
-
-    #yhat_{t} = f(u_{t-nb:t-1},yhat_{t-na:t-1},y_{t-nc:t-1})
-    def __init__(self,na,nb,nc):
-        #na = length of y hat
-        #nb = length of u
-        #nc = length of y real
-        super(System_bj, self).__init__(None, None) #action_space=None, observation_space=None
-        self.na = na
-        self.nb = nb
-        self.nc = nc
-
-    @property
-    def k0(self):
-        return max(self.na,self.nb,self.nc)
-
-    def reset(self):
-        self.yhisthat = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
-        self.uhist = [0]*(self.nb-1) if self.nu is None else [[0]*self.nu for i in range(self.nb-1)]
-        self.yhistreal = [0]*self.nb if self.ny is None else [[0]*self.ny for i in range(self.nb)]
-        return 0
-
-    def init_state(self,sys_data):
-        #sys_data already normed
-        k0 = max(self.na,self.nb,self.nc)
-        self.yhisthat = list(sys_data.y[k0-self.na:k0])
-        self.yhistreal = list(sys_data.y[k0-self.nc:k0-1])
-        self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
-        #when taking an action uhist gets appended to create the current state
-        return self.yhistreal[-1], k0
-
-    def init_state_multi(self,sys_data,nf=100):
-        k0 = max(self.na,self.nb,self.nc)
-        self.yhisthat = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,na)
-        self.yhistreal = np.array([sys_data.y[k0-self.nc+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,nc)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = 
-        return self.yhisthat[:,-1], k0
-
-    def step(self,action): #normal step
-        self.uhist.append(action)
-        self.yhistreal.append(self.yhisthat[-1])
-
-        uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhisthat).flat,np.array(self.yhistreal).flat),axis=0) #might not be the quickest way
-        yout = self.BJ_step(uy)
-        self.yhistreal.pop(0)
-        self.yhisthat.pop(0)
-        self.uhist.pop(0)
-
-        self.yhisthat.append(yout)
-        return yout
-
-    def step_BJ(self,action,y): #normal step
-        #y = the last output
-        self.uhist.append(action) #append to [u[t-nb],...,u[t-1]]
-        self.yhistreal.append(y) #append to [y[t-nc],...,y[t-1]]
-
-        uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhisthat).flat,np.array(self.yhistreal).flat),axis=0) #might not be the quickest way
-        yout = self.BJ_step(uy)
-        self.yhisthat.append(yout)
-        self.yhisthat.pop(0)
-        self.yhistreal.pop(0) #[y[t-nc-1],...,y[t-1]]
-        self.uhist.pop(0)
-        return yout
-
-    def step_multi(self,actions): #finish this function
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
-        self.yhistreal = np.append(self.yhistreal,self.yhisthat[:,None],axis=1) #(N,nc)
-        uy = np.concatenate([self.uhist,self.yhisthat,self.yhistreal],axis=1)
-        yout = self.multi_BJ_step(uy)
-        self.yhisthat = np.append(self.yhisthat[:,1:],yout[:,None],axis=1)
-        self.uhist = self.uhist[:,1:]
-        self.yhistreal = self.yhistreal[:,1:]
-        return yout
-
-    def step_BJ_multi(self,actions,ys): #normal step
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
-        self.yhistreal = np.append(self.yhistreal,ys[:,None],axis=1) #(N,nc)
-        uy = np.concatenate([self.uhist,self.yhisthat,self.yhistreal],axis=1)
-        yout = self.multi_BJ_step(uy)
-        self.yhisthat = np.append(self.yhisthat[:,1:],yout[:,None],axis=1)
-        self.uhist = self.uhist[:,1:]
-        self.yhistreal = self.yhistreal[:,1:]
-        return yout
-
-    def multi_BJ_step(self,uy):
-        return self.BJ_step(uy)
-
-    def apply_BJ_experiment(self,sys_data):
-        if isinstance(sys_data,(tuple,list,System_data_list)):
-            return System_data_list([self.apply_BJ_experiment(sd) for sd in sys_data])
-        if sys_data.y==None:
-            return self.apply_experiment(sys_data) #bail if y does not exist
-
-        Yhat = []
-        sys_data_norm = self.norm.transform(sys_data)
-        U,Yreal = sys_data_norm.u,sys_data_norm.y
-        obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
-        Yhat.extend(sys_data_norm.y[:k0])
-
-        for k in range(k0,len(U)):
-            Yhat.append(obs)
-            if k<len(U)-1: #skip last step
-                obs = self.step_BJ(U[k],Yreal[k])
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Yhat),normed=True,cheat_n=k0))
-    #continue here
-    # make apply_BJ_experiment
-    # make make_fit_data or something
-    # make loss
-
-
-
 if __name__ == '__main__':
-    # sys = Systems_gyms('MountainCarContinuous-v0')
     pass
+    # sys = Systems_gyms('MountainCarContinuous-v0')
+    # pass
     # sys = Systems_gyms('LunarLander-v2')
     # print(sys.reset())
     # # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve
