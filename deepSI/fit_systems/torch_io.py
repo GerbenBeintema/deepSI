@@ -7,8 +7,9 @@ from torch import nn
 
 
 class Torch_io(System_torch, System_io):
-    def __init__(self, na=5, nb=5):
-        super(Torch_io,self).__init__(na=na,nb=nb)
+    def __init__(self, na=5, nb=5, feedthrough=False):
+        assert feedthrough==False
+        super(Torch_io,self).__init__(na=na,nb=nb, feedthrough=feedthrough)
         
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.net = simple_res_net
@@ -26,7 +27,6 @@ class Torch_io(System_torch, System_io):
         self.ny_real = ny
         self.nu, self.ny = nu if nu is not None else 1, ny if ny is not None else 1 #multi y multi u
         self.gn = self.net(n_in=self.nb*self.nu+self.na*self.ny, n_out=self.ny, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        return list(self.gn.parameters())
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         Loss = torch.zeros(1,dtype=yhist.dtype,device=yhist.device)[0]
@@ -76,7 +76,6 @@ class Torch_io_siso(System_torch, System_io):
         n_in = nu*self.nb + ny*self.na
         IN = [nn.Linear(n_in,64),nn.Tanh(),nn.Linear(64,ny),nn.Flatten()]
         self.net = nn.Sequential(*IN)
-        return self.net.parameters()
 
     def loss(self,hist,Y, **kwargs):
         return torch.mean((self.net(hist)[:,0]-Y)**2)

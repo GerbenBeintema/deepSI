@@ -163,10 +163,14 @@ class System_torch(System_fittable):
         return [item for key,item in self.parameters_with_names.items()]
     @property
     def parameters_with_names(self):
+        if hasattr(self,'excluded_nets_from_parameters'):
+            excluded_nets = self.excluded_nets_from_parameters
+        else:
+            excluded_nets = []
         nns = {d:{'params':self.__getattribute__(d).parameters()} for d in dir(self) if \
-            d not in ['parameters_with_names','parameters'] and isinstance(self.__getattribute__(d),nn.Module   )}
+            d not in ['parameters_with_names','parameters']+excluded_nets and isinstance(self.__getattribute__(d),nn.Module   )}
         pars= {d:{'params':self.__getattribute__(d)}              for d in dir(self) if \
-            d not in ['parameters_with_names','parameters'] and isinstance(self.__getattribute__(d),nn.Parameter)}
+            d not in ['parameters_with_names','parameters']+excluded_nets and isinstance(self.__getattribute__(d),nn.Parameter)}
         return {**nns,**pars}
 
 
