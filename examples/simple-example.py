@@ -9,7 +9,7 @@ class My_system(deepSI.System_ss):
         super(My_system,self).__init__(nx=2)
     def f(self, x, u):
         return x[0]/(1.2+x[1]**2)+x[1]*0.4, x[1]/(1.2+x[0]**2)+x[0]*0.4+u #some non-linear function
-    def h(self, x):
+    def h(self, x, u):
         return x[0]+self.random.normal(scale=0.1,size=()) #add some noise
 
 
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     print(f'NRMS = {test_lin.NRMS(test):.2%}')
 
     fit_sys_encoder = deepSI.fit_systems.SS_encoder(nx=4,na=10,nb=10)
-    fit_sys_encoder.fit(train[1000:],sim_val=train[:1000])
+    fit_sys_encoder.fit(train[1000:],train[:1000])
 
     test_encoder = fit_sys_encoder.apply_experiment(test)
     plt.plot(test.y,label='real')
