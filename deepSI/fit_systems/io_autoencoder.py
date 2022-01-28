@@ -32,7 +32,6 @@ class IO_autoencoder(System_torch):
         self.g_n =         self.net(n_in=self.nz,                     n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         self.f_n =         self.net(n_in=self.nz*self.na + self.nb*nu,n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
         self.g_inv_n =     self.net(n_in=ny,                          n_out=self.nz, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        return list(self.g_n.parameters()) + list(self.f_n.parameters()) + list(self.g_inv_n.parameters())
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         #uhist (s, nb, nu)
@@ -53,27 +52,7 @@ class IO_autoencoder(System_torch):
 
         return Loss1 + Loss2
 
-    ########## How to use ##############
-    def init_state(self,sys_data): #put nf here for n-step error?
-        uhist, yhist, ufuture, yfuture = sys_data[:self.k0].to_hist_future_data(na=self.na,nb=self.nb,nf=0,force_multi_u=True,force_multi_y=True)
-        yhist = torch.tensor(yhist,dtype=torch.float32)
-        uhist = torch.tensor(uhist,dtype=torch.float32)
-
-        yhist_flat = yhist.reshape(-1,yhist.shape[2])  #(s*na, ny)
-        self.zvec = self.g_inv_n(yhist_flat).detach()[None]  #(s*na, ny) -> (s*na, nz) -> (1,na,nz)
-        self.uhist = uhist
-        f_in = torch.cat((self.zvec.flatten(start_dim=1),self.uhist.flatten(start_dim=1)),axis=1) #(s, na*nz) + (s, nb*nu) = (s, na*nz + nb*nu)
-        znext = self.f_n(f_in) # (s, nz)
-
-        y_predict = self.g_n(znext)[0].detach().numpy() # (s, nz) -> (s, ny)
-
-        #advance state
-        self.zvec = torch.cat((self.zvec[:,1:,:],znext[:,None,:]),axis=1) #add to time dime (1, na, nz)
-        self.uhist = self.uhist[:,1:] #(1, nb-1, nu)
-
-        return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
+    def init_state_and_measure_multi(self,sys_data,nf=100,stride=1):
         uhist, yhist, ufuture, yfuture = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,force_multi_u=True,force_multi_y=True)
         yhist = torch.tensor(yhist,dtype=torch.float32)
         uhist = torch.tensor(uhist,dtype=torch.float32)
@@ -89,23 +68,7 @@ class IO_autoencoder(System_torch):
         self.uhist = self.uhist[:,1:] #(1, nb-1, nu)
         return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
 
-    def reset(self): #to be able to use encoder network as a data generator
-        self.state = torch.randn(1,self.nx)
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number or array
-        action = action[None,None] if self.nu is None else action[None,:] #(1,nu)
-        self.uhist = torch.cat((self.uhist, action[:,None,:]),axis=1)
-        f_in = torch.cat((self.zvec.flatten(start_dim=1),self.uhist.flatten(start_dim=1)),axis=1) #(s, na*nz) + (s, nb*nu) = (s, na*nz + nb*nu)
-        znext = self.f_n(f_in) # (s, nz)
-        y_predict = self.g_n(znext)[0].detach().numpy() # (s, nz) -> (s, ny)
-        self.zvec = torch.cat((self.zvec[:,1:,:],znext[:,None,:]),axis=1) #add to time dime (1, na, nz)
-        self.uhist = self.uhist[:,1:] #(1, nb-1, nu)
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step_multi(self,action):
+    def act_measure_multi(self,action):
         action = torch.tensor(action,dtype=torch.float32) #array
         action = action[:,None] if self.nu is None else action
         self.uhist = torch.cat((self.uhist, action[:,None,:]),axis=1)
@@ -114,7 +77,6 @@ class IO_autoencoder(System_torch):
         y_predict = self.g_n(znext).detach().numpy() # (s, nz) -> (s, ny)
         self.zvec = torch.cat((self.zvec[:,1:,:],znext[:,None,:]),axis=1) #add to time dime (1, na, nz)
         self.uhist = self.uhist[:,1:] #(1, nb-1, nu)
-
         return (y_predict[:,0] if self.ny is None else y_predict)
 
 

@@ -23,6 +23,7 @@ def linear_SI_example():
     sys0 = deepSI.fit_systems.SS_linear(A=A,B=B,C=C,D=D)
 
     ## Generate experiment
+    np.random.seed(3)
     sys_data_train = deepSI.System_data(u=np.random.normal(size=1000))
     sys_data_test = deepSI.System_data(u=np.random.normal(size=1000))
 
@@ -45,6 +46,10 @@ def linear_SI_example():
     sys_data_test_predict_IO = fit_sys_IO.apply_experiment(sys_data_test)
     sys_data_test_res_IO = sys_data_test - sys_data_test_predict_IO
 
+    #print NRMS values
+    print(f'Linear SS simulation NRMS={sys_data_test_predict_SS.NRMS(sys_data_test)}')
+    print(f'Linear IO simulation NRMS={sys_data_test_predict_IO.NRMS(sys_data_test)}')
+
     #plot results
     plt.subplot(2,1,1)
     sys_data_test.plot()
@@ -59,6 +64,8 @@ def linear_SI_example():
     plt.legend(['SS','IO'])
     plt.grid()
     plt.show()
+
+
 
 
 

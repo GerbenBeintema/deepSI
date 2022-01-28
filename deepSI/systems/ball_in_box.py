@@ -22,19 +22,17 @@ class Ball_in_box(System_deriv): #discrate system single system
         super(Ball_in_box, self).__init__(dt=dt,nx=2)
         self.action_space = Box(float(-1),float(1),shape=(2,))
 
-    def reset(self):
+    def reset_state(self):
         self.x = [0.5,0.5,0,0] #[x,y,vx,vy]
-        return self.h(self.x) #return position
 
     def deriv(self,x,u): #will be converted by 
         ux,uy = np.clip(u,-1,1)*self.Fmax
-        # print(u)
         x,y,vx,vy = x
         dvxdt = (1/x**2-1/(1-x)**2)/200+ux-self.gamma*vx
         dvydt = (1/y**2-1/(1-y)**2)/200+uy-self.gamma*vy
         return [vx,vy,dvxdt,dvydt]
 
-    def h(self,x):
+    def h(self,x,u):
         return x[0],x[1] #return position
 
 class Ball_in_box_video(Ball_in_box): #discrate system single system
@@ -50,9 +48,8 @@ class Ball_in_box_video(Ball_in_box): #discrate system single system
         self.image_height, self.image_width = image_height, image_width
         super(Ball_in_box_video, self).__init__(Fmax=Fmax)
         self.observation_space = Box(0.,1.,shape=(self.image_height,self.image_width))
-        
 
-    def h(self,x):
+    def h(self,x,u):
         # A = np.zeros((self.image_width,self.image_height))
         Y = np.linspace(0,1,num=self.image_height)
         X = np.linspace(0,1,num=self.image_width)

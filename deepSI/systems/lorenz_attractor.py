@@ -56,14 +56,13 @@ class Lorenz_attractor(System_deriv): #discrate system single system
 
         # self.settings = {**self.settings,**dict(name=self.name,omega0=omega0,Fc=Fc,lin=lin)} #todo seed?
 
-    def reset(self):
+    def reset_state(self):
         x = np.random.uniform(low=[-20,-25,0.9],high=[20,25,50],size=(3,))
         for i in range(500):
             x = self.f(x,0)
         self.x = x
-        return self.h(self.x)
 
-    def h(self,x):
+    def h(self,x,u):
         return x[0]
 
     def deriv(self,x,u): #will be converted by Deriv system
@@ -79,7 +78,7 @@ class Lorenz_attractor(System_deriv): #discrate system single system
         return np.array([xp,yp,zp])
 
 class Lorenz_attractor_sincos(Lorenz_attractor):
-    def h(self,x):
+    def h(self,x,u):
         x,y,z = x
 
         A = x*np.sin(x)

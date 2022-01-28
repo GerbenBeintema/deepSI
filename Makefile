@@ -18,3 +18,7 @@ help:
 # "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
 %: Makefile
 	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+runtests:
+	jupyter nbconvert --to python "examples/Examples 1; The flow of deepSI.ipynb"
+	mv "examples/Examples 1; The flow of deepSI.py" development/

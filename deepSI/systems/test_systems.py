@@ -16,7 +16,7 @@ class Test_ss_linear1(System_ss): #discrate system single system
         x2new = x1*0.5
         return [x1new,x2new]
 
-    def h(self,x):
+    def h(self,x,u):
         x1,x2 = x
         return x1
 
@@ -35,7 +35,7 @@ class  Test_ss_linear2(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
         x2new = x2*0.1 + 0.1*u + self.random.normal(scale=0.5)
         return [x1new,x2new]
 
-    def h(self,x):
+    def h(self,x,u):
         x1,x2 = x
         return x1 + self.random.normal(scale=1)
 

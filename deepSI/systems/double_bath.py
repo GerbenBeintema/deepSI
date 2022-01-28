@@ -22,7 +22,7 @@ class Double_bath(System_ss):
         # vk = np.random.normal(scale=sigmav,size=(N,))
         return [x1new,x2new]
 
-    def h(self,x):
+    def h(self,x,u):
         vk = self.random.normal(scale=self.sigmav)
         return x[0]+vk
 
@@ -66,7 +66,7 @@ class Cascaded_tanks_continuous(System_deriv):
         return [x1,x2]
 
 
-    def h(self,x):
+    def h(self,x,u):
         vk = self.random.normal(scale=self.sigmav)
         return x[1]+vk
 

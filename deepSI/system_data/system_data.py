@@ -70,7 +70,7 @@ class hist_future_dataset(Dataset):
 
 class ss_dataset(Dataset):
     """docstring for ss_dataset"""
-    def __init__(self, u, y, nf=20, dilation=1, force_multi_u=False, force_multi_y=False):
+    def __init__(self, u, y, nf=20, stride=1, force_multi_u=False, force_multi_y=False):
         super(ss_dataset, self).__init__()
         self.u = u
         self.y = y
@@ -94,7 +94,7 @@ class ss_dataset(Dataset):
 
 class encoder_dataset(Dataset):
     """docstring for encoder_dataset"""
-    def __init__(self, u, y, na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False):
+    def __init__(self, u, y, na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False):
         super(encoder_dataset, self).__init__()
         self.u = u
         self.y = y
@@ -238,7 +238,7 @@ class System_data(object):
     ############################
     ###### Transformations #####
     ############################
-    def to_IO_data(self,na=10,nb=10,dilation=1,online_construct=False):
+    def to_IO_data(self,na=10,nb=10,stride=1,online_construct=False, feedthrough=False):
         '''Transforms the system data to Input-Output structure (hist,Y) with y length of na, and u length of nb
 
         Parameters
@@ -261,12 +261,12 @@ class System_data(object):
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         Y = []
-        for k in range(max(na,nb),len(u),dilation):
-            hist.append(np.concatenate((u[k-nb:k].flat,y[k-na:k].flat))) #size = nb*nu + na*ny
+        for k in range(max(na,nb),len(u),stride):
+            hist.append(np.concatenate((u[k-nb:k+feedthrough].flat,y[k-na:k].flat))) #size = nb*nu + na*ny
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+    def to_hist_future_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -299,7 +299,7 @@ class System_data(object):
         uhist = []
         ufuture = []
         yfuture = []
-        for k in range(max(nb,na)+nf,len(u)+1,dilation):
+        for k in range(max(nb,na)+nf,len(u)+1,stride):
             yhist.append(y[k-na-nf:k-nf])
             uhist.append(u[k-nb-nf:k-nf])
             yfuture.append(y[k-nf:k])
@@ -314,14 +314,14 @@ class System_data(object):
         return uhist, yhist, ufuture, yfuture
 
 
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+    def to_ss_data(self,nf=20,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         if online_construct:
             return ss_dataset(self.u, self.y, nf=nf, force_multi_u=force_multi_u,force_multi_y=force_multi_y)
 
         u, y = np.copy(self.u), np.copy(self.y)
         ufuture = []
         yfuture = []
-        for k in range(nf,len(u)+1,dilation):
+        for k in range(nf,len(u)+1,stride):
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
         ufuture, yfuture = np.array(ufuture),np.array(yfuture)
@@ -332,7 +332,7 @@ class System_data(object):
         return ufuture, yfuture
 
 
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+    def to_encoder_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         '''Transforms the system data to encoder structure as structure (hist,ufuture,yfuture) of 
 
         Parameters
@@ -343,7 +343,7 @@ class System_data(object):
             u history considered
         nf : int
             future inputs considered
-        dilation : int
+        stride : int
             skipping data for smaller data set.
         force_multi_u : bool
             converts to ufuture to #(samples, time_seq, nu) always
@@ -360,12 +360,12 @@ class System_data(object):
             array of [y[k],....,y[k+nf-1]]
         '''
         if online_construct:
-            return encoder_dataset(self.u, self.y, na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,force_multi_y=force_multi_y)
+            return encoder_dataset(self.u, self.y, na=na,nb=nb,nf=nf,stride=stride,force_multi_u=force_multi_u,force_multi_y=force_multi_y)
         u, y = np.copy(self.u), np.copy(self.y)
         hist = []
         ufuture = []
         yfuture = []
-        for k in range(max(nb,na)+nf,len(u)+1,dilation):
+        for k in range(max(nb,na)+nf,len(u)+1,stride):
             hist.append(np.concatenate((u[k-nb-nf:k-nf].flat,y[k-na-nf:k-nf].flat)))
             yfuture.append(y[k-nf:k])
             ufuture.append(u[k-nf:k])
@@ -635,19 +635,19 @@ class System_data_list(System_data):
             return System_data_list([sd.reshape_as(other) for sd in self.sdl])
 
     ## Transformations ##
-    def to_IO_data(self,na=10,nb=10,dilation=1,online_construct=False):
-        out = [sys_data.to_IO_data(na=na,nb=nb,dilation=dilation,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
+    def to_IO_data(self,na=10,nb=10,stride=1,online_construct=False,feedthrough=False):
+        out = [sys_data.to_IO_data(na=na,nb=nb,stride=stride,online_construct=online_construct,feedthrough=feedthrough) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_hist_future_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+    def to_hist_future_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,stride=stride,force_multi_u=force_multi_u,\
                 force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_ss_data(self,nf=20,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
-        out = [sys_data.to_ss_data(nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+    def to_ss_data(self,nf=20,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+        out = [sys_data.to_ss_data(nf=nf,stride=stride,force_multi_u=force_multi_u,\
                 force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_encoder_data(self,na=10,nb=10,nf=5,dilation=1,force_multi_u=False,force_multi_y=False,online_construct=False):
-        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,dilation=dilation,force_multi_u=force_multi_u,\
+    def to_encoder_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+        out = [sys_data.to_encoder_data(na=na,nb=nb,nf=nf,stride=stride,force_multi_u=force_multi_u,\
                 force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
 

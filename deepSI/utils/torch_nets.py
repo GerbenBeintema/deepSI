@@ -171,11 +171,17 @@ class Upscale_Conv_block(nn.Module):
         #Nnodes = W*H*N(Cout*4*r**2 + Cin)
 
 class CNN_chained_upscales(nn.Module):
-    def __init__(self, nx, ny, features_out = 1, kernel_size=3, padding='same', \
+    def __init__(self, nx, ny, nu=-1, features_out = 1, kernel_size=3, padding='same', \
                  upscale_factor=2, feature_scale_factor=2, final_padding=4, main_upscale=ConvShuffle, shortcut=ConvShuffle, \
                  padding_mode='zeros', activation=nn.functional.relu):
-
         super(CNN_chained_upscales, self).__init__()
+        self.feedthrough = nu!=-1
+        if self.feedthrough:
+            self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+            FCnet_in = nx + np.prod(self.nu, dtype=int)
+        else:
+            FCnet_in = nx
+        
         self.activation  = activation
         assert isinstance(ny,(list,tuple)) and (len(ny)==2 or len(ny)==3), 'ny should have 2 or 3 dimentions in the form (nchannels, height, width) or (height, width)'
         if len(ny)==2:
@@ -221,11 +227,15 @@ class CNN_chained_upscales(nn.Module):
         self.features0 = int(features_now)
         
         self.upblocks = nn.Sequential(*list(reversed(self.upblocks)))
-        self.FC = simple_res_net(n_in=nx,n_out=self.width0*self.height0*self.features0, n_hidden_layers=1)
+        self.FC = simple_res_net(n_in=FCnet_in,n_out=self.width0*self.height0*self.features0, n_hidden_layers=1)
         self.final_conv = nn.Conv2d(features_out, self.nchannels, kernel_size=3, padding=padding, padding_mode='zeros')
         
-    def forward(self, x):
-        X = self.FC(x).view(-1, self.features0, self.height0, self.width0) 
+    def forward(self, x, u=None):
+        if self.feedthrough:
+            xu = torch.cat([x,u.view(u.shape[0],-1)],dim=1)
+        else:
+            xu = x
+        X = self.FC(xu).view(-1, self.features0, self.height0, self.width0) 
         X = self.upblocks(X)
         X = self.activation(X)
         Xout = self.final_conv(X)

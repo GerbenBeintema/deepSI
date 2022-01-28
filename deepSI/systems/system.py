@@ -16,7 +16,6 @@ def load_system(file):
         import torch
         return torch.load(file)
 
-
 class System(object):
     '''The base System class
 
@@ -51,11 +50,30 @@ class System(object):
         '''
         self.action_space, self.observation_space = action_space, observation_space
         self.norm = System_data_norm()
-        self.fitted = False
+        self.init_model_done = False
         self.unique_code = token_urlsafe(4).replace('_','0').replace('-','a') #random code
         self.seed = 42
-        self.use_norm = True #can be changed later
         self._dt = None
+        self.check_valid_system()
+
+    def exists(self, name):
+        return getattr(self,name).__func__!=getattr(System, name)
+
+    def check_valid_system(self):
+        count = 0
+        if self.exists('act_measure'):
+            count += 1
+            assert self.exists('init_state_and_measure') or self.exists('reset_state_and_measure'), 'act_measure is defined but neither init_state_and_measure or reset_state_and_measure is defined'
+        if self.exists('act_measure_multi'):
+            count += 1
+            assert self.exists('init_state_and_measure_multi'), 'act_measure_multi is defined but init_state_and_measure_multi is not defined'
+        if self.exists('measure_act'):
+            count += 1
+            assert self.exists('init_state') or self.exists('reset_state'), 'measure_act is defined but neither init_state or reset_state is defined'
+        if self.exists('measure_act_multi'):
+            count += 1
+            assert self.exists('init_state_multi'), 'measure_act_multi is defined but init_state_multi is not defined'
+        assert count>0, 'no valid method of using the system has been found. One of [act_measure, act_measure_multi, measure_act, measure_act_multi] should be defined'
 
     @property
     def name(self):
@@ -65,6 +83,22 @@ class System(object):
         if not hasattr(self,'_random'):
             self._random = np.random.RandomState(seed=self.seed)
         return self._random
+    @property
+    def act_measure_sys(self):
+        if   self.measure_act_multi.__func__!=System.measure_act_multi or self.measure_act.__func__!=System.measure_act:
+            return False
+        elif self.act_measure_multi.__func__!=System.act_measure_multi or self.act_measure.__func__!=System.act_measure:
+            return True
+        else:
+            raise ValueError('this is neither a act_measure or a measure_act system, both methods undefined')
+
+    @property
+    def dt(self):
+        return self._dt
+    @dt.setter
+    def dt(self,dt):
+        self._dt = dt
+
     def get_state(self):
         '''state of the system (not the parameters)
 
@@ -73,142 +107,130 @@ class System(object):
         state : the user defined state
         '''
         import warnings
-        warnings.warn('Calling sys.state but no state has been set')
+        warnings.warn('Calling self.get_state but no state has been set')
         return None
-
-    def apply_experiment(self, sys_data, save_state=False, dont_set_initial_state=False): #can put this in apply controller
-        '''Does an experiment with for given a system data (fixed u)
-
-        Parameters
-        ----------
-        sys_data : System_data or System_data_list (or list or tuple)
-            The experiment which should be applied
-
-        Notes
-        -----
-        This will initialize the state using self.init_state if sys_data.y (and u)
-        is not None and skip the appropriate number of steps associated with it.
-        If either is missing than self.reset() is used to initialize the state. 
-        Afterwards this state is advanced using sys_data.u and the output is saved at each step.
-        Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
-        that it can be accounted for later.
-        '''
-
+        
+    def apply_experiment(self, sys_data, save_state=False):
         if isinstance(sys_data,(tuple,list,System_data_list)):
-            assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
+            # assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
-        
+
         dt_old = self.dt
         if sys_data.dt is not None:
             self.dt = sys_data.dt #calls the dt setter
 
-        U, Y = sys_data_norm.u, [] #Y hold the predicted output.
-        if dont_set_initial_state:
-            # x0 is already set correctly
-            # use u0 to get x1 and yhat1
-            # copy 1 element y0 to Y. 
-            if save_state: 
-                x0 = self.get_state()
-            k0 = 1
-            obs = self.step(U[0])
-            if save_state:
-                x1 = self.get_state()
-                X = [x0,x1]
-            Y.extend(sys_data_norm.y[:k0])           
-        elif sys_data_norm.y is not None: #if y is not None than init state
-            obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
-            Y.extend(sys_data_norm.y[:k0]) #h(x_{k0-1})
+        U, Y = sys_data_norm.u, []
+        if sys_data_norm.y is not None:
+            k0 = self.init_state(sys_data_norm)
+            Y.extend(sys_data_norm.y[:k0])
         else:
-            obs, k0 = self.reset(), 0
+            k0, _ = 0, self.reset_state()
+        
+        if save_state:
+            X = [self.get_state()]*k0
 
-        if save_state and not dont_set_initial_state:
-            X = [self.get_state()]*(k0+1)
-
-        for k in range(k0,len(U)):
-            Y.append(obs) 
-            if k<len(U)-1: #skip last step
-                action = U[k]
-                obs = self.step(action) #here
-                if save_state:
-                    X.append(self.get_state())
+        for u in U[k0:]:
+            if save_state:
+                X.append(self.get_state())
+            Y.append(self.measure_act(u)) #also advances state
         
         if dt_old is not None:
             self.dt = dt_old
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))   
-    
-    def apply_controller(self,controller,N_samples):
-        '''Same as self.apply_experiment but with a controller
+        
+        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))  
 
-        Parameters
-        ----------
-        controller : callable
-            when called with the current output it return the next action/input that should be taken
-
-        Notes
-        -----
-        This method is in a very early state and will probably be changed in the near future.
+    def measure_act(self, action):
         '''
-        # if sys_data.dt is not None: #dt check
-        dt_old = self.dt
-        self.dt = sys_data.dt
-        Y = []
-        U = []
-        obs = self.reset() #normed obs
-        for i in range(N_samples):
-            Y.append(obs)
-            action = (controller(obs*self.norm.ystd +self.norm.y0)-self.norm.u0)/self.norm.ustd #transform y and inverse transform resulting action
-            U.append(action)
-            obs = self.step(action)
-        # Y = Y[:-1]
-        # if sys_data.dt is not None:
-        self.dt = dt_old
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),normed=True))
+        1. Measure giving the current state and action
+        2. advance state using action
+        
+        calls measure_act_multi if (measure_act_multi or act_measure_multi is overwritten) was overwritten
+
+        '''
+        if self.exists('measure_act_multi') or self.exists('act_measure_multi'):
+            return self.measure_act_multi([action])[0]
+        
+        if self.exists('act_measure'):
+            last_output, self.current_output = self.current_output, self.act_measure(action)
+            return last_output
+        raise NotImplementedError('measure_act or measure_act_multi or act_measure or act_measure_multi should be implemented in subclass')
+
+    def measure_act_multi(self, actions):
+        '''
+        calls act_measure if it was overwritten otherwise will throw an error
+        '''
+        if self.exists('act_measure_multi'):
+            last_output, self.current_output = self.current_output, self.act_measure_multi(actions)
+            return last_output
+        raise NotImplementedError('measure_act_multi or act_measure_multi should be implemented in subclass')
+        
+    def act_measure(self, action):
+        raise NotImplementedError('act_measure should be implemented in subclass')
+    
+    def act_measure_multi(self, actions):
+        raise NotImplementedError('act_measure_multi should be implemented in subclass')
+
+    def reset_state(self):
+        '''Should reset the internal state
+        
+        if the system is act_measure it will call reset_state_and_measure and save the current output.
+        '''
+        if self.exists('reset_state_and_measure'):
+            self.current_output = self.reset_state_and_measure()
+            return
+        else:
+            raise NotImplementedError('reset should be implemented in subclass')
+    
+    def reset_state_and_measure(self):
+        '''Should reset the internal state and return the current measurement'''
+        raise NotImplementedError('reset_state_and_measure should be implemented in subclass if act_measure or act_measure_multi is defined')
+
+
+    #todo make init state chain.
 
     def init_state(self, sys_data):
-        '''Initialize the internal state of the model using the start of sys_data
-
+        '''initalizes the interal state using the sys_data and returns the number of steps used in the initilization
+        
         Returns
         -------
-        Output : an observation (e.g. floats)
-            The observation/predicted state at time step k0
         k0 : int
-            number of steps that should be skipped
+            number of steps that have been skipped
 
         Notes
         -----
-        Example: x0 = encoder(u[t-k0:k0],yhist[t-k0:k0]), and return h(x0), k0
-        This function is often overwritten in child. As default it will return self.reset(), 0 
+        Example: x[k0] = encoder(u[t-k0:k0],yhist[t-k0:k0]), and k0
+        This function is often overwritten in child. As default it will call self.reset and return 0
         '''
-        return self.reset(), 0
 
-    def init_state_multi(self, sys_data, nf=None, dilation=1):
-        '''Similar to init_state but to initialize multiple states 
-           (used in self.n_step_error and self.one_step_ahead)
+        #self.k0 #need to be given before the function start
+        if self.exists('init_state_multi') or self.exists('init_state_and_measure_multi'):
+            nf = len(sys_data) - self.k0
+            k0 = self.init_state_multi(sys_data,nf=nf)
+            return k0
 
-            Parameters
-            ----------
-            sys_data : System_data
-                Data used to initialize the state
-            nf : int
-                skip the nf last states
-            dilation: int
-                number of states between each state
-           '''
-        raise NotImplementedError('init_state_multi should be implemented in subclass')
+        #warning for if torch fittable?
+        if self.exists('init_state_and_measure'):
+            self.current_output, k0 = self.init_state_and_measure(sys_data)
+            return k0
+        
+        #todo; insert warning if it is a system which expects the initial state to be set
+        self.reset_state() #this can give errors if multi_step is defined but not 
+        return 0
+    
+    def init_state_multi(self, sys_data, nf=None, stride=1):
+        if self.exists('init_state_and_measure_multi'):
+            self.current_output, k0 = self.init_state_and_measure_multi(sys_data, nf=nf, stride=stride)
+            return k0
+        else:
+            raise NotImplementedError('init_state_multi should be defined in child if measure_act_multi also exist')
 
-    def step(self, action):
-        '''Applies the action to the system and returns the new observation, 
-        should always be overwritten in subclass'''
-        raise NotImplementedError('one_step_ahead should be implemented in subclass')
+    def init_state_and_measure(self, sys_data):
+        #todo; insert warting if it is a system which expects the initial state to be set
+        return self.reset_state_and_measure(), 0
 
-    def step_multi(self,actions):
-        '''Applies the actions to the system and returns the new observations'''
-        return self.step(actions)
-
-    def reset(self):
-        '''Should reset the internal state and return the current obs'''
-        raise NotImplementedError('one_step_ahead should be implemented in subclass')
+    def init_state_and_measure_multi(self, sys_data, nf=None, stride=1):
+        raise NotImplementedError('init_state_and_measure_multi called but act_measure_multi is not defined')
 
     def multi_step_ahead(self, sys_data, nf, full=False):
         '''calculates the n-step precition
@@ -230,12 +252,12 @@ class System(object):
                 return [System_data_list(o) for o in zip(*[self.multi_step_ahead(sd, nf, full=True) for sd in sys_data.sdl])]
 
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=1)
-        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=1)
+        obs, k0 = self.init_state_multi(sys_data, nf=nf, stride=1)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, stride=1)
 
         assert full==False
-        for i,unow in enumerate(np.swapaxes(ufuture,0,1)[:-1]):
-            obs = self.step_multi(unow)
+        for i,unow in enumerate(np.swapaxes(ufuture,0,1)):
+            obs = self.measure_act_multi(unow)
         obs = np.concatenate([sys_data.y[:k0+nf-1], obs],axis=0)
 
         sys_data_nstep = System_data(u=sys_data.u, y=obs, normed=True, cheat_n=k0+nf)
@@ -246,14 +268,6 @@ class System(object):
             self.init_state(sys_data) #removes large state
 
         return self.norm.inverse_transform(sys_data_nstep)
-
-    @property
-    def dt(self):
-        return self._dt
-    
-    @dt.setter
-    def dt(self,dt):
-        self._dt = dt
 
     def one_step_ahead(self, sys_data):
         '''One step ahead prediction'''
@@ -269,7 +283,7 @@ class System(object):
         return self.norm.inverse_transform(System_data(u=np.array(sys_data_norm.u),y=np.array(Y),normed=True,cheat_n=k0))   
         # raise NotImplementedError('one_step_ahead is to be implemented')
 
-    def n_step_error(self,sys_data,nf=100,dilation=1,mode='NRMS',mean_channels=True):
+    def n_step_error(self,sys_data,nf=100,stride=1,mode='NRMS',mean_channels=True):
         '''Calculate the expected error after taking n=1...nf steps.
 
         Parameters
@@ -277,7 +291,7 @@ class System(object):
         sys_data : System_data
         nf : int
             upper bound of n.
-        dilation : int
+        stride : int
             passed to init_state_multi to reduce memory cost.
         mode : str or System_data_norm
             'NRMS', 'RMS', 'RMS_sys_norm' or a System_data_norm for 
@@ -300,22 +314,21 @@ class System(object):
         else:
             raise ValueError("The mode of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
 
-        Losses = self.n_step_error_per_channel(sys_data, nf=nf, dilation=dilation)/norm.ystd
+        Losses = self.n_step_error_per_channel(sys_data, nf=nf, stride=stride)/norm.ystd
         if mean_channels==False:
             return Losses
         else:
             return np.array([np.mean(a) for a in Losses])
 
-
-    def n_step_error_per_channel(self, sys_data, nf=100, dilation=1):
-        '''Calculate the expected error after taking n=1...nf steps, returns the shape (nf, ny) or nf if ny is None
+    def n_step_error_per_channel(self, sys_data, nf=100, stride=1):
+        '''Calculate the expected error after taking n=0...nf-1 steps, returns the shape (nf, ny) or nf if ny is None
 
         Parameters
         ----------
         sys_data : System_data
         nf : int
             upper bound of n.
-        dilation : int
+        stride : int
             passed to init_state_multi to reduce memory costs.
         '''
         if isinstance(sys_data,(list,tuple)):
@@ -326,35 +339,37 @@ class System(object):
         self.dt = sys_data.dt
 
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf, dilation=dilation)
-        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, dilation=dilation)
+        k0 = self.init_state_multi(sys_data, nf=nf, stride=stride)
+        _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, stride=stride)
 
         Losses = []
         for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
+            obs = self.measure_act_multi(unow)
             Losses.append(np.mean((ynow-obs)**2,axis=0)**0.5)
-            obs = self.step_multi(unow)
 
         if isinstance(sys_data,System_data_list):
             self.init_state(sys_data[0]) #removes large state
         else:
             self.init_state(sys_data) #removes large state
-        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
-        self.dt = dt_old
         
-        return np.array(Losses)
-    def n_step_error_plot(self, sys_data, nf=100, dilation=1, RMS=False, show=True):
-        Losses = self.n_step_error(sys_data,nf=nf,dilation=dilation,RMS=RMS)
+        if dt_old is not None:
+            self.dt = dt_old
+
+        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
+
+    def n_step_error_plot(self, sys_data, nf=100, stride=1, mode='NRMS', mean_channels=True, show=True):
+        Losses = self.n_step_error(sys_data, nf=nf, stride=stride, mode=mode, mean_channels=mean_channels)
         if sys_data.dt is not None:
             dt = sys_data.dt
         else:
             dt = self.dt if self.dt is not None else 1
         tar = np.arange(nf)*dt
         plt.plot(tar,Losses)
-        plt.xlabel('time-error' if dt!=1 else 'n-step-error')
-        plt.ylabel('NRMS' if RMS==False else 'RMS')
+        plt.xlabel(f'Time (sec) (dt={dt})' if dt!=1 else 'index time')
+        plt.ylabel(mode)
+        plt.grid()
         if show:
             plt.show()
-
 
     def save_system(self,file):
         '''Save the system using pickle
@@ -392,8 +407,8 @@ class System(object):
             exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
 
-class Systems_gyms(System):
-    """docstring for Systems_gyms"""
+class System_gym(System):
+    """docstring for System_gym"""
     def __init__(self, env, env_kwargs=dict(), n=None):
         if isinstance(env,gym.Env):
             assert n==None, 'if env is already a gym environment than n cannot be given'
@@ -403,12 +418,12 @@ class Systems_gyms(System):
             self.env = gym.make(env,**env_kwargs)
         else:
             raise NotImplementedError('n requires implementation later')
-        super(Systems_gyms, self).__init__(action_space=self.env.action_space, observation_space=self.env.observation_space)
+        super(System_gym, self).__init__(action_space=self.env.action_space, observation_space=self.env.observation_space)
 
-    def reset(self):
+    def reset_state_and_measure(self):
         return self.env.reset()
         
-    def step(self,action):
+    def act_measure(self,action):
         '''Applies the action to the systems and returns the new observation'''
         obs, reward, done, info = self.env.step(action)
         self.done = done
@@ -428,22 +443,19 @@ class System_ss(System): #simple state space systems
         self.nu = nu
         self.ny = ny
 
+    def reset_state(self):
         self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
 
-    def reset(self):
-        self.x = np.zeros((self.nx,) if isinstance(self.nx,int) else self.nx)
-        return self.h(self.x)
-
-    def step(self,action):
+    def measure_act(self,action):
+        y = self.h(self.x, action)
         self.x = self.f(self.x,action)
-        return self.h(self.x)
-    # def step_multi(self,actions)
+        return y
 
     def f(self,x,u):
         '''x[k+1] = f(x[k],u[k])'''
         raise NotImplementedError('f and h should be implemented in child')
-    def h(self,x):
-        '''y[k] = h(x[k])'''
+    def h(self,x,u): 
+        '''y[k] = h(x[k],u[k])'''
         raise NotImplementedError('f and h should be implemented in child')
 
     def get_state(self):
@@ -452,9 +464,8 @@ class System_ss(System): #simple state space systems
 
 from scipy.integrate import solve_ivp
 class System_deriv(System_ss):
-    ''''''
-
-    def __init__(self,dt=None,nx=None,nu=None,ny=None,method='RK4'):
+    '''ZOH integration for datageneration'''
+    def __init__(self, dt=None, nx=None, nu=None, ny=None, method='RK4'):
         super(System_deriv, self).__init__(nx, nu, ny)
         self.dt = dt
         self.method = method
@@ -482,7 +493,7 @@ class System_deriv(System_ss):
 
 
 class System_io(System):
-    def __init__(self,na, nb, nu=None, ny=None): #(u,y)
+    def __init__(self,na, nb, nu=None, ny=None, feedthrough=False): #(u,y)
         action_shape = tuple() if nu is None else (nu,) #repeated code
         observation_shape = tuple() if ny is None else (ny,)
         action_space = Box(-float('inf'), float('inf'), shape=action_shape)
@@ -493,46 +504,53 @@ class System_io(System):
         self.na = na #hist length of y
         self.nu = nu
         self.ny = ny
+        self.feedthrough = feedthrough
         #y[k] = step(u[k-nb,k-1],y[k-na,...,k-1])
         #y[k+1] = step(u[k-nb+1,k],y[k-na-1,...,k])
         self.reset()
 
     def reset(self):
         self.yhist = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
-        self.uhist = [0]*(self.nb-1) if self.nu is None else [[0]*self.nu for i in range(self.nb-1)]
+        self.uhist = [0]*self.nb if self.nu is None else [[0]*self.nu for i in range(self.nb)]
         return 0
 
     @property
     def k0(self):
         return max(self.na,self.nb)
 
-    def init_state(self,sys_data):
+    def init_state(self, sys_data):
         #sys_data already normed
-        k0 = max(self.na,self.nb)
+        k0 = self.k0
         self.yhist = list(sys_data.y[k0-self.na:k0])
-        self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
+        self.uhist = list(sys_data.u[k0-self.nb:k0]) #how it is saved, len(yhist) = na, len(uhist) = nb-1 or nb if feedthrough
         #when taking an action uhist gets appended to create the current state
-        return sys_data.y[k0-1], k0
+        return k0
 
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        k0 = max(self.na,self.nb)
-        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = 
-        return self.yhist[:,-1], k0
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        k0 = self.k0
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,nb-1(+1)) +1 if feedthrough
+        return k0
 
-    def step(self,action):
-        self.uhist.append(action)
+    def measure_act(self, action):
+        if self.feedthrough:
+            self.uhist.append(action) #add current output only when feedthrough is enabled
         uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhist).flat),axis=0) #might not be the quickest way
         yout = self.io_step(uy)
+        if not self.feedthrough:
+            self.uhist.append(action)
         self.yhist.append(yout)
         self.yhist.pop(0)
         self.uhist.pop(0)
         return yout
 
-    def step_multi(self,actions):
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
+    def measure_act_multi(self,actions):
+        if self.feedthrough:
+            self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         uy = np.concatenate([self.uhist.reshape(self.uhist.shape[0],-1),self.yhist.reshape(self.uhist.shape[0],-1)],axis=1) ######todo MIMO
         yout = self.multi_io_step(uy)
+        if not self.feedthrough:
+            self.uhist = np.append(self.uhist,actions[:,None],axis=1)
         self.yhist = np.append(self.yhist[:,1:],yout[:,None],axis=1)
         self.uhist = self.uhist[:,1:]
         return yout
@@ -546,121 +564,10 @@ class System_io(System):
     def get_state(self):
         return [copy.copy(self.uhist), copy.copy(self.yhist)]
 
-class System_bj(System):
-    #work in progress, use at own risk
-
-    #yhat_{t} = f(u_{t-nb:t-1},yhat_{t-na:t-1},y_{t-nc:t-1})
-    def __init__(self,na,nb,nc):
-        #na = length of y hat
-        #nb = length of u
-        #nc = length of y real
-        super(System_bj, self).__init__(None, None) #action_space=None, observation_space=None
-        self.na = na
-        self.nb = nb
-        self.nc = nc
-
-    @property
-    def k0(self):
-        return max(self.na,self.nb,self.nc)
-
-    def reset(self):
-        self.yhisthat = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
-        self.uhist = [0]*(self.nb-1) if self.nu is None else [[0]*self.nu for i in range(self.nb-1)]
-        self.yhistreal = [0]*self.nb if self.ny is None else [[0]*self.ny for i in range(self.nb)]
-        return 0
-
-    def init_state(self,sys_data):
-        #sys_data already normed
-        k0 = max(self.na,self.nb,self.nc)
-        self.yhisthat = list(sys_data.y[k0-self.na:k0])
-        self.yhistreal = list(sys_data.y[k0-self.nc:k0-1])
-        self.uhist = list(sys_data.u[k0-self.nb:k0-1]) #how it is saved, len(yhist) = na, len(uhist) = nb-1
-        #when taking an action uhist gets appended to create the current state
-        return self.yhistreal[-1], k0
-
-    def init_state_multi(self,sys_data,nf=100):
-        k0 = max(self.na,self.nb,self.nc)
-        self.yhisthat = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,na)
-        self.yhistreal = np.array([sys_data.y[k0-self.nc+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = (N,nc)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1)]) #+1? #shape = 
-        return self.yhisthat[:,-1], k0
-
-    def step(self,action): #normal step
-        self.uhist.append(action)
-        self.yhistreal.append(self.yhisthat[-1])
-
-        uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhisthat).flat,np.array(self.yhistreal).flat),axis=0) #might not be the quickest way
-        yout = self.BJ_step(uy)
-        self.yhistreal.pop(0)
-        self.yhisthat.pop(0)
-        self.uhist.pop(0)
-
-        self.yhisthat.append(yout)
-        return yout
-
-    def step_BJ(self,action,y): #normal step
-        #y = the last output
-        self.uhist.append(action) #append to [u[t-nb],...,u[t-1]]
-        self.yhistreal.append(y) #append to [y[t-nc],...,y[t-1]]
-
-        uy = np.concatenate((np.array(self.uhist).flat,np.array(self.yhisthat).flat,np.array(self.yhistreal).flat),axis=0) #might not be the quickest way
-        yout = self.BJ_step(uy)
-        self.yhisthat.append(yout)
-        self.yhisthat.pop(0)
-        self.yhistreal.pop(0) #[y[t-nc-1],...,y[t-1]]
-        self.uhist.pop(0)
-        return yout
-
-    def step_multi(self,actions): #finish this function
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
-        self.yhistreal = np.append(self.yhistreal,self.yhisthat[:,None],axis=1) #(N,nc)
-        uy = np.concatenate([self.uhist,self.yhisthat,self.yhistreal],axis=1)
-        yout = self.multi_BJ_step(uy)
-        self.yhisthat = np.append(self.yhisthat[:,1:],yout[:,None],axis=1)
-        self.uhist = self.uhist[:,1:]
-        self.yhistreal = self.yhistreal[:,1:]
-        return yout
-
-    def step_BJ_multi(self,actions,ys): #normal step
-        self.uhist = np.append(self.uhist,actions[:,None],axis=1)
-        self.yhistreal = np.append(self.yhistreal,ys[:,None],axis=1) #(N,nc)
-        uy = np.concatenate([self.uhist,self.yhisthat,self.yhistreal],axis=1)
-        yout = self.multi_BJ_step(uy)
-        self.yhisthat = np.append(self.yhisthat[:,1:],yout[:,None],axis=1)
-        self.uhist = self.uhist[:,1:]
-        self.yhistreal = self.yhistreal[:,1:]
-        return yout
-
-    def multi_BJ_step(self,uy):
-        return self.BJ_step(uy)
-
-    def apply_BJ_experiment(self,sys_data):
-        if isinstance(sys_data,(tuple,list,System_data_list)):
-            return System_data_list([self.apply_BJ_experiment(sd) for sd in sys_data])
-        if sys_data.y==None:
-            return self.apply_experiment(sys_data) #bail if y does not exist
-
-        Yhat = []
-        sys_data_norm = self.norm.transform(sys_data)
-        U,Yreal = sys_data_norm.u,sys_data_norm.y
-        obs, k0 = self.init_state(sys_data_norm) #is reset if init_state is not defined #normed obs
-        Yhat.extend(sys_data_norm.y[:k0])
-
-        for k in range(k0,len(U)):
-            Yhat.append(obs)
-            if k<len(U)-1: #skip last step
-                obs = self.step_BJ(U[k],Yreal[k])
-        return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Yhat),normed=True,cheat_n=k0))
-    #continue here
-    # make apply_BJ_experiment
-    # make make_fit_data or something
-    # make loss
-
-
-
 if __name__ == '__main__':
-    # sys = Systems_gyms('MountainCarContinuous-v0')
     pass
+    # sys = Systems_gyms('MountainCarContinuous-v0')
+    # pass
     # sys = Systems_gyms('LunarLander-v2')
     # print(sys.reset())
     # # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve

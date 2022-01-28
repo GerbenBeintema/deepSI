@@ -1,5 +1,5 @@
 
-from deepSI.systems.system import System, System_io, System_data, load_system, System_bj
+from deepSI.systems.system import System, System_io, System_data, load_system
 import numpy as np
 from deepSI.datasets import get_work_dirs
 import deepSI
@@ -12,24 +12,28 @@ import os.path
 from torch.utils.data import Dataset, DataLoader
 import itertools
 from copy import deepcopy
+import warnings
 
 class System_fittable(System):
     """Subclass of system which introduces a .fit method which calls ._fit to fit the systems
 
     Notes
     -----
-    This function will automaticly fit the normalization in self.norm if self.use_norm is set to True (default). 
-    Lastly it will set self.fitted to True which will keep the norm constant. 
+    This function will automaticly fit the normalization in self.norm if auto_fit_norm is set to True (default). 
+    Lastly it will set self.init_model_done to True which will keep the norm constant. 
     """
-    def fit(self, sys_data, **kwargs):
-        if self.fitted==False:
-            if self.use_norm: #if the norm is not used you can also manually initialize it.
-                #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
-                self.norm.fit(sys_data)
-            self.nu = sys_data.nu
-            self.ny = sys_data.ny
-        self._fit(self.norm.transform(sys_data), **kwargs)
-        self.fitted = True
+    def init_model(self, sys_data=None, nu=-1, ny=-1, auto_fit_norm=True):
+        if auto_fit_norm: #if the norm is not used you can also manually initialize it.
+            #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
+            self.norm.fit(sys_data)
+        self.nu = sys_data.nu
+        self.ny = sys_data.ny
+        self.init_model_done = True
+
+    def fit(self, train_sys_data, auto_fit_norm=True, **kwargs):
+        if self.init_model_done==False:
+            self.init_model(train_sys_data, auto_fit_norm=auto_fit_norm)            
+        self._fit(self.norm.transform(train_sys_data), **kwargs)
 
     def _fit(self, normed_sys_data, **kwargs):
         raise NotImplementedError('_fit or fit should be implemented in subclass')
@@ -68,11 +72,6 @@ class System_torch(System_fittable):
             The shape of the input u
         ny : None, int or tuple
             The shape of the output y
-
-        Returns
-        -------
-        parameters : list
-            List of the network parameters
         '''
         raise NotImplementedError('init_nets should be implemented in subclass')
 
@@ -111,7 +110,7 @@ class System_torch(System_fittable):
 
         Parameters
         ----------
-        parameters : list
+        parameters : list or list of dict
             system torch parameters
         optimizer_kwargs : dict
             If 'optimizer' is defined than that optimizer will be used otherwise Adam will be used.
@@ -123,7 +122,7 @@ class System_torch(System_fittable):
             del optimizer_kwargs['optimizer']
         else:
             optimizer = torch.optim.Adam
-        return optimizer(parameters,**optimizer_kwargs) 
+        return optimizer(parameters,**optimizer_kwargs)
 
     def init_scheduler(self, **scheduler_kwargs):
         '''Optionally defined in subclass to create the scheduler
@@ -140,59 +139,137 @@ class System_torch(System_fittable):
         del scheduler_kwargs['scheduler']
         return scheduler(self.optimizer,**scheduler_kwargs)
 
+    def init_model(self, sys_data=None, nu=-1, ny=-1, device='cpu', auto_fit_norm=True, optimizer_kwargs={}, parameters_optimizer_kwargs={}, scheduler_kwargs={}):
+        '''This function set the nu and ny, inits the network, moves parameters to device, initilizes optimizer and initilizes logging parameters'''
+        if sys_data==None:
+            assert nu!=-1 and ny!=-1, 'either sys_data or (nu and ny) should be provided'
+            self.nu, self.ny = nu, ny
+        else:
+            self.nu, self.ny = sys_data.nu, sys_data.ny
+            if auto_fit_norm:
+                if not self.norm.is_id:
+                    warnings.warn('Fitting the norm due to auto_fit_norm=True')
+                self.norm.fit(sys_data)
+        self.init_nets(self.nu, self.ny)
+        self.to_device(device=device)
+        parameters_and_optim = [{**item,**parameters_optimizer_kwargs.get(name,{})} for name,item in self.parameters_with_names.items()]
+        self.optimizer = self.init_optimizer(parameters_and_optim, **optimizer_kwargs)
+        self.scheduler = self.init_scheduler(**scheduler_kwargs)
+        self.bestfit = float('inf')
+        self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
+        self.init_model_done = True
+    @property
+    def parameters(self):
+        return [item for key,item in self.parameters_with_names.items()]
+    @property
+    def parameters_with_names(self):
+        if hasattr(self,'excluded_nets_from_parameters'):
+            excluded_nets = self.excluded_nets_from_parameters
+        else:
+            excluded_nets = []
+        nns = {d:{'params':self.__getattribute__(d).parameters()} for d in dir(self) if \
+            d not in ['parameters_with_names','parameters']+excluded_nets and isinstance(self.__getattribute__(d),nn.Module   )}
+        pars= {d:{'params':self.__getattribute__(d)}              for d in dir(self) if \
+            d not in ['parameters_with_names','parameters']+excluded_nets and isinstance(self.__getattribute__(d),nn.Parameter)}
+        return {**nns,**pars}
 
-    def fit(self, sys_data, epochs=30, batch_size=256, loss_kwargs={}, optimizer_kwargs={}, \
-            sim_val=None, concurrent_val=False, timeout=None, verbose=1, cuda=False, val_frac=0.2, \
-            sim_val_fun='NRMS', sqrt_train=True, loss_val=None, num_workers_data_loader=0, \
-            print_full_time_profile=False, scheduler_kwargs={}):
+
+    def cal_validation_error(self, val_sys_data, validation_measure='sim-NRMS'):
+        '''possible validation_measure are
+        'sim-NRMS'
+        'sim-NRMS_mean_channel'
+        'sim-NRMS_per_channels' (and others defined in System_data)
+        'sim-NRMS_sys_norm'
+        
+        '10-step-NRMS' or '10-step-average-NRMS'
+        '10-step-last-NRMS'
+        '10-step-last-RMS'
+        '10-step-[w0,w1,w2,w3,w4,w5,w6,w7,w8,w9]-NRMS' weighted mean 10-step-error
+        
+        #todo;
+        User given callback. (overwrite this function?)
+        'loss'  #todo
+        'sim-inno' #todo
+        '''
+        if validation_measure.find('sim')==0:
+            val_sys_data_sim = self.apply_experiment(val_sys_data)
+            sim_val_fun = validation_measure.split('-')[1]
+            if sim_val_fun=='NRMS_sys_norm':
+                return self.norm.transform(val_sys_data_sim).RMS(self.norm.transform(val_sys_data))
+            else:
+                return val_sys_data_sim.__getattribute__(sim_val_fun)(val_sys_data)
+        elif validation_measure.find('step')!=-1:
+            splitted = validation_measure.split('-')
+            nstep = int(splitted[0])
+            mode = splitted[-1]
+            n_step_error = self.n_step_error(val_sys_data, nf=nstep, stride=1, mode=mode, mean_channels=True)
+
+            if len(splitted)==3:
+                average_method = 'average'
+            else:
+                average_method = splitted[2]
+            if average_method[0]=='[':
+                w = np.array([float(a) for a in average_method[1:-1].split(',')])
+                return np.sum(w*n_step_error)/np.sum(w)
+            elif average_method=='average':
+                return np.mean(n_step_error)
+            elif average_method=='last':
+                return n_step_error[-1]
+        NotImplementedError(f'validation_measure={validation_measure} not implemented, use one as "sim-NRMS", "sim-NRMS_mean_channels", "10-step-average-NRMS", ect.')
+
+    def fit(self, train_sys_data, val_sys_data, epochs=30, batch_size=256, loss_kwargs={}, \
+            auto_fit_norm=True, validation_measure='sim-NRMS', optimizer_kwargs={}, concurrent_val=False, cuda=False, \
+            timeout=None, verbose=1, sqrt_train=True, num_workers_data_loader=0, print_full_time_profile=False, scheduler_kwargs={}):
         '''The batch optimization method with parallel validation, 
 
         Parameters
         ----------
-        sys_data : System_data or System_data_list
+        train_sys_data : System_data or System_data_list
             The system data to be fitted
+        val_sys_data : System_data or System_data_list
+            The validation system data after each used after each epoch for early stopping. Use the keyword argument validation_measure to specify which measure should be used. 
         epochs : int
         batch_size : int
         loss_kwargs : dict
             The Keyword Arguments to be passed to the self.make_training_data and self.loss of the current fit_system.
+        auto_fit_norm : boole
+            If true will use self.norm.fit(train_sys_data) which will fit it element wise. 
+        validation_measure : str
+            Specify which measure should be used for validation, e.g. 'sim-RMS', 'sim-NRMS_mean_channel', 'sim-NRMS_sys_norm', ect. See self.cal_validation_error for details.
         optimizer_kwargs : dict
-            The Keyword Arguments to be passed on to init_optimizer.
-        sim_val : System_data or System_data_list
-            The system data to be used as simulation validation using apply_experiment (if absent than a portion of the training data will be used)
+            The Keyword Arguments to be passed on to init_optimizer. notes; init_optimizer['optimizer'] is the optimization function used (default torch.Adam)
+            and optimizer_kwargs['parameters_optimizer_kwargs'] the learning rates and such for the different elements of the models. see https://pytorch.org/docs/stable/optim.html
         concurrent_val : boole
             If set to true a subprocess will be started which concurrently evaluates the validation method selected.
             Warning: if concurrent_val is set than "if __name__=='__main__'" or import from a file if using self defined method or networks.
+        cuda : bool
+            if cuda will be used (often slower than not using it, be aware)
         timeout : None or number
             Alternative to epochs to run until a set amount of time has past. 
         verbose : int
             Set to 0 for a silent run
-        cuda : bool
-            if cuda will be used (often slower than not using it, be aware)
-        val_frac : float
-            if sim_val is absent a portion will be splitted from the training data to act as validation set using the loss method.
-        sim_val_fun : str
-            method on system_data invoked if sim_val is used.
         sqrt_train : boole
             will sqrt the loss while printing
+        num_workers_data_loader : int
+            see https://pytorch.org/docs/stable/data.html
+        print_full_time_profile : boole
+            will print the full time profile, useful for debugging and basic process optimization. 
+        scheduler_kwargs : dict
+            learning rate scheduals are a work in progress.
         
         Notes
         -----
         This method implements a batch optimization method in the following way; each epoch the training data is scrambled and batched where each batch
-        is passed to the loss method and utilized to optimize the parameters. After each epoch the systems is validated using the evaluation of a 
-        simulation or a validation split and a checkpoint will be crated if a new lowest validation loss has been achieved. (or concurrently if concurrent_val is set)
+        is passed to the self.loss method and utilized to optimize the parameters. After each epoch the systems is validated using the evaluation of a 
+        simulation or a validation split and a checkpoint will be crated if a new lowest validation loss has been achieved. (or concurrently if concurrent_val=True)
         After training (which can be stopped at any moment using a KeyboardInterrupt) the system is loaded with the lowest validation loss. 
 
         The default checkpoint location is "C:/Users/USER/AppData/Local/deepSI/checkpoints" for windows and ~/.deepSI/checkpoints/ for unix like.
         These can be loaded manually using sys.load_checkpoint("_best") or "_last". (For this to work the sys.unique_code needs to be set to the correct string)
         '''
         def validation(train_loss=None, time_elapsed_total=None):
-            self.eval(); self.cpu();
-            if sim_val is not None:
-                sim_val_predict = self.apply_experiment(sim_val)
-                Loss_val = sim_val_predict.__getattribute__(sim_val_fun)(sim_val)
-            else:
-                with torch.no_grad():
-                    Loss_val = self.loss(*data_val,**loss_kwargs).item()
+            self.eval(); self.cpu()
+            Loss_val = self.cal_validation_error(val_sys_data, validation_measure=validation_measure)
             self.Loss_val.append(Loss_val)
             self.Loss_train.append(train_loss)
             self.time.append(time_elapsed_total)
@@ -207,24 +284,22 @@ class System_torch(System_fittable):
             return Loss_val
         
         ########## Initialization ##########
-        if self.fitted==False:
-            if self.use_norm: #if the norm is not used you can also manually initialize it.
-                #you may consider not using the norm if you have constant values in your training data which can change. They are known to cause quite a number of bugs and errors. 
-                self.norm.fit(sys_data)
-            self.nu = sys_data.nu
-            self.ny = sys_data.ny
-            self.parameters = list(self.init_nets(self.nu,self.ny))
-            if cuda:
-                self.cuda() #for some models I have to do this for other I can create the optimizer before moving to cuda?
-            self.optimizer = self.init_optimizer(self.parameters,**optimizer_kwargs) #cuda should be done here or not?
-            self.scheduler = self.init_scheduler(**scheduler_kwargs)
-            self.bestfit = float('inf')
-            self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
-            self.fitted = True
+        if self.init_model_done==False:
+            if verbose: print('Initilizing the model and optimizer')
+            device = 'cuda' if cuda else 'cpu'
+            optimizer_kwargs = deepcopy(optimizer_kwargs)
+            parameters_optimizer_kwargs = optimizer_kwargs.get('parameters_optimizer_kwargs',{})
+            if parameters_optimizer_kwargs:
+                del optimizer_kwargs['parameters_optimizer_kwargs']
+            self.init_model(sys_data=train_sys_data, device=device, auto_fit_norm=auto_fit_norm, optimizer_kwargs=optimizer_kwargs,\
+                    parameters_optimizer_kwargs=parameters_optimizer_kwargs, scheduler_kwargs=scheduler_kwargs)
+        else:
+            if verbose: print('Model already initilized (init_model_done=True), skipping initilizing of the model, the norm and the creation of the optimizer')
 
         if self.scheduler==False and verbose:
             print('!!!! Your might be continuing from a save which had scheduler but which was removed during saving... check this !!!!!!')
-        self.dt = sys_data.dt
+        
+        self.dt = train_sys_data.dt
         if cuda: 
             self.cuda()
         self.train()
@@ -234,22 +309,8 @@ class System_torch(System_fittable):
         extra_t            = 0 if len(self.time)    ==0 else self.time[-1] #correct timer after restart
 
         ########## Getting the data ##########
-        data_full = self.make_training_data(self.norm.transform(sys_data), **loss_kwargs) #this can return a list of numpy arrays or a torch.utils.data.Dataset instance
-        if not isinstance(data_full, Dataset) and verbose: print_array_byte_size(sum([d.nbytes for d in data_full]))
-
-        ########## datasplitting ##########
-        if sim_val is not None:
-            data_train = data_full
-            data_val = None
-        elif loss_val is not None: #is not used that often
-            data_train = data_full
-            data_val = [torch.tensor(a, dtype=torch.float32) for a in self.make_training_data(self.norm.transform(loss_val), **loss_kwargs)]
-        else: #split off some data from the main dataset
-            from sklearn.model_selection import train_test_split
-            assert isinstance(data_full, Dataset)==False, 'not yet implemented, give a sim_val or loss_val dataset to '
-            datasplitted = [torch.tensor(a, dtype=torch.float32) for a in train_test_split(*data_full,random_state=42)] # (A1_train, A1_test, A2_train, A2_test)
-            data_train = [datasplitted[i] for i in range(0,len(datasplitted),2)]
-            data_val = [datasplitted[i] for i in range(1,len(datasplitted),2)]
+        data_train = self.make_training_data(self.norm.transform(train_sys_data), **loss_kwargs)
+        if not isinstance(data_train, Dataset) and verbose: print_array_byte_size(sum([d.nbytes for d in data_train]))
 
         #### transforming it back to a list to be able to append. ########
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
@@ -259,7 +320,6 @@ class System_torch(System_fittable):
         N_training_samples = len(data_train) if isinstance(data_train, Dataset) else len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
-        val_str = sim_val_fun if sim_val is not None else 'loss' #for correct printing
         if verbose>0: 
             print(f'N_training_samples = {N_training_samples}, batch_size = {batch_size}, N_batch_updates_per_epoch = {N_batch_updates_per_epoch}')
         
@@ -272,12 +332,12 @@ class System_torch(System_fittable):
             data_train_loader = My_Simple_DataLoader(data_train, batch_size=batch_size) #is quite a bit faster for low data situations
 
         if concurrent_val:
-            self.remote_start(sim_val, data_val, sim_val_fun, loss_kwargs)
+            self.remote_start(val_sys_data, validation_measure)
             self.remote_send(float('nan'), extra_t)
         else: #start with the initial validation 
             validation(train_loss=float('nan'), time_elapsed_total=extra_t) #also sets current model to cuda
             if verbose: 
-                print(f'Initial Validation {val_str}=', self.Loss_val[-1])
+                print(f'Initial Validation {validation_measure}=', self.Loss_val[-1])
 
         try:
             t = Tictoctimer()
@@ -348,7 +408,7 @@ class System_torch(System_fittable):
                 if verbose>0:
                     time_elapsed = time.time() - start_t
                     if bestfit_old > self.bestfit:
-                        print(f'########## New lowest validation loss achieved ########### {val_str} = {self.bestfit}')
+                        print(f'########## New lowest validation loss achieved ########### {validation_measure} = {self.bestfit}')
                         best_epoch = epoch+1
                     if concurrent_val: #if concurrent val than print validation freq
                         val_feq = val_counter/(epoch+1)
@@ -357,7 +417,7 @@ class System_torch(System_fittable):
                         valfeqstr = f''
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
                     Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)!=0 else float('nan')
-                    Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {val_str} {Loss_val_now:6.4}'
+                    Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {validation_measure} {Loss_val_now:6.4}'
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
                     time_str = f'Time Loss: {loss_time:.1%}, data: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
                     self.batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
@@ -373,7 +433,7 @@ class System_torch(System_fittable):
         except KeyboardInterrupt:
             print('Stopping early due to a KeyboardInterrupt')
 
-        self.train(); self.cpu();
+        self.train(); self.cpu()
         del data_train_loader
 
         ####### end of training concurrent things #####
@@ -395,7 +455,7 @@ class System_torch(System_fittable):
         except FileNotFoundError:
             print('no best checkpoint found keeping last')
         if verbose: 
-            print(f'Loaded model with best known validation {val_str} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
+            print(f'Loaded model with best known validation {validation_measure} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
 
     ########## Saving and loading ############
     def checkpoint_save_system(self, name='_best', directory=None):
@@ -407,7 +467,7 @@ class System_torch(System_fittable):
         file = os.path.join(directory,self.name + name + '.pth')
         try:
             self.__dict__ = torch.load(file)
-            if self.fitted:
+            if self.init_model_done:
                 self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
                 for i in np.where(np.isnan(self.Loss_train))[0]:
                     if i!=len(self.Loss_train)-1: #if the last is NaN than I will leave it there. Something weird happened like breaking before one validation loop was completed. 
@@ -431,8 +491,10 @@ class System_torch(System_fittable):
         self.to_device('cpu')
     def to_device(self,device):
         for d in dir(self):
+            if d in ['parameters_with_names','parameters']:
+                continue
             attribute = self.__getattribute__(d)
-            if isinstance(attribute,nn.Module):
+            if isinstance(attribute,(nn.Module,nn.Parameter)):
                 attribute.to(device)
             elif isinstance(attribute, torch.optim.Optimizer):
                 for key,item in attribute.state.items():
@@ -451,11 +513,11 @@ class System_torch(System_fittable):
                 attribute.train()
 
     ########## Remote ##########
-    def remote_start(self, sim_val, data_val, sim_val_fun, loss_kwargs):
+    def remote_start(self, val_sys_data, validation_measure):
         from multiprocessing import Process, Pipe
         self.remote, work_remote = Pipe()
         self.remote.receiving = False
-        process = Process(target=_worker, args=(work_remote, self.remote, sim_val, data_val, sim_val_fun, loss_kwargs))
+        process = Process(target=_worker, args=(work_remote, self.remote, val_sys_data, validation_measure))
         process.daemon = True  # if the main process crashes, we should not cause things to hang
         process.start()
         work_remote.close()
@@ -500,7 +562,7 @@ class IgnoreKeyboardInterrupt:
     def __exit__(self, type, value, traceback): #on exit it will raise the keyboard interpurt
         signal.signal(signal.SIGINT, self.old_handler)
 
-def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRMS', loss_kwargs={}):
+def _worker(remote, parent_remote, val_sys_data=None, validation_measure='sim-NRMS'):
     '''Utility function used by .fit for concurrent validation'''
     
     parent_remote.close()
@@ -508,13 +570,7 @@ def _worker(remote, parent_remote, sim_val=None, data_val=None, sim_val_fun='NRM
         try:
             with IgnoreKeyboardInterrupt():
                 sys, Loss_train, time_now = remote.recv() #gets the current network
-                if sim_val is not None:
-                    sim_val_sim = sys.apply_experiment(sim_val)
-                    Loss_val = sim_val_sim.__getattribute__(sim_val_fun)(sim_val)
-                else:
-                    with torch.no_grad():
-                        Loss_val = sys.loss(*data_val,**loss_kwargs).item()
-
+                Loss_val = sys.cal_validation_error(val_sys_data, validation_measure)
                 sys.Loss_val.append(Loss_val)
                 sys.Loss_train.append(Loss_train)
                 sys.batch_id.append(sys.batch_counter)
@@ -615,7 +671,7 @@ if __name__ == '__main__':
     # exit()
     # sys.fit(train,loss_val=test,epochs=500,batch_size=126,concurrent_val=True)
     sys.fit(train,sim_val=test,loss_kwargs=dict(online_construct=False),epochs=500,batch_size=126,\
-            concurrent_val=True,num_workers_data_loader=0,sim_val_fun='NRMS_mean_channels')
+            concurrent_val=True,num_workers_data_loader=0,validation_measure='sim-NRMS')
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=False)
     # sys.fit(train,sim_val=test,epochs=10,batch_size=64,concurrent_val=True)
     print(sys.Loss_train)

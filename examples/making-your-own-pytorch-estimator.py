@@ -9,6 +9,7 @@ class NARX_basic(deepSI.fit_systems.System_torch):
     def __init__(self, na=20, nb=20):
         super(NARX_basic, self).__init__()
         self.na, self.nb = na, nb
+        self.k0 = max(self.na, self.nb)
 
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.net = simple_res_net
@@ -36,7 +37,6 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         assert ny is None
         self.NARX_net = self.net(n_in=self.na + self.nb, n_out=1, n_nodes_per_layer=self.n_nodes_per_layer,\
                                      n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        return list(self.NARX_net.parameters())
 
     def make_training_data(self, sys_data, **loss_kwargs):
         '''Defined in subclass which converts the normed sys_data into training data
@@ -66,7 +66,7 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         Yhat = self.NARX_net(uy)[:,0]
         return torch.mean((Y-Yhat)**2)
 
-    def init_state(self, sys_data):
+    def init_state_and_measure(self, sys_data):
         '''Initialize the internal state of the model using the start of sys_data
 
         Returns
@@ -87,9 +87,7 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         #when taking an action uhist gets appended to create the current state
         return sys_data.y[k0-1], k0
 
-
-
-    def init_state_multi(self, sys_data, nf=None, dilation=1):
+    def init_state_and_measure_multi(self, sys_data, nf=None, stride=1):
         '''Similar to init_state but to initialize multiple states 
            (used in self.n_step_error and self.one_step_ahead)
 
@@ -99,15 +97,16 @@ class NARX_basic(deepSI.fit_systems.System_torch):
                 Data used to initialize the state
             nf : int
                 skip the nf last states
-            dilation: int
+            stride: int
                 number of states between each state
            '''
-        k0 = max(self.na,self.nb)
-        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = (N,na)
-        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,dilation)]) #+1? #shape = 
+        k0 = self.k0
+        self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i  ] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
+        self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = 
+        print(f'self.yhist.shape={self.yhist.shape}')
         return self.yhist[:,-1], k0
 
-    def step(self, action):
+    def act_measure(self, action):
         '''Applies the action to the system and returns the new observation, 
         should always be overwritten in subclass'''
         self.uhist.append(action)
@@ -118,8 +117,9 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         self.uhist.pop(0)
         return yout
 
-    def step_multi(self, actions):
+    def act_measure_multi(self, actions):
         '''Applies the actions to the system and returns the new observations'''
+        actions = np.array(actions)
         self.uhist = np.append(self.uhist, actions[:,None], axis=1)
         uy = np.concatenate([self.uhist.reshape(self.uhist.shape[0],-1),self.yhist.reshape(self.uhist.shape[0],-1)],axis=1) ######todo MIMO
         yout = self.NARX_net(torch.as_tensor(uy,dtype=torch.float32))[:,0].detach().numpy()
@@ -130,10 +130,9 @@ class NARX_basic(deepSI.fit_systems.System_torch):
 if __name__ == '__main__':
     sys = NARX_basic()
     train, test = deepSI.datasets.Silverbox()
-    sys.fit(train, sim_val=test[:1000])
+    sys.fit(train, test[:1000])
     test_sim = sys.apply_experiment(test)
     print('NRMS:',test_sim.NRMS(test))
     test.plot()
     (test-test_sim).plot(show=True)
-    plt.plot(sys.n_step_error(test))
-    plt.show()
+    sys.n_step_error_plot(test)

@@ -1,6 +1,6 @@
 
 from deepSI.system_data import System_data, System_data_list, System_data_norm
-from deepSI.systems.system import System, Systems_gyms
+from deepSI.systems.system import System, System_gym
 from deepSI.fit_systems.torch_io import Torch_io
 from deepSI.fit_systems.encoders import SS_encoder
 import numpy as np

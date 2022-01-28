@@ -14,7 +14,7 @@ class NarendraLiBenchmark(System_ss): #https://arxiv.org/pdf/2003.14162.pdf
         x2new = x2*np.cos(x2) + x1*np.exp(-(x1**2+x2**2)/8) + u**3/(1+u**2+0.5*np.cos(x1+x2))
         return [x1new,x2new]
 
-    def h(self,x):
+    def h(self,x,u):
         x1,x2 = x
         return x1/(1+0.5*np.sin(x2)) + x2/(1+0.5*np.sin(x1)) + self.random.normal(scale=0.1)
 

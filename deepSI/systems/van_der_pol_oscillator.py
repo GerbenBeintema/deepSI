@@ -9,14 +9,13 @@ class Van_der_pol_oscillator(System_deriv):
         self.mu = mu
         super(Van_der_pol_oscillator, self).__init__(nx=2,dt=dt)
 
-    def reset(self):
+    def reset_state(self):
         x = np.random.uniform(low=[-3,-3],high=[3,3],size=(2,))
         for i in range(500):
             x = self.f(x,0)
         self.x = x
-        return self.h(self.x)
 
-    def h(self,x):
+    def h(self,x,u):
         return x[0]
 
     def deriv(self,state,u): #will be converted by Deriv system

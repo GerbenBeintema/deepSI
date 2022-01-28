@@ -32,17 +32,17 @@ class SS_encoder(System_torch):
         Some random unique 4 digit code (can be used for saving/loading)
     name : str
         concatenation of the the class name and the unique code
-    use_norm : bool
     seed : int
         random seed
     random : np.random.RandomState
         unique random generated initialized with seed (only created ones called)
     '''
-    def __init__(self, nx=10, na=20, nb=20):
-        super(SS_encoder, self).__init__() #where does dt come into
-        self.nx, self.na, self.nb = nx, na, nb
-        self.k0 = max(self.na,self.nb)
-        
+    def __init__(self, nx = 10, na=20, nb=20, feedthrough=False):
+        super(SS_encoder,self).__init__()
+        self.na, self.nb = na, nb
+        self.k0 = max(self.na, self.nb)
+        self.nx = nx
+
         from deepSI.utils import simple_res_net, feed_forward_nn
         self.e_net = simple_res_net
         self.e_n_hidden_layers = 2
@@ -58,71 +58,55 @@ class SS_encoder(System_torch):
         self.h_n_hidden_layers = 2
         self.h_n_nodes_per_layer = 64
         self.h_activation = nn.Tanh
+        
+        self.feedthrough = feedthrough
 
-    ########## How to fit #############
     def make_training_data(self, sys_data, **loss_kwargs):
         assert sys_data.normed == True
         nf = loss_kwargs.get('nf',25)
-        dilation = loss_kwargs.get('dilation',1)
+        stride = loss_kwargs.get('stride',1)
         online_construct = loss_kwargs.get('online_construct',False)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,\
+        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,stride=stride,\
         force_multi_u=True,force_multi_y=True,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
-
+        
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
         self.encoder = self.e_net(self.nb*nu+self.na*ny, self.nx, n_nodes_per_layer=self.e_n_nodes_per_layer, n_hidden_layers=self.e_n_hidden_layers, activation=self.e_activation)
         self.fn =      self.f_net(self.nx+nu,            self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
-        self.hn =      self.h_net(self.nx,               ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
-        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
-
+        hn_in = self.nx + nu if self.feedthrough else self.nx
+        self.hn =      self.h_net(hn_in     ,            ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
+    
     def loss(self, hist, ufuture, yfuture, **loss_kwargs):
         x = self.encoder(hist) #(N, nb*nu + na*ny) -> (N, nx)
-        y_predict = []
+        y_predicts = []
         for u in torch.transpose(ufuture,0,1):
-            y_predict.append(self.hn(x)) #output prediction
-            fn_in = torch.cat((x,u),dim=1) #construc the input of the f function
-            x = self.fn(fn_in) #calculate the next state
-        return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
-
-    ########## How to use ##############
-    def init_state(self,sys_data): #put nf here for n-step error?
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        with torch.no_grad():
-            self.state = self.encoder(hist) #detach here?
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict), max(self.na,self.nb)
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+            xu = torch.cat((x,u),dim=1)
+            y_predicts.append(self.hn(xu if self.feedthrough else x)) #output prediction
+            x = self.fn(xu) #calculate the next state
+        y_predicts = torch.stack(y_predicts,dim=1) #[Nt, Nb, ny] to [Nb, Nt, ny]
+        return torch.nn.functional.mse_loss(y_predicts, yfuture)
+    
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[0],dtype=torch.float32) #(1,)
         with torch.no_grad():
             self.state = self.encoder(hist)
-        y_predict = self.hn(self.state).detach().numpy()
-        return (y_predict[:,0] if self.ny is None else y_predict), max(self.na,self.nb)
-
-    def reset(self): #to be able to use encoder network as a data generator
-        self.state = torch.randn(1,self.nx)
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number
-        action = action[None,None] if self.nu is None else action[None,:]
+        return max(self.na,self.nb)
+    
+    def measure_act_multi(self, actions):
+        actions = torch.tensor(actions,dtype=torch.float32) 
+        actions = actions[:,None] if self.nu is None else actions
         with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #array
-        action = action[:,None] if self.nu is None else action
-        with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()
+            xu = torch.cat([self.state, actions],dim=1)
+            y_predict = self.hn(xu if self.feedthrough else self.state).numpy()
+            self.state = self.fn(xu)
         return (y_predict[:,0] if self.ny is None else y_predict)
-
+    
+    def reset_state(self):
+        self.state = torch.zeros((1,self.nx), dtype=torch.float32)
+    
     def get_state(self):
-        return self.state[0].numpy()
+        return self.state.numpy()[0]
 
 class default_encoder_net(nn.Module):
     def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
@@ -150,20 +134,29 @@ class default_state_net(nn.Module):
         return self.net(net_in)
 
 class default_output_net(nn.Module):
-    def __init__(self, nx, ny, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
+    def __init__(self, nx, ny, nu=-1, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
         super(default_output_net, self).__init__()
         from deepSI.utils import simple_res_net
         self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
-        self.net = simple_res_net(n_in=nx, n_out=np.prod(self.ny,dtype=int), n_nodes_per_layer=n_nodes_per_layer, \
+        self.feedthrough = nu!=-1
+        if self.feedthrough:
+            self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+            net_in = nx + np.prod(self.nu, dtype=int)
+        else:
+            net_in = nx
+        self.net = simple_res_net(n_in=net_in, n_out=np.prod(self.ny,dtype=int), n_nodes_per_layer=n_nodes_per_layer, \
             n_hidden_layers=n_hidden_layers, activation=activation)
 
-    def forward(self, x):
-        return self.net(x).view(*((x.shape[0],)+self.ny))
-    
+    def forward(self, x, u=None):
+        if self.feedthrough:
+            xu = torch.cat([x,u.view(u.shape[0],-1)],dim=1)
+        else:
+            xu = x
+        return self.net(xu).view(*((x.shape[0],)+self.ny))
 
 class SS_encoder_general(System_torch):
     """docstring for SS_encoder_general"""
-    def __init__(self, nx=10, na=20, nb=20, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, \
         e_net=default_encoder_net, f_net=default_state_net, h_net=default_output_net, \
         e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}):
 
@@ -180,66 +173,49 @@ class SS_encoder_general(System_torch):
         self.h_net = h_net
         self.h_net_kwargs = h_net_kwargs
 
+        self.feedthrough = feedthrough
+
     ########## How to fit #############
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        dilation = Loss_kwargs.get('dilation',1)
+        stride = Loss_kwargs.get('stride',1)
         online_construct = Loss_kwargs.get('online_construct',False)
-        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
+        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
 
     def init_nets(self, nu, ny): # a bit weird
         self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.fn =      self.f_net(nx=self.nx, nu=nu,                                **self.f_net_kwargs)
-        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs) 
-        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
+        if self.feedthrough:
+            self.hn =      self.h_net(nx=self.nx, ny=ny, nu=nu,                     **self.h_net_kwargs) 
+        else:
+            self.hn =      self.h_net(nx=self.nx, ny=ny,                            **self.h_net_kwargs) 
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
-        x = self.encoder(uhist, yhist)
+        x = self.encoder(uhist, yhist) #initialize Nbatch number of states
         errors = []
         for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
-            errors.append(nn.functional.mse_loss(y, self.hn(x)))
-            # y_predict.append(y-self.hn(x)) 
-            x = self.fn(x,u)
+            errors.append(nn.functional.mse_loss(y, self.hn(x,u) if self.feedthrough else self.hn(x))) #calculate error after taking n-steps
+            x = self.fn(x,u) #advance state. 
         return torch.mean(torch.stack(errors))
 
     ########## How to use ##############
-    def init_state(self,sys_data): #put nf here for n-step error?
-        uhist, yhist = sys_data[:self.k0].to_hist_future_data(na=self.na,nb=self.nb,nf=0)[:2]
-        uhist = torch.tensor(uhist,dtype=torch.float32)
-        yhist = torch.tensor(yhist,dtype=torch.float32)
-        with torch.no_grad():
-            self.state = self.encoder(uhist, yhist) #detach here?
-            y_predict = self.hn(self.state).numpy()[0]
-        return y_predict, max(self.na,self.nb)
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[:2] #(1,)
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[:2] #(1,)
         uhist = torch.tensor(uhist,dtype=torch.float32)
         yhist = torch.tensor(yhist,dtype=torch.float32)
         with torch.no_grad():
             self.state = self.encoder(uhist,yhist)
-            y_predict = self.hn(self.state).numpy()
-        return y_predict, max(self.na,self.nb)
+        return max(self.na,self.nb)
 
-    def reset(self): #to be able to use encoder network as a data generator
+    def reset_state(self): #to be able to use encoder network as a data generator
         self.state = torch.zeros(1,self.nx)
-        with torch.no_grad():
-            y_predict = self.hn(self.state).numpy()[0]
-        return y_predict
 
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32)[None] #(1,...)
+    def measure_act_multi(self,action):
+        action = torch.tensor(action, dtype=torch.float32) #(N,...)
         with torch.no_grad():
-            self.state = self.fn(self.state,action)
-            y_predict = self.hn(self.state).numpy()[0]
-        return y_predict
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #(N,...)
-        with torch.no_grad():
-            self.state = self.fn(self.state,action)
-            y_predict = self.hn(self.state).numpy()
+            y_predict = self.hn(self.state, action).numpy() if self.feedthrough else self.hn(self.state).numpy()
+            self.state = self.fn(self.state, action)
         return y_predict
 
     def get_state(self):
@@ -250,13 +226,13 @@ class SS_encoder_general(System_torch):
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
-    def __init__(self, nx=10, na=20, nb=20, f_norm=0.1, dt_base=1., cutt_off=1.5, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=0.1, dt_base=1., cutt_off=1.5, \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
         # dx/dt = f(x,u) = f_norm/dt_base f*(x,u)
         # euler example: x(t+dt) = x(t) + f_norm*dt/dt_base f*(x,u)
 
-        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, \
+        super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, feedthrough=feedthrough, e_net=e_net, f_net=f_net, h_net=h_net, \
                                                        e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
         self.integrator_net = integrator_net
         self.integrator_net_kwargs = integrator_net_kwargs
@@ -267,13 +243,12 @@ class SS_encoder_deriv_general(SS_encoder_general):
     def init_nets(self, nu, ny): # a bit weird
         par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) 
         self.derivn = self.fn  #move fn to become the deriviative net
+        self.excluded_nets_from_parameters = ['derivn']
         self.fn = self.integrator_net(self.derivn, f_norm=self.f_norm, dt_base=self.dt_base, **self.integrator_net_kwargs) #has no torch parameters?
-        return par
 
     @property
     def dt(self):
         return self._dt 
-
     @dt.setter
     def dt(self,dt):
         self._dt = dt
@@ -283,89 +258,14 @@ class SS_encoder_deriv_general(SS_encoder_general):
         x = self.encoder(uhist, yhist) #this fails if dt starts to change
         diff = []
         for i,(u,y) in enumerate(zip(torch.transpose(ufuture,0,1), torch.transpose(yfuture,0,1))): #iterate over time
-            yhat = self.hn(x)
+            yhat = self.hn(x) if not self.feedthrough else self.hn(x,u)
             dy = (yhat - y)**2 # (Nbatch, ny)
             diff.append(dy)
-            with torch.no_grad(): #break if the 
+            with torch.no_grad(): #break if the error is too large
                 if torch.mean(dy).item()**0.5>self.cutt_off:
                     break
             x = self.fn(x,u)
         return torch.mean((torch.stack(diff,dim=1)))
-
-class SS_encoder_rnn(System_torch):
-    """docstring for SS_encoder_rnn"""
-    def __init__(self, hidden_size=10, num_layers=2, na=20, nb=20):
-        super(SS_encoder_rnn, self).__init__(None,None)
-        self.na = na
-        self.nb = nb
-        from deepSI.utils import simple_res_net, feed_forward_nn
-        self.net = simple_res_net
-        self.n_hidden_layers = 2
-        self.n_nodes_per_layer = 64
-        self.activation = nn.Tanh
-
-        #RNN parameters
-        self.num_layers = num_layers
-        self.hidden_size = hidden_size
-
-    def make_training_data(self, sys_data, **Loss_kwargs):
-        assert sys_data.normed == True
-        nf = Loss_kwargs.get('nf',25)
-        online_construct = Loss_kwargs.get('online_construct',False)
-        return sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,online_construct=online_construct) #returns np.array(hist),np.array(ufuture),np.array(yfuture)
-
-    def init_nets(self, nu, ny): # a bit weird
-        # print(nu,ny)
-        assert ny==None and nu==None
-        ny = 1
-        nu = 1
-
-        self.rnn = nn.RNN(input_size=nu,hidden_size=self.hidden_size,num_layers=self.num_layers,batch_first=True) #batch_first yes
-        # output, h_n = self.RNN(input,h_0) #input = (batch, seq_len, input_size), 
-        #h_0 = (num_layers, batch, hidden_size)
-        #outputs = (batch, seq_len, hidden_size) #last layer
-
-        #encoder: self.nb + self.na -> h_0 = (num_layers, batch, hidden_size)
-        #hn: (batch*seq_len, hidden_size) -> (batch*seq_len, ny)
-        self.encoder = self.net(n_in=self.nb+self.na, n_out=self.hidden_size*self.num_layers, n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        self.hn =      self.net(n_in=self.hidden_size,n_out=ny,      n_nodes_per_layer=self.n_nodes_per_layer, n_hidden_layers=self.n_hidden_layers, activation=self.activation)
-        return list(self.encoder.parameters()) + list(self.rnn.parameters()) + list(self.hn.parameters())
-
-    def loss(self, hist, ufuture, yfuture, **Loss_kwargs):
-        x = self.encoder(hist) # (s, nhist = nb + na) -> (s, hidden_size*num_layers)
-        h_0 = x.view(-1, self.num_layers, self.hidden_size).permute(1,0,2)   # to (num_layers, s, hidden_size)
-
-        # ufuture (batch, seq_len)
-        output, h_n = self.rnn(ufuture[:,:-1,None], h_0) #do not use the last u
-        #print(output.shape) #has shape (s, seq_len-1, hidden_size)
-        output = torch.cat((h_0[-1][:,None,:],output),dim=1)
-        #outputs = (batch, seq_len, hidden_size) -> (batch*seq_len, hidden_size)
-        h_in = output.reshape(-1,self.hidden_size)
-        y_predict = self.hn(h_in).view(output.shape[0], output.shape[1])
-        return torch.mean((y_predict-yfuture)**2)
-
-    def init_state(self,sys_data): #put nf here for n-step error?
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=len(sys_data)-max(self.na,self.nb))[0][:1],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
-        return self.hn(self.state[-1,:,:])[0,0].item(), max(self.na,self.nb) #some error is being made here
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=self.na,nb=self.nb,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
-        self.state = self.encoder(hist).view(-1, self.num_layers, self.hidden_size).permute(1,0,2)
-        return self.hn(self.state[-1,:,:])[:,0].detach().numpy(), max(self.na,self.nb)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number
-        output, self.state = self.rnn(action[None,None,None], self.state)
-        return self.hn(output[:,0,:])[0,0].item()
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #array
-        output, self.state = self.rnn(action[:,None,None], self.state)
-        return self.hn(output[:,0,:])[:,0].detach().numpy()
-
-    def get_state(self):
-        return self.state[0].numpy()
 
 class par_start_encoder(nn.Module):
     """A network which makes the initial states a parameter of the network"""
@@ -376,68 +276,32 @@ class par_start_encoder(nn.Module):
     def forward(self,ids):
         return self.start_state[ids]
 
-
-class SS_par_start(System_torch): #this is not implemented in a nice manner, there might be bugs.
+class SS_par_start(SS_encoder): #this is not implemented in a nice manner, there might be bugs.
     """docstring for SS_par_start"""
-    def __init__(self, nx=10):
-        super(SS_par_start, self).__init__()
-        self.nx = nx
-        self.k0 = 0
-
-        from deepSI.utils import simple_res_net, feed_forward_nn
-        self.f_net = simple_res_net
-        self.f_n_hidden_layers = 2
-        self.f_n_nodes_per_layer = 64
-        self.f_activation = nn.Tanh
-
-        self.h_net = simple_res_net
-        self.h_n_hidden_layers = 2
-        self.h_n_nodes_per_layer = 64
-        self.h_activation = nn.Tanh
-
-    def init_optimizer(self, parameters, **optimizer_kwargs):
-        '''Optionally defined in subclass to create the optimizer
-
-        Parameters
-        ----------
-        parameters : list
-            system torch parameters
-        optimizer_kwargs : dict
-            If 'optimizer' is defined than that optimizer will be used otherwise Adam will be used.
-            The other parameters will be passed to the optimizer as a kwarg.
-        '''
+    def __init__(self, nx=10, feedthrough=False, optimizer_kwargs={}):
+        super(SS_par_start, self).__init__(nx=nx,na=0, nb=0, feedthrough=feedthrough)
         self.optimizer_kwargs = optimizer_kwargs
-        if optimizer_kwargs.get('optimizer') is not None:
-            from copy import deepcopy
-            optimizer_kwargs = deepcopy(optimizer_kwargs) #do not modify the original kwargs, is this necessary
-            optimizer = optimizer_kwargs['optimizer']
-            del optimizer_kwargs['optimizer']
-        else:
-            optimizer = torch.optim.Adam
-        return optimizer(parameters,**optimizer_kwargs) 
-
 
     ########## How to fit #############
     def make_training_data(self, sys_data, **Loss_kwargs):
         assert sys_data.normed == True
         nf = Loss_kwargs.get('nf',25)
-        dilation = Loss_kwargs.get('dilation',1)
+        stride = Loss_kwargs.get('stride',1)
         online_construct = Loss_kwargs.get('online_construct',False)
         assert online_construct==False, 'to be implemented'
-        hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation,force_multi_u=True,force_multi_y=True)
+        hist, ufuture, yfuture = sys_data.to_encoder_data(na=0,nb=0,nf=nf,stride=stride,force_multi_u=True,force_multi_y=True)
         nsamples = hist.shape[0]
         ids = np.arange(nsamples,dtype=int)
         self.par_starter = par_start_encoder(nx=self.nx, nsamples=nsamples)
-        self.optimizer = self.init_optimizer(self.parameters+list(self.par_starter.parameters()), **self.optimizer_kwargs) #no kwargs
-
+        self.optimizer = self.init_optimizer(self.parameters, **self.optimizer_kwargs) #no kwargs
         return ids, ufuture, yfuture #returns np.array(hist),np.array(ufuture),np.array(yfuture)
 
     def init_nets(self, nu, ny): # a bit weird
         ny = ny if ny is not None else 1
         nu = nu if nu is not None else 1
-        self.fn =      self.f_net(n_in=self.nx+nu,            n_out=self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
-        self.hn =      self.h_net(n_in=self.nx,               n_out=ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
-        return list(self.fn.parameters()) + list(self.hn.parameters())
+        self.fn =      self.f_net(self.nx+nu,            self.nx, n_nodes_per_layer=self.f_n_nodes_per_layer, n_hidden_layers=self.f_n_hidden_layers, activation=self.f_activation)
+        hn_in = self.nx + nu if self.feedthrough else self.nx
+        self.hn =      self.h_net(hn_in     ,            ny,      n_nodes_per_layer=self.h_n_nodes_per_layer, n_hidden_layers=self.h_n_hidden_layers, activation=self.h_activation)
 
     def loss(self, ids, ufuture, yfuture, **Loss_kwargs):
         ids = ids.numpy().astype(int)
@@ -445,49 +309,17 @@ class SS_par_start(System_torch): #this is not implemented in a nice manner, the
         x = self.par_starter(ids)
         y_predict = []
         for u in torch.transpose(ufuture,0,1):
-            y_predict.append(self.hn(x)) #output prediction
-            fn_in = torch.cat((x,u),dim=1)
-            x = self.fn(fn_in)
+            xu = torch.cat((x,u),dim=1)
+            y_predict.append(self.hn(x) if not self.feedthrough else self.hn(xu))
+            x = self.fn(xu)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
 
     ########## How to use ##############
-    def init_state(self,sys_data): #put nf here for n-step error?
-        with torch.no_grad():
-            self.state = torch.as_tensor(np.random.normal(scale=0.1,size=(1,self.nx)),dtype=torch.float32) #detach here?
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict), 0
-
-    def init_state_multi(self,sys_data,nf=100,dilation=1):
-        hist = torch.tensor(sys_data.to_encoder_data(na=0,nb=0,nf=nf,dilation=dilation)[0],dtype=torch.float32) #(1,)
+    def init_state_multi(self,sys_data,nf=100,stride=1):
+        hist = torch.tensor(sys_data.to_encoder_data(na=0,nb=0,nf=nf,stride=stride)[0],dtype=torch.float32) #(1,)
         with torch.no_grad():
             self.state = torch.as_tensor(np.random.normal(scale=0.1,size=(hist.shape[0],self.nx)),dtype=torch.float32) #detach here?
-        y_predict = self.hn(self.state).detach().numpy()
-        return (y_predict[:,0] if self.ny is None else y_predict), 0
-
-    def reset(self): #to be able to use encoder network as a data generator
-        self.state = torch.randn(1,self.nx)
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #number
-        action = action[None,None] if self.nu is None else action[None,:]
-        with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()[0,:]
-        return (y_predict[0] if self.ny is None else y_predict)
-
-    def step_multi(self,action):
-        action = torch.tensor(action,dtype=torch.float32) #array
-        action = action[:,None] if self.nu is None else action
-        with torch.no_grad():
-            self.state = self.fn(torch.cat((self.state,action),axis=1))
-        y_predict = self.hn(self.state).detach().numpy()
-        return (y_predict[:,0] if self.ny is None else y_predict)
-
-    def get_state(self):
-        return self.state[0].numpy()
-
+        return 0
 
 from deepSI.utils import simple_res_net, feed_forward_nn, affine_forward_layer
 class SS_encoder_affine_input(SS_encoder_general):
@@ -504,10 +336,10 @@ class SS_encoder_affine_input(SS_encoder_general):
 
     Hence, g_net produces a vector which is reshaped into a matrix (See deepSI.utils.torch_nets.affine_forward_layer for details).
     """
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, g_net=simple_res_net, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, e_net=default_encoder_net, g_net=simple_res_net, \
                  h_net=default_output_net, e_net_kwargs={}, g_net_kwargs={}, h_net_kwargs={}):
     
-        super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb,\
+        super(SS_encoder_affine_input, self).__init__(nx=nx,na=na,nb=nb, feedthrough=feedthrough, \
             e_net=e_net,f_net=affine_forward_layer, h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=dict(g_net=g_net,g_net_kwargs=g_net_kwargs), \
             h_net_kwargs=h_net_kwargs)
@@ -522,9 +354,9 @@ class SS_encoder_CNN_video(SS_encoder_general):
     The subspace encoder
 
     """
-    def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=CNN_chained_upscales, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, e_net=CNN_encoder, f_net=default_state_net, h_net=CNN_chained_upscales, \
                                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_CNN_video, self).__init__(nx=nx,na=na,nb=nb,\
+        super(SS_encoder_CNN_video, self).__init__(nx=nx,na=na,nb=nb, feedthrough=feedthrough, \
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
 
@@ -533,6 +365,7 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
     def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=Shotgun_MLP, \
                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
         '''Todo: fix cuda with all the arrays'''
+        raise NotImplementedError('not yet updated to 0.3 go back to 0.2 to use this model')
         super(SS_encoder_shotgun_MLP, self).__init__(nx=nx,na=na,nb=nb,\
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
@@ -638,7 +471,7 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
             norm_sampler.y0 = norm_sampler.y0[:,0,0]
             norm_sampler.ystd = norm_sampler.ystd[:,0,0] #ystd to (C,) such that it can divide #(Ns, Np, C)
         else:
-            raise NotImplementedError(f'norm of {norm} is not yet implemented for sampled simulations')
+            raise NotImplementedError(f'norm of {self.norm} is not yet implemented for sampled simulations')
         sys_data_sim =  norm_sampler.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0))
         sys_data_sim.h, sys_data_sim.w = sys_data.h, sys_data.w
         return sys_data_sim
@@ -746,20 +579,22 @@ class SS_encoder_inovation(SS_encoder_general):
     f(x_k,u_k,eps_k) = f0(x_k,u_k) + K eps_k    (with K a matrix)
 
     """
-    def __init__(self, nx=10, na=20, nb=20, e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, feedthrough=False, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
 
-    def init_nets(self, nu, ny): # a bit weird
+    def init_nets(self, nu, ny):
         self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.fn =      self.f_net(nx=self.nx, nu=nu, ny=self.ny,                    **self.f_net_kwargs)
-        self.hn =      self.h_net(nx=self.nx, ny=ny,                                **self.h_net_kwargs)
-        return list(self.encoder.parameters()) + list(self.fn.parameters()) + list(self.hn.parameters())
+        if self.feedthrough:
+            self.hn =      self.h_net(nx=self.nx, ny=ny, nu=nu,                     **self.h_net_kwargs) 
+        else:
+            self.hn =      self.h_net(nx=self.nx, ny=ny,                            **self.h_net_kwargs) 
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
         x = self.encoder(uhist, yhist)
         y_predict = []
         for u,y in zip(torch.transpose(ufuture,0,1),torch.transpose(yfuture,0,1)): #iterate over time
-            yhat = self.hn(x)
+            yhat = self.hn(x) if not self.feedthrough else self.hn(x,u)
             y_predict.append(yhat) 
             x = self.fn(x,u,eps=y-yhat)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)

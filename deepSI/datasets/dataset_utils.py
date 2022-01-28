@@ -6,6 +6,7 @@ import os
 import os.path
 from pathlib import Path
 from sys import platform
+import shutil
 
 def get_work_dirs():
     '''A utility function which gets the utility directories for each OS
@@ -49,7 +50,7 @@ def get_work_dirs():
 
 def clear_cache():
     '''Delete all cached downloads'''
-    import shutil
+    
     temp_dir = get_work_dirs()['data_sets']
     for l in ['EMPS','CED','F16','WienHammer','BoucWen','ParWHF','WienerHammerBenchMark','Silverbox','Cascaded_Tanks']:
         try:
