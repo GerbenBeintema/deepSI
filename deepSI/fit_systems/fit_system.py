@@ -294,7 +294,7 @@ class System_torch(System_fittable):
             self.init_model(sys_data=train_sys_data, device=device, auto_fit_norm=auto_fit_norm, optimizer_kwargs=optimizer_kwargs,\
                     parameters_optimizer_kwargs=parameters_optimizer_kwargs, scheduler_kwargs=scheduler_kwargs)
         else:
-            if verbose: print('Model already initilized, skipping initilizing of model and optimizer')
+            if verbose: print('Model already initilized (init_model_done=True), skipping initilizing of the model, the norm and the creation of the optimizer')
 
         if self.scheduler==False and verbose:
             print('!!!! Your might be continuing from a save which had scheduler but which was removed during saving... check this !!!!!!')
