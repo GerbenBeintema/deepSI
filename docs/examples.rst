@@ -3,15 +3,16 @@
 Examples
 ========
 
-deepSI includes a collection of example scripts that demonstrate
-implementations of several SI problems.
+deepSI includes a collection of examples scripts and notebooks which decomstrate some of the features included. 
 
-The examples include:
+Examples included in deepSI can be viewed at:
 
 https://github.com/GerbenBeintema/deepSI/tree/master/examples
 
+Examples from publications;
+
+https://github.com/GerbenBeintema/SS-encoder-WH-Silver 
+
 https://github.com/GerbenBeintema/SS-encoder-video
 
-https://github.com/GerbenBeintema/SS-encoder-nissan (a bit out of date with the current version of deepSI) 
-
-https://github.com/GerbenBeintema/SS-encoder-WH-Silver (a bit out of date with the current version of deepSI) 
+https://github.com/GerbenBeintema/SS-encoder-nissan 
