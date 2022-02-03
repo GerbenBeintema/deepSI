@@ -85,7 +85,7 @@ Or we can use a more advanced SI method such as the encoder method :meth:`deepSI
    :emphasize-lines: 3,5
 
    sys_encoder = deepSI.fit_systems.SS_encoder(nx=4, na=10, nb=10)
-   sys_encoder.fit(train, epochs=50, batch_size=256, loss_kwargs={'nf':50}, sim_val=test[:5000])
+   sys_encoder.fit(train_sys_data=train, val_sys_data=test[:5000], epochs=50, batch_size=256, loss_kwargs={'nf':50})
    test_simulation_encoder = sys_encoder.apply_experiment(test)
    train_simulation_encoder = sys_encoder.apply_experiment(train)
    print(train_simulation_encoder.NRMS(train)) # 0.013109197256339526

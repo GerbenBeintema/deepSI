@@ -36,7 +36,7 @@ test_simulation_SS_linear = sys_SS_linear.apply_experiment(test)
 #Encoder method with neural networks (Beintema, et al. 2020a)
 sys_encoder = deepSI.fit_systems.SS_encoder(nx=4, na=10, nb=10) 
 #batch optimization using PyTorch for back propagation. 
-sys_encoder.fit(train, epochs=50, batch_size=256, loss_kwargs={'nf':50}, sim_val=test[:5000]) 
+sys_encoder.fit(train_sys_data=train, val_sys_data=test[:5000], epochs=50, batch_size=256, loss_kwargs={'nf':50})
 test_simulation_encoder = sys_encoder.apply_experiment(test)
 
 #plotting the residuals
