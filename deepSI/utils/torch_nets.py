@@ -6,6 +6,8 @@ import numpy as np
 class feed_forward_nn(nn.Module): #a simple MLP
     def __init__(self,n_in=6, n_out=5, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh):
         super(feed_forward_nn,self).__init__()
+        self.n_in = n_in
+        self.n_out = n_out
         seq = [nn.Linear(n_in,n_nodes_per_layer),activation()]
         assert n_hidden_layers>0
         for i in range(n_hidden_layers-1):
@@ -25,6 +27,8 @@ class simple_res_net(nn.Module):
         #linear + non-linear part 
         super(simple_res_net,self).__init__()
         self.net_lin = nn.Linear(n_in,n_out)
+        self.n_in = n_in
+        self.n_out = n_out
         if n_hidden_layers>0:
             self.net_non_lin = feed_forward_nn(n_in,n_out,n_nodes_per_layer=n_nodes_per_layer,n_hidden_layers=n_hidden_layers,activation=activation)
         else:
@@ -56,6 +60,8 @@ class MLP_res_block(nn.Module):
 class complete_MLP_res_net(nn.Module):
     def __init__(self, n_in=6, n_out=5, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh, force_linear_res=False):
         super(complete_MLP_res_net,self).__init__()
+        self.n_in = n_in
+        self.n_out = n_out
         assert n_hidden_layers>0, 'just use nn.Linear lol'
         seq = [MLP_res_block(n_in, n_nodes_per_layer, activation=activation, force_linear_res=force_linear_res)]
         for i in range(n_hidden_layers-1):
