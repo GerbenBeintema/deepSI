@@ -185,6 +185,9 @@ class System_torch(System_fittable):
         '10-step-last-NRMS'
         '10-step-last-RMS'
         '10-step-[w0,w1,w2,w3,w4,w5,w6,w7,w8,w9]-NRMS' weighted mean 10-step-error
+        '10-step-NMAE_sys_norm'
+        '10-step-MSE'
+        'X-step-{last/average}-{mode}'  #like this
         
         #todo;
         User given callback. (overwrite this function?)
@@ -235,7 +238,7 @@ class System_torch(System_fittable):
         auto_fit_norm : boole
             If true will use self.norm.fit(train_sys_data) which will fit it element wise. 
         validation_measure : str
-            Specify which measure should be used for validation, e.g. 'sim-RMS', 'sim-NRMS_mean_channel', 'sim-NRMS_sys_norm', ect. See self.cal_validation_error for details.
+            Specify which measure should be used for validation, e.g. 'sim-RMS', '10-step-last-RMS', 'sim-NRMS_sys_norm', ect. See self.cal_validation_error for details.
         optimizer_kwargs : dict
             The Keyword Arguments to be passed on to init_optimizer. notes; init_optimizer['optimizer'] is the optimization function used (default torch.Adam)
             and optimizer_kwargs['parameters_optimizer_kwargs'] the learning rates and such for the different elements of the models. see https://pytorch.org/docs/stable/optim.html

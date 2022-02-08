@@ -294,7 +294,7 @@ class System(object):
         stride : int
             passed to init_state_multi to reduce memory cost.
         mode : str or System_data_norm
-            'NRMS', 'RMS', 'RMS_sys_norm' or a System_data_norm for 
+            'NRMS', 'RMS', 'NRMS_sys_norm' or a System_data_norm for 
             norm obtained from the sys_data, 
             no norm
             norm obtained from the provided data, 
@@ -303,37 +303,28 @@ class System(object):
             return (nf) shape if true and (nf,ny) alike if false.
         '''
         norm = System_data_norm()
-        if mode=='NRMS':
-            norm.fit(sys_data)
-        elif mode=='RMS':
-            pass
-        elif mode=='RMS_sys_norm':
-            norm = self.norm
+        if isinstance(mode, tuple):
+            norm, error_mode = mode
         elif isinstance(mode,System_data_norm):
-            norm = mode
+            norm, error_mode = mode, 'RMS'
         else:
-            raise ValueError("The mode of the n-step error should be one of ('NRMS', 'RMS', 'RMS_sys_norm', instance of System_data_norm)")
+            #figure out the error mode
+            if 'RMS' in mode:
+                error_mode = 'RMS'
+            elif 'MSE' in mode:
+                error_mode = 'MSE'
+            elif 'MAE' in mode:
+                error_mode = 'MAE'
+            else:
+                raise NotImplementedError(f'mode {mode} should has one of RMS MSE MAE')
+            
+            if '_sys_norm' in mode:
+                norm = self.norm
+            elif mode[0]=='N':
+                norm.fit(sys_data)
 
-        Losses = self.n_step_error_per_channel(sys_data, nf=nf, stride=stride)/norm.ystd
-        if mean_channels==False:
-            return Losses
-        else:
-            return np.array([np.mean(a) for a in Losses])
-
-    def n_step_error_per_channel(self, sys_data, nf=100, stride=1):
-        '''Calculate the expected error after taking n=0...nf-1 steps, returns the shape (nf, ny) or nf if ny is None
-
-        Parameters
-        ----------
-        sys_data : System_data
-        nf : int
-            upper bound of n.
-        stride : int
-            passed to init_state_multi to reduce memory costs.
-        '''
         if isinstance(sys_data,(list,tuple)):
             sys_data = System_data_list(sys_data)
-            # [self.n_step_error(sd,return_weight=True) for sd in sys_data]
 
         dt_old = self.dt
         self.dt = sys_data.dt
@@ -345,17 +336,28 @@ class System(object):
         Losses = []
         for unow, ynow in zip(np.swapaxes(ufuture,0,1), np.swapaxes(yfuture,0,1)):
             obs = self.measure_act_multi(unow)
-            Losses.append(np.mean((ynow-obs)**2,axis=0)**0.5)
+            res = (ynow-obs)*self.norm.ystd/norm.ystd
+            if callable(error_mode):
+                Losses.append(error_mode(res))
+            elif error_mode=='RMS':
+                Losses.append(np.mean(res**2,axis=0)**0.5)
+            elif error_mode=='MSE':
+                Losses.append(np.mean(res**2,axis=0))
+            elif error_mode=='MAE':
+                Losses.append(np.mean(np.abs(res),axis=0))
+            else:
+                raise NotImplementedError('error_mode should be one of ["RMS","MSE","MAE"]')
 
+        #Remove large state
         if isinstance(sys_data,System_data_list):
-            self.init_state(sys_data[0]) #removes large state
+            self.init_state(sys_data[0]) 
         else:
-            self.init_state(sys_data) #removes large state
+            self.init_state(sys_data)
         
         if dt_old is not None:
             self.dt = dt_old
 
-        return np.array(Losses)*self.norm.ystd #Units of RMS (nf, ny)
+        return np.array([np.mean(a) for a in Losses]) if mean_channels else np.array(Losses)
 
     def n_step_error_plot(self, sys_data, nf=100, stride=1, mode='NRMS', mean_channels=True, show=True):
         Losses = self.n_step_error(sys_data, nf=nf, stride=stride, mode=mode, mean_channels=mean_channels)
