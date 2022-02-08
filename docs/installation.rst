@@ -20,7 +20,7 @@ Install deepSI
     conda install -c anaconda git
     pip install git+git://github.com/GerbenBeintema/deepSI@master
 
-(optional; setup an anaconda environment)
+(If you encounter any problem I recommend retrying after setting up a new conda enviroment (https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html))
 
 To open a jupyter notebook you can use the anaconda navigator or type "jupyter notebook" in the address bar of directory you want to start or open a notebook.
 

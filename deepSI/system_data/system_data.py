@@ -472,11 +472,22 @@ class System_data(object):
 
     def RMS(self,real, multi_average=True):
         '''Root mean square error'''
-        #Variance accounted for
         #y output system
         #yhat output model
         y, yhat = real.y[self.cheat_n:], self.y[self.cheat_n:]
         return np.mean((y-yhat)**2)**0.5 if multi_average else np.mean((y-yhat)**2,axis=0)**0.5
+    def MSE(self,real, multi_average=True):
+        '''mean square error'''
+        #y output system
+        #yhat output model
+        y, yhat = real.y[self.cheat_n:], self.y[self.cheat_n:]
+        return np.mean((y-yhat)**2) if multi_average else np.mean((y-yhat)**2,axis=0)
+    def MAE(self,real, multi_average=True):
+        '''mean absolute error'''
+        #y output system
+        #yhat output model
+        y, yhat = real.y[self.cheat_n:], self.y[self.cheat_n:]
+        return np.mean(abs(y-yhat)) if multi_average else np.mean(abs(y-yhat),axis=0)
 
     def VAF(self,real,multi_average=True):
         '''Variance accounted also known as R^2 
@@ -673,6 +684,10 @@ class System_data_list(System_data):
 
     def RMS(self,real, multi_average=True):
         return self.weighted_mean([sd.RMS(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
+    def MSE(self,real, multi_average=True):
+        return self.weighted_mean([sd.MSE(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
+    def MAE(self,real, multi_average=True):
+        return self.weighted_mean([sd.MAE(sdo,multi_average=multi_average) for sd,sdo in zip(self.sdl,real.sdl)])
 
     def __sub__(self,other):
         if isinstance(other,System_data_list):            

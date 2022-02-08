@@ -267,6 +267,67 @@ class SS_encoder_deriv_general(SS_encoder_general):
             x = self.fn(x,u)
         return torch.mean((torch.stack(diff,dim=1)))
 
+class hf_net_default(nn.Module):
+    def __init__(self, nx, nu, ny, feedthrough=False, f_net=default_state_net, f_net_kwargs={}, h_net_kwargs={}, h_net=default_output_net):
+        super(hf_net_default, self).__init__()
+        self.nx = nx
+        self.nu = nu
+        self.ny = ny
+        self.fn = f_net(nx, nu, **f_net_kwargs)
+        #nx, ny, nu=-1,
+        self.feedthrough = feedthrough
+        self.hn = h_net(nx, ny, nu=nu if feedthrough else -1, **h_net_kwargs)
+    
+    def forward(self, x, u):
+        y = self.hn(x,u) if self.feedthrough else self.hn(x)
+        xnext = self.fn(x,u)
+        return y, xnext
+
+class SS_encoder_general_hf(SS_encoder_general):
+    """The encoder function with combined h and f functions
+    
+    the hf_net_default has the arguments
+       hf_net_default(nx, nu, ny, feedthrough=False, **hf_net_kwargs)
+    and is used as 
+       ynow, xnext = hfn(x,u)
+    """
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, \
+                 hf_net=hf_net_default, \
+                 hf_net_kwargs = dict(f_net=default_state_net, f_net_kwargs={}, h_net_kwargs={}, h_net=default_output_net), \
+                 e_net=default_encoder_net,   e_net_kwargs={}):
+
+        super(SS_encoder_general_hf, self).__init__()
+        self.nx, self.na, self.nb = nx, na, nb
+        self.k0 = max(self.na,self.nb)
+        
+        self.e_net = e_net
+        self.e_net_kwargs = e_net_kwargs
+        
+        self.hf_net = hf_net
+        hf_net_kwargs['feedthrough'] = feedthrough
+        self.hf_net_kwargs = hf_net_kwargs
+
+        self.feedthrough = feedthrough
+
+    def init_nets(self, nu, ny): # a bit weird
+        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        self.hfn = self.hf_net(nx=self.nx, nu=self.nu, ny=self.ny, **self.hf_net_kwargs)
+
+    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+        x = self.encoder(uhist, yhist) #initialize Nbatch number of states
+        errors = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            yhat, x = self.hfn(x, u)
+            errors.append(nn.functional.mse_loss(y, yhat)) #calculate error after taking n-steps
+        return torch.mean(torch.stack(errors))
+    
+    def measure_act_multi(self,action):
+        action = torch.tensor(action, dtype=torch.float32) #(N,...)
+        with torch.no_grad():
+            y_predict, self.state = self.hfn(self.state, action)
+        return y_predict
+
+
 class par_start_encoder(nn.Module):
     """A network which makes the initial states a parameter of the network"""
     def __init__(self, nx, nsamples):
