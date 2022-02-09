@@ -158,7 +158,7 @@ class SS_encoder_general(System_torch):
     """docstring for SS_encoder_general"""
     def __init__(self, nx=10, na=20, nb=20, feedthrough=False, \
         e_net=default_encoder_net, f_net=default_state_net, h_net=default_output_net, \
-        e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}):
+        e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}, na_right=0, nb_right=0):
 
         super(SS_encoder_general, self).__init__()
         self.nx, self.na, self.nb = nx, na, nb
@@ -174,6 +174,8 @@ class SS_encoder_general(System_torch):
         self.h_net_kwargs = h_net_kwargs
 
         self.feedthrough = feedthrough
+        self.na_right = na_right
+        self.nb_right = nb_right
 
     ########## How to fit #############
     def make_training_data(self, sys_data, **Loss_kwargs):
@@ -181,10 +183,15 @@ class SS_encoder_general(System_torch):
         nf = Loss_kwargs.get('nf',25)
         stride = Loss_kwargs.get('stride',1)
         online_construct = Loss_kwargs.get('online_construct',False)
-        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
+        na_right = self.na_right if hasattr(self,'na_right') else 0
+        nb_right = self.nb_right if hasattr(self,'nb_right') else 0
+        return sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,na_right=na_right, nb_right=nb_right, \
+            stride=stride,online_construct=online_construct) #uhist, yhist, ufuture, yfuture
 
     def init_nets(self, nu, ny): # a bit weird
-        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        na_right = self.na_right if hasattr(self,'na_right') else 0
+        nb_right = self.nb_right if hasattr(self,'nb_right') else 0
+        self.encoder = self.e_net(nb=(self.nb+nb_right), nu=nu, na=(self.na+na_right), ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.fn =      self.f_net(nx=self.nx, nu=nu,                                **self.f_net_kwargs)
         if self.feedthrough:
             self.hn =      self.h_net(nx=self.nx, ny=ny, nu=nu,                     **self.h_net_kwargs) 
@@ -200,8 +207,10 @@ class SS_encoder_general(System_torch):
         return torch.mean(torch.stack(errors))
 
     ########## How to use ##############
-    def init_state_multi(self,sys_data,nf=100,stride=1):
-        uhist, yhist = sys_data.to_hist_future_data(na=self.na,nb=self.nb,nf=nf,stride=stride)[:2] #(1,)
+    def init_state_multi(self, sys_data, nf=100, stride=1):
+        na_right = self.na_right if hasattr(self,'na_right') else 0
+        nb_right = self.nb_right if hasattr(self,'nb_right') else 0
+        uhist, yhist = sys_data.to_hist_future_data(na=self.na, nb=self.nb, nf=nf, na_right=na_right, nb_right=nb_right, stride=stride)[:2] #(1,)
         uhist = torch.tensor(uhist,dtype=torch.float32)
         yhist = torch.tensor(yhist,dtype=torch.float32)
         with torch.no_grad():

@@ -6,3 +6,4 @@ from deepSI.datasets.misc_data_sets import sun_spot_data
 
 from deepSI.datasets.dataset_utils import clear_cache, cashed_download, get_work_dirs
 import deepSI.datasets.sista_database
+import deepSI.datasets.time_series

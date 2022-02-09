@@ -266,7 +266,7 @@ class System_data(object):
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+    def to_hist_future_data(self, na=10, nb=10, nf=5, na_right = 0, nb_right = 0, stride=1, force_multi_u=False, force_multi_y=False, online_construct=False):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -283,9 +283,9 @@ class System_data(object):
         Returns
         -------
         uhist : ndarray (samples, nb, nu) or (sample, nb) if nu=None
-            array of [u[k-nb],....,u[k-1]]
+            array of [u[k-nb],....,u[k - (nb_right + 1)]]
         yhist : ndarray (samples, na, ny) or (sample, na) if ny=None
-            array of [y[k-nb],....,y[k-1]]
+            array of [y[k-na],....,y[k - (na_right + 1)]]
         ufuture : ndarray (samples, nf, nu) or (sample, nf) if nu=None
             array of [u[k],....,u[k+nf-1]]
         yfuture : ndarray (samples, nf, ny) or (sample, nf) if ny=None
@@ -299,11 +299,20 @@ class System_data(object):
         uhist = []
         ufuture = []
         yfuture = []
-        for k in range(max(nb,na)+nf,len(u)+1,stride):
-            yhist.append(y[k-na-nf:k-nf])
-            uhist.append(u[k-nb-nf:k-nf])
-            yfuture.append(y[k-nf:k])
-            ufuture.append(u[k-nf:k])
+        k0 = max(nb, na)
+        k0_right = max(nf, na_right, nb_right)
+        for k in range(k0+k0_right,len(u)+1,stride):
+            kmid = k - k0_right
+            yhist.append(y[kmid-na:kmid+na_right])
+            uhist.append(u[kmid-nb:kmid+nb_right])
+            yfuture.append(y[kmid:kmid+nf])
+            ufuture.append(u[kmid:kmid+nf])
+            # yhist.append(y[k-na-nf:k-nf])
+            # uhist.append(u[k-nb-nf:k-nf])
+            # yhist.append(y[k-na-k0_right:k-(k0_right - nb_right)])
+            # uhist.append(u[k-nb-k0_right:k-(k0_right - na_right)])
+            # yfuture.append(y[k-nf:k])
+            # ufuture.append(u[k-nf:k])
         uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
         if force_multi_u and uhist.ndim==2: #(N, time_seq, nu)
             uhist = uhist[:,:,None]
