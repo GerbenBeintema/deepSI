@@ -658,8 +658,8 @@ class System_data_list(System_data):
     def to_IO_data(self,na=10,nb=10,stride=1,online_construct=False,feedthrough=False):
         out = [sys_data.to_IO_data(na=na,nb=nb,stride=stride,online_construct=online_construct,feedthrough=feedthrough) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in  zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
-    def to_hist_future_data(self,na=10,nb=10,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
-        out = [sys_data.to_hist_future_data(na=na,nb=nb,nf=nf,stride=stride,force_multi_u=force_multi_u,\
+    def to_hist_future_data(self,na=10,nb=10,na_right=0,nb_right=0,nf=5,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
+        out = [sys_data.to_hist_future_data(na=na,nb=nb,na_right=na_right,nb_right=nb_right,nf=nf,stride=stride,force_multi_u=force_multi_u,\
                 force_multi_y=force_multi_y,online_construct=online_construct) for sys_data in self.sdl]  #((I,ys),(I,ys))
         return [np.concatenate(o,axis=0) for o in zip(*out)] if not online_construct else ConcatDataset(out) #(I,I,I),(ys,ys,ys)
     def to_ss_data(self,nf=20,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):

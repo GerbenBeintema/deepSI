@@ -483,7 +483,6 @@ class System_deriv(System_ss):
             k2 = self.dt*np.array(self.deriv(x+k1/2,u))
             k3 = self.dt*np.array(self.deriv(x+k2/2,u))
             k4 = self.dt*np.array(self.deriv(x+k3,u))
-            xnew = x + (k1+2*k2+2*k3+k4)/6
             return x + (k1+2*k2+2*k3+k4)/6
         else:
             f = lambda t,x: self.deriv(x,u)

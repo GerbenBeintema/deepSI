@@ -649,11 +649,14 @@ class SS_encoder_inovation(SS_encoder_general):
     f(x_k,u_k,eps_k) = f0(x_k,u_k) + K eps_k    (with K a matrix)
 
     """
-    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, feedthrough=False, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+    def __init__(self, nx=10, na=20, nb=20, na_right=1, nb_right=0, feedthrough=False, \
+        e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, na_right=na_right, nb_right=nb_right, \
+            feedthrough=False, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
 
     def init_nets(self, nu, ny):
-        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        self.encoder = self.e_net(nb=self.nb+self.nb_right, nu=nu, na=self.na+self.na_right,\
+             ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.fn =      self.f_net(nx=self.nx, nu=nu, ny=self.ny,                    **self.f_net_kwargs)
         if self.feedthrough:
             self.hn =      self.h_net(nx=self.nx, ny=ny, nu=nu,                     **self.h_net_kwargs) 
