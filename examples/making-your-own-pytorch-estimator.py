@@ -79,7 +79,7 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         Notes
         -----
         Example: x0 = encoder(u[t-k0:k0],yhist[t-k0:k0]), and return h(x0), k0
-        This function is often overwritten in child. As default it will return self.reset(), 0 
+        This function is often overwritten in child. As default it will return self.reset_state(), 0 
         '''
         k0 = max(self.na,self.nb)
         self.yhist = list(sys_data.y[k0-self.na:k0])

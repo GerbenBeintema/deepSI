@@ -94,11 +94,12 @@ class SS_encoder(System_torch):
         return max(self.na,self.nb)
     
     def measure_act_multi(self, actions):
-        actions = torch.tensor(actions,dtype=torch.float32) 
+        actions = torch.tensor(np.array(actions),dtype=torch.float32) 
         actions = actions[:,None] if self.nu is None else actions
         with torch.no_grad():
             xu = torch.cat([self.state, actions],dim=1)
-            y_predict = self.hn(xu if self.feedthrough else self.state).numpy()
+            feedthrough = self.feedthrough if hasattr(self,'feedthrough') else False
+            y_predict = self.hn(xu if feedthrough else self.state).numpy()
             self.state = self.fn(xu)
         return (y_predict[:,0] if self.ny is None else y_predict)
     
@@ -148,7 +149,8 @@ class default_output_net(nn.Module):
             n_hidden_layers=n_hidden_layers, activation=activation)
 
     def forward(self, x, u=None):
-        if self.feedthrough:
+        feedthrough = self.feedthrough if hasattr(self,'feedthrough') else False
+        if feedthrough:
             xu = torch.cat([x,u.view(u.shape[0],-1)],dim=1)
         else:
             xu = x
@@ -223,7 +225,8 @@ class SS_encoder_general(System_torch):
     def measure_act_multi(self,action):
         action = torch.tensor(action, dtype=torch.float32) #(N,...)
         with torch.no_grad():
-            y_predict = self.hn(self.state, action).numpy() if self.feedthrough else self.hn(self.state).numpy()
+            feedthrough = self.feedthrough if hasattr(self,'feedthrough') else False
+            y_predict = self.hn(self.state, action).numpy() if feedthrough else self.hn(self.state).numpy()
             self.state = self.fn(self.state, action)
         return y_predict
 
@@ -330,10 +333,10 @@ class SS_encoder_general_hf(SS_encoder_general):
             errors.append(nn.functional.mse_loss(y, yhat)) #calculate error after taking n-steps
         return torch.mean(torch.stack(errors))
     
-    def measure_act_multi(self,action):
-        action = torch.tensor(action, dtype=torch.float32) #(N,...)
+    def measure_act_multi(self,actions):
+        actions = torch.tensor(np.array(actions), dtype=torch.float32) #(N,...)
         with torch.no_grad():
-            y_predict, self.state = self.hfn(self.state, action)
+            y_predict, self.state = self.hfn(self.state, actions)
         return y_predict
 
 
@@ -483,7 +486,7 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
         -----
         This will initialize the state using self.init_state if sys_data.y (and u)
         is not None and skip the appropriate number of steps associated with it.
-        If either is missing than self.reset() is used to initialize the state. 
+        If either is missing than self.reset_state() is used to initialize the state. 
         Afterwards this state is advanced using sys_data.u and the output is saved at each step.
         Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
         that it can be accounted for later.

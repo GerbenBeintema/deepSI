@@ -25,7 +25,7 @@ class Double_potential_well(System_deriv): #discrate system single system
         super(Double_potential_well, self).__init__(dt=dt,nx=2)
         self.action_space = Box(-float(1),float(1),shape=tuple())
 
-    def reset(self):
+    def reset_state(self):
         self.x = [-self.a,0]
         return self.h(self.x) #return position
 

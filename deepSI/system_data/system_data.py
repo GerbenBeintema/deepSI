@@ -165,28 +165,32 @@ class System_data(object):
             Check if this data set is normed (i.e. was used as norm.transform(sys_data)) mostly used for debugging. 
         '''
         super(System_data, self).__init__()
-        assert (y is not None) or (u is not None), 'either y or u requires to be not None or'
-        N_samples = len(u) if u is not None else len(y)
         
-        #do not make a copy if they are already an ndarray, saves some memory
-        self.u = (u if isinstance(u,np.ndarray) else np.array(u)) if u is not None else np.zeros((N_samples,0)) #if y exists than u will always exists
+        # this does not make a copy if they are already an ndarray, saves some memory
+        self.u = (u if isinstance(u,np.ndarray) else np.array(u)) if u is not None else None
         self.x = (x if isinstance(x,np.ndarray) else np.array(x)) if x is not None else None
         self.y = (y if isinstance(y,np.ndarray) else np.array(y)) if y is not None else None
         self.cheat_n = cheat_n #when the real simulation starts, used in evaluation
-        self.multi_u = self.u.ndim>1
+        self.multi_u = self.u.ndim>1 if self.u is not None else True
         self.multi_y = self.y.ndim>1 if self.y is not None else True
         self.normed = normed
         self.dt = dt
 
         #checks
-        if self.y is not None:
-            assert self.u.shape[0]==self.y.shape[0], f'{self.u.shape[0]}!={self.y.shape[0]}'
+        if self.y is not None and self.u is not None:
+            assert len(self.u)==len(self.y), f'{self.u.shape[0]}!={self.y.shape[0]}'
         if self.x is not None: 
-            assert self.x.shape[0]==self.y.shape[0]
+            if self.y is not None:
+                assert self.x.shape[0]==self.y.shape[0]
+            if self.u is not None:
+                assert self.x.shape[0]==self.u.shape[0]
 
     @property
     def N_samples(self):
-        return self.u.shape[0]
+        if self.u is not None:
+            return len(self.u)
+        elif self.y is not None:
+            return len(self.y)
 
     @property
     def ny(self):
@@ -200,7 +204,9 @@ class System_data(object):
     @property
     def nu(self):
         '''Number of input dimensions. None or number or tuple'''
-        if self.u.ndim==1:
+        if self.u is None:
+            return 0
+        elif self.u.ndim==1:
             return None
         else:
             return self.u.shape[1] if self.u.ndim==2 else self.u.shape[1:]

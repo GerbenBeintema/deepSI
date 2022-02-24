@@ -409,6 +409,14 @@ class System(object):
             exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
 
+class System_ystd(System):
+    # 
+    # y and ystd
+    # Every time an output is returned a std is also returned
+    #
+    pass
+
+
 class System_gym(System):
     """docstring for System_gym"""
     def __init__(self, env, env_kwargs=dict(), n=None):
@@ -508,9 +516,9 @@ class System_io(System):
         self.feedthrough = feedthrough
         #y[k] = step(u[k-nb,k-1],y[k-na,...,k-1])
         #y[k+1] = step(u[k-nb+1,k],y[k-na-1,...,k])
-        self.reset()
+        self.reset_state()
 
-    def reset(self):
+    def reset_state(self):
         self.yhist = [0]*self.na if self.ny is None else [[0]*self.ny for i in range(self.na)]
         self.uhist = [0]*self.nb if self.nu is None else [[0]*self.nu for i in range(self.nb)]
         return 0
@@ -570,7 +578,7 @@ if __name__ == '__main__':
     # sys = Systems_gyms('MountainCarContinuous-v0')
     # pass
     # sys = Systems_gyms('LunarLander-v2')
-    # print(sys.reset())
+    # print(sys.reset_state())
     # # exp = System_data(u=[[int(np.sin(2*np.pi*i/70)>0)*2-1] for i in range(500)]) #mountain car solve
     # print(sys)
     # exp = System_data(u=[sys.action_space.sample() for i in range(500)]) 
@@ -608,7 +616,7 @@ if __name__ == '__main__':
     #         dvxdt = - 1e-3*vx + alpha*( - 1/(x-1)**2 + 1/(x+1)**2) + u
     #         return [dxdt,dvxdt]
 
-    #     def h(self,x):
+    #     def h(self,x,u):
     #         return x[0]
 
     # np.random.seed(32)

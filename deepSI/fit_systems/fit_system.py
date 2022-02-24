@@ -418,7 +418,7 @@ class System_torch(System_fittable):
                         valfeqstr = f', {val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f', {1/val_feq:4.3} epochs/val'
                     else: #else print validation time use
                         valfeqstr = f''
-                    trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train else f'loss {train_loss_epoch:7.4}'
+                    trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train and train_loss_epoch>=0 else f'loss {train_loss_epoch:7.4}'
                     Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)!=0 else float('nan')
                     Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {validation_measure} {Loss_val_now:6.4}'
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
@@ -470,7 +470,8 @@ class System_torch(System_fittable):
         file = os.path.join(directory,self.name + name + '.pth')
         try:
             self.__dict__ = torch.load(file)
-            if self.init_model_done:
+            init_model_done = self.init_model_done if hasattr(self,'init_model_done') else True
+            if init_model_done:
                 self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array(self.Loss_val), np.array(self.Loss_train), np.array(self.batch_id), np.array(self.time), np.array(self.epoch_id)
                 for i in np.where(np.isnan(self.Loss_train))[0]:
                     if i!=len(self.Loss_train)-1: #if the last is NaN than I will leave it there. Something weird happened like breaking before one validation loop was completed. 
