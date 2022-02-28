@@ -479,23 +479,25 @@ if __name__ == '__main__':
                             activation=activation, upscale_factor=upscale_factor)
         print(f(torch.randn(1,nx)).shape)
 
-class affine_forward_layer(nn.Module):
+class general_koopman_forward_layer(nn.Module):
     """
     Implantation of
-
-    x_k+1 = A@x_k + g(x_k)@u_k
-
+    x_k+1 = A@x_k + g(x_k,u_k)@u_k
     where @ is matrix multiply
     """
-    def __init__(self, nx, nu, g_net=simple_res_net, g_net_kwargs={}):
-        super(affine_forward_layer, self).__init__()
+    def __init__(self, nx, nu, include_u_in_g=True, g_net=simple_res_net, g_net_kwargs={}):
+        super(general_koopman_forward_layer, self).__init__()
         self.nu = 1 if nu is None else nu
-        self.gpart = affine_input_net(output_dim=nx, input_dim=self.nu, affine_dim=nx, g_net=g_net, g_net_kwargs=g_net_kwargs)
+        self.include_u_in_g = include_u_in_g
+        affine_dim=nx+self.nu if include_u_in_g else nx
+        self.gpart = affine_input_net(output_dim=nx, input_dim=self.nu, affine_dim=affine_dim,\
+                                      g_net=g_net, g_net_kwargs=g_net_kwargs)
         self.Apart = nn.Linear(nx, nx, bias=False)
 
     def forward(self,x,u):
-        u = u.view(u.shape[0],-1) #flatten
-        return self.Apart(x) + self.gpart(x,u)
+        uflat = u.view(u.shape[0],-1) #convert to (Nb, nu)
+        net_in = torch.cat([x,uflat],axis=1) if self.include_u_in_g else x
+        return self.Apart(x) + self.gpart(net_in,uflat)
 
 class time_integrators(nn.Module):
     """docstring for time_integrators"""
