@@ -337,7 +337,7 @@ class SS_encoder_general_hf(SS_encoder_general):
         actions = torch.tensor(np.array(actions), dtype=torch.float32) #(N,...)
         with torch.no_grad():
             y_predict, self.state = self.hfn(self.state, actions)
-        return y_predict
+        return y_predict.numpy()
 
 
 class par_start_encoder(nn.Module):
