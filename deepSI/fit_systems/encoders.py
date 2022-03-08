@@ -238,7 +238,7 @@ class SS_encoder_general(System_torch):
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
-    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=0.1, dt_base=1., cutt_off=1.5, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=0.1, dt_base=1., cut_off=1.5, \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
         # dx/dt = f(x,u) = f_norm/dt_base f*(x,u)
@@ -250,11 +250,11 @@ class SS_encoder_deriv_general(SS_encoder_general):
         self.integrator_net_kwargs = integrator_net_kwargs
         self.f_norm = f_norm
         self.dt_base = dt_base #freal = f_norm/dt_base simple rescale factor which is often used
-        self.cutt_off = cutt_off
+        self.cut_off = cut_off
 
     def init_nets(self, nu, ny): # a bit weird
         par = super(SS_encoder_deriv_general, self).init_nets(nu,ny) 
-        self.derivn = self.fn  #move fn to become the deriviative net
+        self.derivn = self.fn  #move fn to become the derivative net
         self.excluded_nets_from_parameters = ['derivn']
         self.fn = self.integrator_net(self.derivn, f_norm=self.f_norm, dt_base=self.dt_base, **self.integrator_net_kwargs) #has no torch parameters?
 
@@ -274,7 +274,7 @@ class SS_encoder_deriv_general(SS_encoder_general):
             dy = (yhat - y)**2 # (Nbatch, ny)
             diff.append(dy)
             with torch.no_grad(): #break if the error is too large
-                if torch.mean(dy).item()**0.5>self.cutt_off:
+                if torch.mean(dy).item()**0.5>self.cut_off:
                     break
             x = self.fn(x,u)
         return torch.mean((torch.stack(diff,dim=1)))
@@ -632,7 +632,7 @@ class default_ino_state_net(nn.Module):
             epsflat = eps.view(eps.shape[0],-1)
             return self.net(net_in) + self.K(epsflat)
 
-class SS_encoder_inovation(SS_encoder_general):
+class SS_encoder_innovation(SS_encoder_general):
     """
     Similar to SS encoder but with the structure of 
        x_k+1 = f(x_k,u_k,eps_k)
@@ -653,7 +653,7 @@ class SS_encoder_inovation(SS_encoder_general):
     """
     def __init__(self, nx=10, na=20, nb=20, na_right=1, nb_right=0, feedthrough=False, \
         e_net=default_encoder_net, f_net=default_ino_state_net, h_net=default_output_net, e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
-        super(SS_encoder_inovation, self).__init__(nx=nx, na=na, nb=nb, na_right=na_right, nb_right=nb_right, \
+        super(SS_encoder_innovation, self).__init__(nx=nx, na=na, nb=nb, na_right=na_right, nb_right=nb_right, \
             feedthrough=False, e_net=e_net, f_net=f_net, h_net=h_net, e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
 
     def init_nets(self, nu, ny):
