@@ -200,11 +200,15 @@ class SS_encoder_general(System_torch):
         else:
             self.hn =      self.h_net(nx=self.nx, ny=ny,                            **self.h_net_kwargs) 
 
-    def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
+    def loss(self, uhist, yhist, ufuture, yfuture, loss_nf_cutoff=None, **Loss_kwargs):
         x = self.encoder(uhist, yhist) #initialize Nbatch number of states
         errors = []
         for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
-            errors.append(nn.functional.mse_loss(y, self.hn(x,u) if self.feedthrough else self.hn(x))) #calculate error after taking n-steps
+            error = nn.functional.mse_loss(y, self.hn(x,u) if self.feedthrough else self.hn(x))
+            errors.append(error) #calculate error after taking n-steps
+            if loss_nf_cutoff is not None and error.item()>loss_nf_cutoff:
+                print(len(errors), end=' ')
+                break
             x = self.fn(x,u) #advance state. 
         return torch.mean(torch.stack(errors))
 

@@ -9,7 +9,7 @@ For these exercises, you will be using python 3.7 with some extensions for strea
  1. Open Google Colab via https://colab.research.google.com/
  2. Login in to your Google account. 
  3. Upload the desired notebook.
- 4. use "`!pip install git+git://github.com/GerbenBeintema/deepSI@master`" to install deepSI directly from the repository
+ 4. use "`!pip install git+https://github.com/GerbenBeintema/deepSI@master`" to install deepSI directly from the repository
  4. To save your work either save it to your Google drive or download it as a `.ipynb`.
 
 ## Local installation using Anaconda
@@ -29,7 +29,7 @@ For these exercises, you will be using python 3.7 with some extensions for strea
       * Follow install instruction on screen
       * type "`conda activate ML`" to enter the created environment
     * type "`conda install -c anaconda git ipywidgets`"
-    * type "`pip install git+git://github.com/GerbenBeintema/deepSI@master`" to install deepSI in the ML environment
+    * type "`pip install git+https://github.com/GerbenBeintema/deepSI@master`" to install deepSI in the ML environment
  4. Opening a notebook.
     * Open the anaconda navigator
     * change the active environment to ML
@@ -37,6 +37,6 @@ For these exercises, you will be using python 3.7 with some extensions for strea
     * Navigate to the desired Notebook and open. 
  5. Extra: Update deepSI
     * launch the `Powershell Prompt` (or `CMD.exe Prompt`)
-    * type `pip install git+git://github.com/GerbenBeintema/deepSI@master`
+    * type `pip install git+https://github.com/GerbenBeintema/deepSI@master`
 
 After the installation one should open the `Quickstart-Tutorial.ipynb` notebook and follow the instructions. 

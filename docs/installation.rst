@@ -7,18 +7,18 @@ deepSI has been verified to work for 3.7 <= python <= 3.9
 
 After installing anaconda (adding to path is not necessary) you can open the "anaconda promp" or "anaconda cmd" and type the following commands to install deepSI
 
-Install pytorch see; https://pytorch.org/get-started/locally/
+Install pytorch see; https://pytorch.org/get-started/locally/ e.g.;
 
 .. code:: sh
 
-    conda install pytorch torchvision torchaudio cudatoolkit=10.2 -c pytorch 
+    conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch 
 
 Install deepSI
 
 .. code:: sh
 
     conda install -c anaconda git
-    pip install git+git://github.com/GerbenBeintema/deepSI@master
+    pip install git+https://github.com/GerbenBeintema/deepSI@master
 
 (If you encounter any problem I recommend retrying after setting up a new conda enviroment (https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html))
 
