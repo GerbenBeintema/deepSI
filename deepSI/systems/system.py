@@ -110,9 +110,9 @@ class System(object):
         warnings.warn('Calling self.get_state but no state has been set')
         return None
         
-    def apply_experiment(self, sys_data, save_state=False):
+    def apply_experiment(self, sys_data, save_state=False, init_state=True):
         if isinstance(sys_data,(tuple,list,System_data_list)):
-            # assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
+            #assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
         sys_data_norm = self.norm.transform(sys_data) #do this correctly
 
@@ -121,7 +121,9 @@ class System(object):
             self.dt = sys_data.dt #calls the dt setter
 
         U, Y = sys_data_norm.u, []
-        if sys_data_norm.y is not None:
+        if init_state==False:
+            k0 = 0
+        elif sys_data_norm.y is not None:
             k0 = self.init_state(sys_data_norm)
             Y.extend(sys_data_norm.y[:k0])
         else:
