@@ -139,7 +139,7 @@ def cashed_download(url,name_dir,zip_name=None,dir_placement=None,download_size=
 
     if not zipped: return save_dir
     print('extracting file...')
-    from zipfile import ZipFile
+    
     
     ending = file_name.split('.')[-1]
     if ending=='gz':
@@ -149,7 +149,11 @@ def cashed_download(url,name_dir,zip_name=None,dir_placement=None,download_size=
             with gzip.open(save_loc, 'rb') as f_in:
                 shutil.copyfileobj(f_in, f_out)
     elif ending=='zip':
-        File = ZipFile
+        from zipfile import ZipFile as File
+        with File(save_loc) as Obj:
+            Obj.extractall(save_dir)
+    elif ending=='rar':
+        from rarfile import RarFile as File
         with File(save_loc) as Obj:
             Obj.extractall(save_dir)
     else:

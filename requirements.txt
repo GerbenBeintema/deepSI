@@ -8,3 +8,4 @@ scikit-learn
 gym
 opencv-python
 requests
+rarfile

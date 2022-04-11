@@ -294,15 +294,60 @@ def Silverbox(dir_placement=None,force_download=False, split_data=True):
         return data_out.train_test_split()
     return System_data_list([data1, data2])
 
+def Industrial_robot(dir_placement=None,force_download=False, split_data=True):
+    '''An identification benchmark dataset for a full robot movement with a KUKA KR300 R2500 
+    ultra SE industrial robot is presented. It is a robot with a nominal payload capacity of
+    300 kg, a weight of 1120 kg, and a reach of 2500mm. It exhibits 12 states accounting for
+    position and velocity for each of the 6 joints. The robot encounters backlash in all 
+    joints, pose-dependent inertia, pose-dependent gravitational loads, pose-dependent
+    hydraulic forces, pose- and velocity-dependent centripetal and Coriolis forces as well 
+    as nonlinear friction, which is temperature-dependent and therefore potentially 
+    time-varying. Prepared datasets for black-box identification of the forward or the 
+    inverse robot dynamics are provided. Additional to the data for the black-box modeling, 
+    we supply high-frequency raw data and videos of each experiment. A baseline and figures
+    of merit are defined to make results comparable across different identification methods.
+
+    A detailed formulation of the identification problem can be found here. All the provided 
+    files and information on the industrial robot dataset can be found here. 
+
+    https://kluedo.ub.uni-kl.de/frontdoor/index/index/docId/6731
+
+    https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/
+
+    https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar
+
+    Special thanks to Jonas Weigand and co-authors for creating and sharing this benchmark!'''
+    url = 'https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar'
+
+    download_size=12717003 
+    save_dir = cashed_download(url, 'Industrial_robot', zip_name='Robot_Identification_Benchmark_Without_Raw_Data.rar',\
+        dir_placement=dir_placement, download_size=download_size, force_download=force_download)
+    # save_dir = os.path.join(save_dir,'forward_identification_without_raw_data') #matfiles location
+
+    out = loadmat(os.path.join(save_dir,'forward_identification_without_raw_data.mat'))
+
+    K = 606 
+    trains = [System_data(y=out['y_train'][:,n*K:(n+1)*K].T,u = out['u_train'][:,n*K:(n+1)*K].T) \
+            for n in range(out['y_train'].shape[1]//K)]
+    train = System_data_list(trains)
+    tests = [System_data(y=out['y_test'][:,n*K:(n+1)*K].T,u = out['u_test'][:,n*K:(n+1)*K].T) \
+            for n in range(out['y_test'].shape[1]//K)]
+    test = System_data_list(tests)
+
+    return train, test
+
 
 if __name__=='__main__':
     # clear_cache()
 
-    clear_cache()
-    out = Cascaded_Tanks(split_data=True)
+    out = Industrial_robot(force_download=False)
     print(out)
-    out = Cascaded_Tanks(split_data=False)
-    print(out)
+
+    # clear_cache()
+    # out = Cascaded_Tanks(split_data=True)
+    # print(out)
+    # out = Cascaded_Tanks(split_data=False)
+    # print(out)
     # out[0].plot()
 
     '''testing'''
