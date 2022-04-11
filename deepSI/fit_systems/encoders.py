@@ -310,11 +310,9 @@ class SS_encoder_general_hf(SS_encoder_general):
     def __init__(self, nx=10, na=20, nb=20, feedthrough=False, \
                  hf_net=hf_net_default, \
                  hf_net_kwargs = dict(f_net=default_state_net, f_net_kwargs={}, h_net_kwargs={}, h_net=default_output_net), \
-                 e_net=default_encoder_net,   e_net_kwargs={}):
+                 e_net=default_encoder_net,   e_net_kwargs={}, na_right=0, nb_right=0):
 
-        super(SS_encoder_general_hf, self).__init__()
-        self.nx, self.na, self.nb = nx, na, nb
-        self.k0 = max(self.na,self.nb)
+        super(SS_encoder_general_hf, self).__init__(nx=nx, nb=nb, na=na, na_right=na_right, nb_right=nb_right)
         
         self.e_net = e_net
         self.e_net_kwargs = e_net_kwargs
@@ -326,7 +324,9 @@ class SS_encoder_general_hf(SS_encoder_general):
         self.feedthrough = feedthrough
 
     def init_nets(self, nu, ny): # a bit weird
-        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        na_right = self.na_right if hasattr(self,'na_right') else 0
+        nb_right = self.nb_right if hasattr(self,'nb_right') else 0
+        self.encoder = self.e_net(nb=self.nb+nb_right, nu=nu, na=self.na+na_right, ny=ny, nx=self.nx, **self.e_net_kwargs)
         self.hfn = self.hf_net(nx=self.nx, nu=self.nu, ny=self.ny, **self.hf_net_kwargs)
 
     def loss(self, uhist, yhist, ufuture, yfuture, **Loss_kwargs):
