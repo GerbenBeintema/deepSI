@@ -158,6 +158,7 @@ class System_torch(System_fittable):
         self.bestfit = float('inf')
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
         self.init_model_done = True
+
     @property
     def parameters(self):
         return [item for key,item in self.parameters_with_names.items()]

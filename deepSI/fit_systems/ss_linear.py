@@ -7,6 +7,7 @@ from warnings import warn
 import math
 import scipy as sc
 from numpy.linalg import pinv
+from scipy import linalg
 
 
 #adapted from https://github.com/CPCLAB-UNIPI/SIPPY/blob/master/sippy/OLSims_methods.py
@@ -244,7 +245,7 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
     return x, y
 
 class SS_linear(System_ss, System_fittable):
-    def __init__(self,seed=None,A=None,B=None,C=None,D=None, nx=2, feedthrough=False):
+    def __init__(self,seed=None,A=None,B=None,C=None,D=None, nx=2, feedthrough=False, k0=None):
         self.ny = None
         self.nu = None
         self.A, self.B, self.C, self.D = A, B, C, D
@@ -254,6 +255,7 @@ class SS_linear(System_ss, System_fittable):
             self.ny = C.shape[0] if C.shape[0]!=1 else None
             self.nu = B.shape[1]
         self.feedthrough = feedthrough or (D is not None and np.sum(np.array(D)**2)!=0) #non-zero D
+        self.k0 = k0
         super(SS_linear, self).__init__(nx=nx)
 
     def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
@@ -307,6 +309,67 @@ class SS_linear(System_ss, System_fittable):
         else:
             yhat = np.dot(self.C, x)
         return yhat[0] if (self.ny==None) else yhat
+
+
+    def init_state(self, sys_data):
+        if self.k0 is None:
+            return super().init_state(sys_data)
+        assert self.feedthrough==False, 'not yet implemented'
+
+        if isinstance(self,SS_linear_CT):
+            A, B, C, D = self.Adis, self.Bdis, self.C, self.D
+        else:
+            A, B, C, D = self.A, self.B, self.C, self.D
+
+        nx = len(A)
+        nu = B.shape[1]
+        ny = C.shape[0]
+        k0 = self.k0
+
+        Ca = [[None] for _ in range(k0)]
+        Cab = [[None for _ in range(k0)] for _ in range(k0)]
+
+        for i in range(1,k0+1):
+            Ca[i-1][0] = C@np.linalg.matrix_power(A, -i)
+            for j in range(k0):
+                Cab[i-1][j] = C@np.linalg.matrix_power(A, j-i)@B if i-j>0 else np.zeros((ny,nu)) 
+
+        Ca = np.block(Ca)
+        self.Ca = Ca
+        Cab = np.block(Cab)
+
+        CCinv = np.linalg.inv(Ca.T@Ca)
+        Cy = CCinv@Ca.T
+        Cu = CCinv@Ca.T@Cab
+        assert sys_data.normed
+        y = sys_data.y
+        u = sys_data.u
+
+        self.x = Cy@y[:k0][::-1] + Cu@u[:k0][::-1]
+        return k0
+
+class SS_linear_CT(SS_linear):
+    def __init__(self,seed=None,A=None,B=None,C=None,D=None, nx=2, feedthrough=False, k0=5):
+        super(SS_linear_CT, self).__init__(seed=seed, A=A, B=B, C=C, D=D, nx=nx, feedthrough=feedthrough, k0=k0)
+
+    def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
+        assert isinstance(sys_data,System_data), 'Using multiple datasets to estimate ss_linear is not yet implemented'
+        sys = deepSI.fit_systems.SS_linear(nx=self.nx)
+        sys._fit(sys_data,SS_A_stability=SS_A_stability, SS_f=SS_f)
+        self.dt = sys_data.dt
+        
+        self.A = linalg.logm(sys.A)/self.dt
+        self.B = linalg.inv((linalg.inv(self.A)@(sys.A-np.eye(len(sys.A)))))@sys.B
+        self.C = sys.C
+        self.D = sys.D
+        self.Adis = sys.A
+        self.Bdis = sys.B
+
+    def f(self,x,u):
+        u = np.array(u) 
+        if u.ndim==0:
+            u = u[None]
+        return np.dot(self.Adis, x) + np.dot(self.Bdis, u)
 
 if __name__=='__main__':
     np.random.seed(42)

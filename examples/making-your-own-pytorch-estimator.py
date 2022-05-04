@@ -103,7 +103,6 @@ class NARX_basic(deepSI.fit_systems.System_torch):
         k0 = self.k0
         self.yhist = np.array([sys_data.y[k0-self.na+i:k0+i  ] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = (N,na)
         self.uhist = np.array([sys_data.u[k0-self.nb+i:k0+i-1] for i in range(0,len(sys_data)-k0-nf+1,stride)]) #+1? #shape = 
-        print(f'self.yhist.shape={self.yhist.shape}')
         return self.yhist[:,-1], k0
 
     def act_measure(self, action):
