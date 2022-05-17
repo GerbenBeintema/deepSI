@@ -254,7 +254,7 @@ class System(object):
                 return [System_data_list(o) for o in zip(*[self.multi_step_ahead(sd, nf, full=True) for sd in sys_data.sdl])]
 
         sys_data = self.norm.transform(sys_data)
-        obs, k0 = self.init_state_multi(sys_data, nf=nf, stride=1)
+        k0 = self.init_state_multi(sys_data, nf=nf, stride=1)
         _, _, ufuture, yfuture = sys_data.to_hist_future_data(na=k0, nb=k0, nf=nf, stride=1)
 
         assert full==False

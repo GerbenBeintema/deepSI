@@ -51,10 +51,12 @@ def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p:
 
     return duplicate(uk, N_periods)
 
-def filtered_signal(N_points_per_period, N_periods=1, fmax=0.1, q=1, transient_periods=5):
+def filtered_signal(N_points_per_period, N_periods=1, fmax=0.1, q=1, transient_periods=5, rng=None):
     '''Generate a signal from filtered uniform noise where u**(1/q) is returned'''
     from scipy import signal
-    u0 = np.random.normal(size=N_points_per_period)
+    if isinstance(rng, int):
+        rng = np.random.RandomState(rng)
+    u0 = np.random.normal(size=N_points_per_period) if rng is None else rng.normal(size=N_points_per_period)
     u0 = duplicate(u0,N_periods+transient_periods)
     if fmax>=1: 
         u1 = u0

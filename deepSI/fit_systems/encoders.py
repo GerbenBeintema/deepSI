@@ -242,14 +242,16 @@ class SS_encoder_general(System_torch):
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
     """For backwards compatibility fn is the advance function"""
-    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=0.1, dt_base=1., cut_off=1.5, \
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=0.1, dt_base=1., cut_off=float('inf'), \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
-                 e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={}):
+                 e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={},\
+                 na_right=0, nb_right=0):
         # dx/dt = f(x,u) = f_norm/dt_base f*(x,u)
         # euler example: x(t+dt) = x(t) + f_norm*dt/dt_base f*(x,u)
 
         super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, feedthrough=feedthrough, e_net=e_net, f_net=f_net, h_net=h_net, \
-                                                       e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs)
+                                                       e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs, \
+                                                       na_right=na_right, nb_right=nb_right)
         self.integrator_net = integrator_net
         self.integrator_net_kwargs = integrator_net_kwargs
         self.f_norm = f_norm

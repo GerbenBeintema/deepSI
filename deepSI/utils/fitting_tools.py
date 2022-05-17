@@ -1,4 +1,4 @@
-
+import numpy as np
 
 
 def fit_with_early_stopping(model, fit_kwargs, stop_frac=2/3, step0=3000, max_step=None, verbose=1):
@@ -27,6 +27,10 @@ def fit_with_early_stopping(model, fit_kwargs, stop_frac=2/3, step0=3000, max_st
             print(f'\t epochs done: {last_epoch_id:.1f} steps done: {last_id:,} last best val loss at step: {best_id:,}')
             print(f'\t Current val: {last_val:.6f} Lowest val: {best_val:.6f}')
             print(f'\t stopping condition: (stop_frac*step0+best_id)/last_id={(stop_frac*step0+best_id)/last_id:.3%} < {stop_frac:.3%} = stop_frac\n')
+        if not np.isfinite(model.Loss_train[-1]):
+            print('^^^^^^^^^^^^^^^^^^ infinite training loss encountered, breaking from loop ^^^^^^^^^^^^^')
+            model.checkpoint_load_system('_best')
+            return model
         if (stop_frac*step0+best_id)/last_id < stop_frac or (isinstance(max_step,int) and last_id>=max_step):
             model.checkpoint_load_system('_best')
             return model
