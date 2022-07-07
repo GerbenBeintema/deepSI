@@ -143,6 +143,12 @@ def extracting_matrices(M, n):
 def K_calc(A, C, Q, R, S):
     n_A = A[0, :].size
     try:
+        import control.matlab as cnt
+    except ImportError:
+        import warnings
+        warnings.warn('could not import control (see github.com/python-control), skipping Kalman filter step', stacklevel=1, source=None)
+
+    try:
         P, L, G = cnt.dare(A.T, C.T, Q, R, S, np.identity(n_A))
         K = np.dot(np.dot(A, P), C.T) + S
         K = np.dot(K, np.linalg.inv(np.dot(np.dot(C, P), C.T) + R))
@@ -312,9 +318,11 @@ class SS_linear(System_ss, System_fittable):
 
 
     def init_state(self, sys_data):
-        if self.k0 is None:
+        if self.k0 is None or self.k0==0:
             return super().init_state(sys_data)
         assert self.feedthrough==False, 'not yet implemented'
+        if self.ny is not None:
+            print('This function has not been check for MIMO please use k0=0')# assert self.ny == None, 'k0=None for MIMO'
 
         if isinstance(self,SS_linear_CT):
             A, B, C, D = self.Adis, self.Bdis, self.C, self.D
@@ -345,7 +353,7 @@ class SS_linear(System_ss, System_fittable):
         y = sys_data.y
         u = sys_data.u
 
-        self.x = Cy@y[:k0][::-1] + Cu@u[:k0][::-1]
+        self.x = Cy@y[:k0][::-1].flat + Cu@u[:k0][::-1].flat
         return k0
 
 class SS_linear_CT(SS_linear):

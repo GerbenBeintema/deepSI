@@ -208,10 +208,8 @@ class System_torch(System_fittable):
             mode = splitted[-1]
             n_step_error = self.n_step_error(val_sys_data, nf=nstep, stride=1, mode=mode, mean_channels=True)
 
-            if len(splitted)==3:
-                average_method = 'average'
-            else:
-                average_method = splitted[2]
+            average_method = 'average' if len(splitted)==3 else splitted[2]
+            
             if average_method[0]=='[':
                 w = np.array([float(a) for a in average_method[1:-1].split(',')])
                 return np.sum(w*n_step_error)/np.sum(w)

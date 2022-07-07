@@ -139,7 +139,6 @@ class System(object):
         
         if dt_old is not None:
             self.dt = dt_old
-        
         return self.norm.inverse_transform(System_data(u=np.array(U),y=np.array(Y),x=np.array(X) if save_state else None,normed=True,cheat_n=k0,dt=sys_data.dt))  
 
     def measure_act(self, action):
@@ -410,14 +409,6 @@ class System(object):
                     s.high[1 - np.isfinite(s.high)] = 2
             exp = System_data(u=[s.sample() for _ in range(N_sampes)])
         return self.apply_experiment(exp)
-
-class System_ystd(System):
-    # 
-    # y and ystd
-    # Every time an output is returned a std is also returned
-    #
-    pass
-
 
 class System_gym(System):
     """docstring for System_gym"""
