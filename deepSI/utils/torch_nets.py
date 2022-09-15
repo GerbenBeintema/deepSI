@@ -501,14 +501,13 @@ class general_koopman_forward_layer(nn.Module):
 
 class time_integrators(nn.Module):
     """docstring for time_integrators"""
-    def __init__(self, deriv, f_norm=1, dt_base=1, dt=None):
+    def __init__(self, deriv, f_norm=1, dt=None):
         '''include time normalization as dt = f_norm*dt, f_norm is often dx/dt'''
         super(time_integrators,self).__init__()
         self.dt_checked = False
         self.dt_valued = None
 
-        self.f_norm = f_norm/dt_base if dt_base is not None else f_norm #normalized dt in units of x
-                                     #this a parameter?
+        self.f_norm = f_norm 
         self._dt = dt #the current time constant (most probably the same as dt_0)
                              #should be set using set_dt before applying any dataset
         self.deriv_base   = deriv #the deriv network

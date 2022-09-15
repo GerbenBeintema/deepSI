@@ -4,7 +4,8 @@ import numpy as np
 crest_factor = lambda uk: np.max(np.abs(uk))/np.sqrt(np.mean(uk**2))
 duplicate = lambda uk,n: np.concatenate([uk]*n)
 
-def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p: p%2==1 and p%6!=1, par=None, n_crest_factor_optim=1):
+def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p: p%2==1 and p%6!=1, par=None, 
+            n_crest_factor_optim=1, seed=None):
     '''A multi-sine geneator with only odd frequences and random phases. 
 
     Paramters
@@ -22,7 +23,17 @@ def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p:
         Manual list of sin periods in the signal (note: overwrites prule)
     n_crest_factor_optim : int
         n random trails to mimize the crest factor (max(y)/std(y))
+    seed : int, None or RandomState
+        the random seed used for the generation
+    
+
+    fmax = pmax/(N_points_per_period*sample time)
     '''
+    if isinstance(seed,int) or seed is None:
+        rng = np.random.RandomState(seed)
+    else:
+        rng = seed
+    assert isinstance(rng, np.random.mtrand.RandomState)
 
     assert pmax<N_points_per_period//2
     #crest factor optim:
