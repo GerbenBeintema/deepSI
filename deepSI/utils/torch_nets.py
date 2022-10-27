@@ -85,7 +85,7 @@ class affine_input_net(nn.Module):
         self.affine_dim = affine_dim
 
     def forward(self,z,u):
-        gnow = self.g_net_now(z).view(-1,self.output_dim,self.input_dim)
+        gnow = self.g_net_now(z).view(-1,self.output_dim,self.input_dim)/self.input_dim**0.5
         return torch.einsum('nij,nj->ni', gnow, u)
 
 
@@ -497,7 +497,7 @@ class general_koopman_forward_layer(nn.Module):
     def forward(self,x,u):
         uflat = u.view(u.shape[0],-1) #convert to (Nb, nu)
         net_in = torch.cat([x,uflat],axis=1) if self.include_u_in_g else x
-        return self.Apart(x) + self.gpart(net_in,uflat)
+        return (self.Apart(x) + self.gpart(net_in,uflat))*0.5
 
 class time_integrators(nn.Module):
     """docstring for time_integrators"""
