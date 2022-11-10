@@ -289,9 +289,9 @@ class System_data(object):
         Returns
         -------
         uhist : ndarray (samples, nb, nu) or (sample, nb) if nu=None
-            array of [u[k-nb],....,u[k - (nb_right + 1)]]
+            array of [u[k-nb],....,u[k - 1 + nb_right]]
         yhist : ndarray (samples, na, ny) or (sample, na) if ny=None
-            array of [y[k-na],....,y[k - (na_right + 1)]]
+            array of [y[k-na],....,y[k - 1 + na_right]]
         ufuture : ndarray (samples, nf, nu) or (sample, nf) if nu=None
             array of [u[k],....,u[k+nf-1]]
         yfuture : ndarray (samples, nf, ny) or (sample, nf) if ny=None

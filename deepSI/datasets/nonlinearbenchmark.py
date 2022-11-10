@@ -36,11 +36,14 @@ def EMPS(dir_placement=None,vir_as_u=True,force_download=False,split_data=True):
     url = 'https://drive.google.com/file/d/1zwoXYa9-3f8NQ0ohzmjpF7UxbNgRTHkS/view'
     download_size = 1949929
     save_dir = cashed_download(url,'EMPS',zip_name='EMPS.zip', dir_placement=dir_placement,download_size=download_size,force_download=force_download)
-    matfile = loadmat(os.path.join(save_dir,'DATA_EMPS.mat'))
-    q_cur, q_ref, t, vir = [matfile[a][:,0] for a in ['qm','qg','t','vir']] #qg is reference, either, q_ref is input or vir is input
-    out_data = System_data(u=vir,y=q_cur) if vir_as_u else System_data(u=q_ref,y=q_cur)
-    return out_data.train_test_split() if split_data else out_data
 
+    datasets = []
+    for name in ['DATA_EMPS.mat','DATA_EMPS_PULSES.mat']:
+        matfile = loadmat(os.path.join(save_dir,name))
+        q_cur, q_ref, t, vir = [matfile[a][:,0] for a in ['qm','qg','t','vir']] #qg is reference, either, q_ref is input or vir is input
+        out_data = System_data(u=vir,y=q_cur) if vir_as_u else System_data(u=q_ref,y=q_cur)
+        datasets.append(out_data)
+    return System_data_list(datasets) if split_data else datasets
 
 def CED(dir_placement=None,force_download=False,split_data=True):
     '''The coupled electric drives consists of two electric motors that drive a pulley using a flexible belt. 
