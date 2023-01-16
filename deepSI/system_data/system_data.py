@@ -201,6 +201,7 @@ class System_data(object):
             return None
         else:
             return self.y.shape[1] if self.y.ndim==2 else self.y.shape[1:]
+    
     @property
     def nu(self):
         '''Number of input dimensions. None or number or tuple'''
@@ -313,12 +314,6 @@ class System_data(object):
             uhist.append(u[kmid-nb:kmid+nb_right])
             yfuture.append(y[kmid:kmid+nf])
             ufuture.append(u[kmid:kmid+nf])
-            # yhist.append(y[k-na-nf:k-nf])
-            # uhist.append(u[k-nb-nf:k-nf])
-            # yhist.append(y[k-na-k0_right:k-(k0_right - nb_right)])
-            # uhist.append(u[k-nb-k0_right:k-(k0_right - na_right)])
-            # yfuture.append(y[k-nf:k])
-            # ufuture.append(u[k-nf:k])
         uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
         if force_multi_u and uhist.ndim==2: #(N, time_seq, nu)
             uhist = uhist[:,:,None]

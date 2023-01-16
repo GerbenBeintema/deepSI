@@ -241,13 +241,44 @@ class SS_encoder_general(System_torch):
 ############## Continuous time ##################
 from deepSI.utils import integrator_RK4, integrator_euler
 class SS_encoder_deriv_general(SS_encoder_general):
-    '''The subspace encoder method to obtain continuous time models
+    '''The subspace encoder method to obtain continuous time models https://arxiv.org/abs/2204.09405
+
+    Equations
+    x_t|t = encoder(upast, ypast) 
+    dxdt = 1/tau * derivn(x_t+k|t, u_t) = f_norm * derivn(x_t+k|t, u_t) #derivn is f_net on initalization
+    x_t+k+1|t = fn(x_t+k|t, u_t) #integrator which uses derivn
+    y_t+k|t = hn(x_t+k|t)
+
+    Here the networks are initialized as:
+    encoder = e_net(nb, nu, na, ny, nx, **e_net_kwargs)
+    derivn = f_net(nx, nu, **f_net_kwargs)
+    fn = integrator_net(deriv, f_norm, **integrator_net_kwargs) #normalization is part of the integrator
+    hn = h_net(nx, ny, nu=-1, **h_net_kwargs)
+
+    Furthermore you can use cut_off to stabelize the training. 
+    tip: use cut_off = 5*(normalized noise level) is a good value
     '''
     def __init__(self, nx=10, na=20, nb=20, feedthrough=False, f_norm=None, tau=None, cut_off=float('inf'), \
                  e_net=default_encoder_net, f_net=default_state_net, integrator_net=integrator_RK4, h_net=default_output_net, \
                  e_net_kwargs={},           f_net_kwargs={},         integrator_net_kwargs={},       h_net_kwargs={},\
                  na_right=0, nb_right=0):
-        # dx/dt = f(x,u) = f_norm f(x,u) = 1/tau f(x,u)
+        '''The subspace encoder method to obtain continuous time models https://arxiv.org/abs/2204.09405
+
+        Equations
+        x_t|t = encoder(upast, ypast) 
+        dxdt = 1/tau * derivn(x_t+k|t, u_t) = f_norm * derivn(x_t+k|t, u_t) #derivn is f_net on initalization
+        x_t+k+1|t = fn(x_t+k|t, u_t) #integrator which uses derivn
+        y_t+k|t = hn(x_t+k|t)
+
+        Here the networks are initialized as:
+        encoder = e_net(nb, nu, na, ny, nx, **e_net_kwargs)
+        derivn = f_net(nx, nu, **f_net_kwargs)
+        fn = integrator_net(deriv, f_norm, **integrator_net_kwargs) #normalization is part of the integrator
+        hn = h_net(nx, ny, nu=-1, **h_net_kwargs)
+
+        Furthermore you can use cut_off to stabelize the training. 
+        tip: use cut_off = 5*(normalized noise level) is a good value
+        '''
         super(SS_encoder_deriv_general, self).__init__(nx=nx, na=na, nb=nb, feedthrough=feedthrough, e_net=e_net, f_net=f_net, h_net=h_net, \
                                                        e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, h_net_kwargs=h_net_kwargs, \
                                                        na_right=na_right, nb_right=nb_right)
