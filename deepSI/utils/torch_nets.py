@@ -76,7 +76,7 @@ class complete_MLP_res_net(nn.Module):
 
 
 class affine_input_net(nn.Module):
-    # implementation of: y = g(z)*u
+    # implementation of: y = g(z)@u
     def __init__(self, output_dim=7, input_dim=2, affine_dim=3, g_net=simple_res_net, g_net_kwargs={}):
         super(affine_input_net, self).__init__()
         self.g_net_now = g_net(n_in=affine_dim,n_out=output_dim*input_dim,**g_net_kwargs)

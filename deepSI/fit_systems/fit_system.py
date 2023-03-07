@@ -75,23 +75,23 @@ class System_torch(System_fittable):
         '''
         raise NotImplementedError('init_nets should be implemented in subclass')
 
-    def make_training_data(self, sys_data, **loss_kwargs):
-        '''Defined in subclass which converts the normed sys_data into training data
+    # def make_training_data(self, sys_data, **loss_kwargs):
+    #     '''Defined in subclass which converts the normed sys_data into training data
 
-        Parameters
-        ----------
-        sys_data : System_data or System_data_list
-            Already normalized
-        loss_kwargs : dict
-            loss function settings passed into .fit
+    #     Parameters
+    #     ----------
+    #     sys_data : System_data or System_data_list
+    #         Already normalized
+    #     loss_kwargs : dict
+    #         loss function settings passed into .fit
 
-        Returns
-        -------
-        data : list or torch.utils.data.Dataset
-            a list of arrays (e.g. [X,Y]) or an instance of torch.utils.data.Dataset
-        '''
-        assert sys_data.normed == True
-        raise NotImplementedError('make_training_data should be implemented in subclass')
+    #     Returns
+    #     -------
+    #     data : list or torch.utils.data.Dataset
+    #         a list of arrays (e.g. [X,Y]) or an instance of torch.utils.data.Dataset
+    #     '''
+    #     assert sys_data.normed == True
+    #     raise NotImplementedError('make_training_data should be implemented in subclass')
 
     def loss(*training_data_batch, **loss_kwargs):
         '''Defined in subclass which take the batch data and calculates the loss based on loss_kwargs
