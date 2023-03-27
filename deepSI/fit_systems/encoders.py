@@ -227,7 +227,7 @@ class SS_encoder_general(System_torch):
         self.state = torch.zeros(1,self.nx)
 
     def measure_act_multi(self,action):
-        action = torch.tensor(action, dtype=torch.float32) #(N,...)
+        action = torch.tensor(np.array(action,dtype=np.float32), dtype=torch.float32) #(N,...)
         with torch.no_grad():
             feedthrough = self.feedthrough if hasattr(self,'feedthrough') else False
             y_predict = self.hn(self.state, action).numpy() if feedthrough else self.hn(self.state).numpy()
@@ -712,17 +712,18 @@ class SS_encoder_innovation(SS_encoder_general):
         
 
 if __name__ == '__main__':
-    # sys = SS_encoder_general()
+    sys = SS_encoder_general()
     # from deepSI.datasets.sista_database import powerplant
     # from deepSI.datasets import Silverbox
     from deepSI.datasets import Cascaded_Tanks
     
     train, test = Cascaded_Tanks()#powerplant()
-    train.dt = 0.1
-    test.dt = 0.1
+    # train.dt = 0.1
+    # test.dt = 0.1
     # train, test = train[:150], test[:50]
     # print(train, test)
-    # # sys.fit(train, sim_val=test,epochs=50)
+    sys.fit(train,test,epochs=1)
+    test2 = sys.apply_experiment(test)
     # import deepSI
     # test2 = deepSI.system_data.System_data_list([test,test])
     # sys.fit(train, sim_val=test2, epochs=50, concurrent_val=True)
@@ -734,6 +735,6 @@ if __name__ == '__main__':
     # from matplotlib import pyplot as plt
     # plt.plot(sys.n_step_error(train,nf=20))
     # plt.show()
-    sys = SS_encoder_deriv_general(nx=2,f_norm=0.025)
+    # sys = SS_encoder_deriv_general(nx=2,f_norm=0.025)
     # sys = SS_par_start()
-    sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)
+    # sys.fit(train, sim_val=test, epochs=50, batch_size=32, concurrent_val=True)
