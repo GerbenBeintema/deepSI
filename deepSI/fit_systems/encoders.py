@@ -510,7 +510,7 @@ class SS_encoder_shotgun_MLP(SS_encoder_general):
         return torch.mean(torch.stack(mse_losses))
 
     def apply_experiment(self, sys_data, save_state=False): #can put this in apply controller
-        '''Does an experiment with for given a system data (fixed u)
+        '''Does an experiment with for a given system data (fixed u)
 
         Parameters
         ----------

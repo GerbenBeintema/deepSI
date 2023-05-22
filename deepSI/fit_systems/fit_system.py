@@ -297,6 +297,8 @@ class System_torch(System_fittable):
                     parameters_optimizer_kwargs=parameters_optimizer_kwargs, scheduler_kwargs=scheduler_kwargs)
         else:
             if verbose: print('Model already initilized (init_model_done=True), skipping initilizing of the model, the norm and the creation of the optimizer')
+            self._check_and_refresh_optimizer_if_needed() 
+
 
         if self.scheduler==False and verbose:
             print('!!!! Your might be continuing from a save which had scheduler but which was removed during saving... check this !!!!!!')
@@ -486,6 +488,19 @@ class System_torch(System_fittable):
         Consider manually creating a save_system function for a long term solution. (maybe utilize checkpoint_save_system)
         '''
         torch.save(self, file)
+
+    def _check_and_refresh_optimizer_if_needed(self):
+        if hasattr(self.optimizer, '_cuda_graph_capture_health_check'): 
+            try:
+                self.optimizer._cuda_graph_capture_health_check()
+            except AttributeError:
+                print('*** Refreshing optimizer with _refresh_optimizer (probably due to a restart of training after loading the model from a file)')
+                self._refresh_optimizer()
+    def _refresh_optimizer(self):
+        parameters = [item for name,item in self.parameters_with_names.items()]
+        optimizer_new = self.optimizer.__class__(parameters, **self.optimizer.defaults)
+        optimizer_new.load_state_dict(self.optimizer.state_dict())
+        self.optimizer = optimizer_new
 
     ### CPU & CUDA Transfers ###
     def cuda(self):

@@ -542,6 +542,47 @@ class integrator_euler(time_integrators):
         return x + self.dt*self.deriv(x,u)
 
 
+class Matrix_net(nn.Module):
+    # A(x) 
+    # A = (Nbatch, n, n) if ncols is not given (Nbatch, n, ncols)
+    # x = (Nbatch, nx)
+    ## Normalized matrix by factor 1/sqrt(ncols) if norm='auto' else *norm will be done
+    ## net is called as net(n_in=nx, n_out=n*ncols,**net_kwargs)
+    def __init__(self, nx, n, ncols=None, net=simple_res_net, net_kwargs={}, norm='auto'):
+        super(self,Matrix_net).__init__()
+        self.nx = nx
+        self.n = n
+        self.ncols = ncols if ncols is not None else n
+        self.net = net(n_in=nx, n_out=n*self.ncols, **net_kwargs)
+        if norm == 'auto':
+            self.norm = 1/self.ncols**0.5 if self.ncols>0 else 1
+        else:
+            self.norm = norm
+    
+    def forward(self, x):
+        return self.net(x).view(x.shape[-1], self.n, self.ncols)*self.norm
+
+class Sym_pos_semidef_matrix_net(nn.Module):
+    def __init__(self, nx, n, net=simple_res_net, net_kwargs={}, norm='auto'):
+        super().__init__()
+        norm = 1/((2+n)*n)**0.25 #long piece of math needed for this equation
+        self.mat_net = Matrix_net(nx, n, net=net, net_kwargs=net_kwargs, norm=norm)
+    
+    def forward(self, x):
+        A = self.mat_net(x)
+        return torch.einsum('bik,bjk->bij',A,A)
+
+
+class Skew_sym_matrix_net(nn.Module):
+    def __init__(self, nx, n, net=simple_res_net, net_kwargs={}, norm='auto'):
+        super().__init__()
+        self.mat_net = Matrix_net(nx, n, net=net, net_kwargs=net_kwargs, norm=norm)
+    
+    def forward(self, x):
+        A = self.mat_net(x)
+        return A - torch.permute(A,(0,2,1))
+
+
 if __name__ == '__main__':
     import deepSI
     import numpy as np

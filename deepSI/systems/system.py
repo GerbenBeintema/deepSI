@@ -111,6 +111,30 @@ class System(object):
         return None
         
     def apply_experiment(self, sys_data, save_state=False, init_state=True):
+        '''Does an experiment (i.e. applying an input series u sequentionally to a system) with for a given system data (fixed u)
+
+        Parameters
+        ----------
+        sys_data : System_data or System_data_list (or list or tuple)
+            The experiment which should be applied
+        save_state : boole
+            A flag to indicate that the state provided by self.get_state should be 
+            saved on the variable of the resulting Sysdata of .x
+        init_state : boole
+            A flag to indicate that the all initalization should be skipped and the 
+            current state set before calling apply_experiment should be used. This 
+            can be used to manually set a initial state. 
+
+
+        Notes
+        -----
+        This will initialize the state using self.init_state if sys_data.y (and u)
+        is not None and skip the appropriate number of steps associated with it.
+        If either is missing than self.reset_state() is used to initialize the state. 
+        Afterwards this state is advanced using sys_data.u and the output is saved at each step.
+        Lastly, the number of skipped/copied steps in init_state is saved as sys_data.cheat_n such 
+        that it can be accounted for later.
+        '''
         if isinstance(sys_data,(tuple,list,System_data_list)):
             #assert dont_set_initial_state is False, 'System_data_list and dont_set_initial_state=True would be errorous'
             return System_data_list([self.apply_experiment(sd, save_state=save_state) for sd in sys_data])
