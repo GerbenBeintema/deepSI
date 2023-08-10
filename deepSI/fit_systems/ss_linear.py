@@ -353,7 +353,7 @@ class SS_linear(System_ss, System_fittable):
         y = sys_data.y
         u = sys_data.u
 
-        self.x = Cy@y[:k0][::-1].flat + Cu@u[:k0][::-1].flat
+        self.x = Cy@y[:k0][::-1].reshape(-1, 1) + Cu@u[:k0][::-1].reshape(-1, 1)
         return k0
 
 class SS_linear_CT(SS_linear):
