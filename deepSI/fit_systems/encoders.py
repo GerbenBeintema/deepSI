@@ -156,6 +156,56 @@ class default_output_net(nn.Module):
             xu = x
         return self.net(xu).view(*((x.shape[0],)+self.ny))
 
+def to_torch_if_needed(*args, dtype=torch.float32):
+    assert len(args)>0
+    out = []
+    for ar in args:
+        if isinstance(ar, (list, tuple, float, int)):
+            ar = np.array(ar)
+        if isinstance(ar, np.ndarray):
+            ar = torch.as_tensor(ar, dtype=dtype)
+        out.append(ar)
+    return out[0] if len(args)==1 else out
+
+def check_shapes(tensor, shape):
+    #the first dimension is a batch dimension when needed
+    assert (len(tensor.shape)==len(shape)) or (len(tensor.shape)-1==len(shape))
+    batched = len(tensor.shape)-1==len(shape)
+    found_shape = tensor.shape[1:] if batched else tensor.shape
+    assert len(found_shape)==len(shape)
+    for n1,n2 in zip(shape, found_shape):
+        assert n1==n2, f'target shape={shape} and found shape = {found_shape}'
+    return (tensor, batched) if batched==True else (tensor[None], batched)
+
+
+def ONNX_export(fun, network, filename, output_names, batched=False, **inputs):
+    class Temp_function_module(nn.Module):
+        def __init__(self, fun, network_name):
+            super().__init__()
+            self.fun = fun
+            self.network = getattr(self.fun.__self__, network_name)
+            
+        def forward(self, *args):
+            return self.fun(*args)
+
+    f = Temp_function_module(fun,network)
+    inputs_values = tuple([item for key,item in inputs.items()])
+    inputs_names = tuple([key for key,item in inputs.items()])
+    if not isinstance(output_names,list):
+        output_names = tuple([output_names])
+    
+    dynamic_axes = None if batched==False else {key : {0 : 'batch_size'} for key in inputs_names + output_names}
+
+    torch.onnx.export(f,               # model being run
+                    inputs_values,                         # model input (or a tuple for multiple inputs)
+                    filename,   # where to save the model (can be a file or file-like object)
+                    export_params=True,        # store the trained parameter weights inside the model file
+                    opset_version=10,          # the ONNX version to export the model to
+                    do_constant_folding=True,  # whether to execute constant folding for optimization
+                    input_names = inputs_names,   # the model's input names
+                    output_names = output_names,
+                    dynamic_axes=dynamic_axes)
+
 class SS_encoder_general(System_torch):
     """docstring for SS_encoder_general"""
     def __init__(self, nx=10, na=20, nb=20, feedthrough=False, \
@@ -226,7 +276,7 @@ class SS_encoder_general(System_torch):
     def reset_state(self): #to be able to use encoder network as a data generator
         self.state = torch.zeros(1,self.nx)
 
-    def measure_act_multi(self,action):
+    def measure_act_multi(self,action): #action is already normalized
         action = torch.tensor(np.array(action,dtype=np.float32), dtype=torch.float32) #(N,...)
         with torch.no_grad():
             feedthrough = self.feedthrough if hasattr(self,'feedthrough') else False
@@ -236,6 +286,88 @@ class SS_encoder_general(System_torch):
 
     def get_state(self):
         return self.state[0].numpy()
+
+    def psi(self, upast, ypast, tensor_return='automatic'):
+        #upast = (Nbatch, nb, nu) or (nb, nu) or (Nbatch, nb) if nu==None
+        #ypast = (Nbatch, na, ny) or (na, ny) or (Nbatch, na) if ny==None
+        if tensor_return=='automatic':
+            tensor_return = isinstance(upast,torch.Tensor)
+
+        upast, ypast = to_torch_if_needed(upast, ypast)
+
+        upast, batched_u = check_shapes(upast, (self.nb,) + self.nu_tuple)
+        ypast, batched_y = check_shapes(ypast, (self.na,) + self.ny_tuple)
+        assert batched_u==batched_y, f'incorrect input shapes upast.shape={upast}, ypast.shape={ypast.shape}'
+        
+        # len(upast.shape) == 2 + len(self.nu_tuple)
+        # batched_y = len(ypast.shape) == 2 + len(self.ny_tuple)
+        # assert batched_u==batched_y, f'incorrect input shapes upast.shape={upast}, ypast.shape={ypast.shape}'
+        # if batched_u==False:
+        #     upast, ypast = upast[None], ypast[None]
+
+        # B, nb, *nu_given = upast.shape
+        # assert nb==self.nb, f'incorrect shape of upast, upast.shape={upast.shape}'
+        # assert tuple(nu_given)==self.nu_tuple, f'incorrect shape of upast, upast.shape={upast.shape}'
+        # B, na, *ny_given = ypast.shape
+        # assert na==self.na, f'incorrect shape of ypast, ypast.shape={ypast.shape}'
+        # assert tuple(ny_given)==self.ny_tuple, f'incorrect shape of ypast, ypast.shape={ypast.shape}'
+
+        upast, ypast = self.norm.u_transform(upast), self.norm.y_transform(ypast)
+        xinit = self.encoder(upast, ypast)
+        if batched_u==False:
+            xinit = xinit[0]
+        return xinit if tensor_return else xinit.detach().numpy()
+
+    def f(self, x, u, tensor_return='automatic'):
+        if tensor_return=='automatic':
+            tensor_return = isinstance(x,torch.Tensor)
+        x, u = to_torch_if_needed(x, u)
+
+        x, batched_x = check_shapes(x, (self.nx,))
+        u, batched_u = check_shapes(u, self.nu_tuple)
+        assert batched_u==batched_x
+
+        u = self.norm.u_transform(u) #it should not change the floating point
+
+        xnext = self.fn(x,u)
+        if batched_x==False:
+            xnext = xnext[0]
+        return xnext if tensor_return else xnext.detach().numpy()
+
+    def h(self, x, u=None, tensor_return='automatic'):
+        if tensor_return=='automatic':
+            tensor_return = isinstance(x,torch.Tensor)
+        x = to_torch_if_needed(x)
+        if self.feedthrough:
+            assert u is not None, 'feedthrough is enabled thus an input need to be given for a output prediction'
+            u = to_torch_if_needed(u)
+            u = self.norm.u_transform(u) #it should not change the floating point
+        x, batched_x = check_shapes(x,(self.nx,)) #(Nbatch, nx)
+        if self.feedthrough:
+            u, batched_u = check_shapes(u,self.nu_tuple)
+            assert batched_x==batched_u, f'incorrect input shapes x.shape={x.shape}, u.shape={u.shape}'
+
+        y = self.hn(x) if not self.feedthrough else self.hn(x,u)
+        y = self.norm.y_inv_transform(y)
+        if batched_x==False:
+            y = y[0]
+        return y if tensor_return else y.detach().numpy()
+
+    def ONNX_export(self, batched = False, filename='SUBNET'):
+        R = lambda *shape: torch.randn(*shape) if len(shape)>0 else torch.randn(1)[0]
+
+        B = (1,) if batched else ()
+        upast = R(*(B + (self.nb,) + self.nu_tuple))
+        ypast = R(*(B + (self.na,) + self.ny_tuple))
+        x = R(*(B + (self.nx,)))
+        u = R(*(B + self.nu_tuple))
+        y = R(*(B + self.ny_tuple))
+
+        ONNX_export(self.f, 'fn', f'{filename}-f.ONNX', output_names='xnext', batched=batched, x=x, u=u)
+        hinputs = {'x':x} if self.feedthrough==False else {'x':x,'u':u}
+        ONNX_export(self.h, 'hn', f'{filename}-h.ONNX', output_names='y', batched=batched, **hinputs)
+        ONNX_export(self.psi, 'encoder', f'{filename}-psi.ONNX', output_names='xinit', batched=batched, upast=upast, ypast=ypast)
+
 
 
 ############## Continuous time ##################
@@ -314,6 +446,21 @@ class SS_encoder_deriv_general(SS_encoder_general):
                     break
             x = self.fn(x,u)
         return torch.mean((torch.stack(diff,dim=1)))
+    def f(self, x, u, tensor_return='automatic'):
+        if tensor_return=='automatic':
+            tensor_return = isinstance(x,torch.Tensor)
+        x, u = to_torch_if_needed(x, u)
+
+        x, batched_x = check_shapes(x, (self.nx,))
+        u, batched_u = check_shapes(u, self.nu_tuple)
+        assert batched_u==batched_x
+
+        u = self.norm.u_transform(u) #it should not change the floating point
+
+        xdot = self.derivn(x,u)*self.f_norm
+        if batched_x==False:
+            xdot = xdot[0]
+        return xdot if tensor_return else xdot.detach().numpy()
 
 class hf_net_default(nn.Module):
     def __init__(self, nx, nu, ny, feedthrough=False, f_net=default_state_net, f_net_kwargs={}, h_net_kwargs={}, h_net=default_output_net):
@@ -374,6 +521,37 @@ class SS_encoder_general_hf(SS_encoder_general):
         with torch.no_grad():
             y_predict, self.state = self.hfn(self.state, actions)
         return y_predict.numpy()
+
+    def hf(self, x, u):
+        if tensor_return=='automatic':
+            tensor_return = isinstance(x,torch.Tensor)
+        x, u = to_torch_if_needed(x, u)
+
+        x, batched_x = check_shapes(x, (self.nx,))
+        u, batched_u = check_shapes(u, self.nu_tuple)
+        assert batched_u==batched_x
+
+        u = self.norm.u_transform(u) #it should not change the floating point
+
+        yhat, xnext = self.hfn(x,u)
+        if batched_x==False:
+            xnext = xnext[0]
+            yhat = yhat[0]
+        return (yhat, xnext) if tensor_return else (yhat.detach().numpy(), xnext.detach().numpy())
+
+
+    def ONNX_export(self, batched = False, filename='SUBNET'):
+        R = lambda *shape: torch.randn(*shape) if len(shape)>0 else torch.randn(1)[0]
+
+        B = (1,) if batched else ()
+        upast = R(*(B + (self.nb,) + self.nu_tuple))
+        ypast = R(*(B + (self.na,) + self.ny_tuple))
+        x = R(*(B + (self.nx,)))
+        u = R(*(B + self.nu_tuple))
+        y = R(*(B + self.ny_tuple))
+
+        ONNX_export(self.hf, 'hfn', f'{filename}-hfn.ONNX', output_names='xnext', batched=batched, x=x, u=u)
+        ONNX_export(self.psi, 'encoder', f'{filename}-psi.ONNX', output_names='xinit', batched=batched, upast=upast, ypast=ypast)
 
 
 class par_start_encoder(nn.Module):
@@ -469,7 +647,7 @@ class SS_encoder_CNN_video(SS_encoder_general):
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
 
 from deepSI.utils import Shotgun_MLP
-class SS_encoder_shotgun_MLP(SS_encoder_general):
+class SS_encoder_shotgun_MLP(SS_encoder_general): #this is basicly a Neural radience field thing
     def __init__(self, nx=10, na=20, nb=20, e_net=CNN_encoder, f_net=default_state_net, h_net=Shotgun_MLP, \
                             e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
         '''Todo: fix cuda with all the arrays'''

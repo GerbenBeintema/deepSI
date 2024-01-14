@@ -273,7 +273,8 @@ class System_data(object):
             Y.append(y[k])
         return np.array(hist), np.array(Y)
 
-    def to_hist_future_data(self, na=10, nb=10, nf=5, na_right = 0, nb_right = 0, stride=1, force_multi_u=False, force_multi_y=False, online_construct=False):
+    def to_hist_future_data(self, na=10, nb=10, nf=5, na_right = 0, nb_right = 0, stride=1, \
+                            force_multi_u=False, force_multi_y=False, online_construct=False):
         '''Transforms the system data to encoder structure as structure (uhist,yhist,ufuture,yfuture) of 
 
         Made for simulation error and multi step error methods
@@ -779,6 +780,19 @@ class System_data_list(System_data):
         """
         return System_data_list([s.down_sample_by_MIMO(factor) for s in self.sdl])
 
+def convert_to_same_type(base, target):
+    #converts target to the same type as base
+    import torch
+    if isinstance(base, (float,int)):
+        return target
+    elif isinstance(base, np.ndarray):
+        return np.array(target,dtype=base.dtype)
+    elif isinstance(base, torch.Tensor):
+        return torch.as_tensor(target, dtype=base.dtype)
+    else:
+        raise NotImplementedError(f'cannot convert to type {base}')
+
+
 class System_data_norm(object):
     '''A utility to normalize system_data before fitting or usage
 
@@ -802,6 +816,8 @@ class System_data_norm(object):
     @property
     def is_id(self):
         return np.all(self.u0==0) and np.all(self.ustd==1) and np.all(self.y0==0) and np.all(self.ystd==1)
+
+
 
     def make_training_data(self,sys_data):
         if isinstance(sys_data,(list,tuple)):
@@ -885,6 +901,14 @@ class System_data_norm(object):
                                cheat_n=sys_data.cheat_n,normed=False,dt=sys_data.dt)
         else:
             raise NotImplementedError(f'type={type(sys_data)} cannot yet be inverse_transform by norm')
+    def u_transform(self, u):
+        return (u - convert_to_same_type(u,self.u0))/convert_to_same_type(u,self.ustd)
+    def y_transform(self, y):
+        return (y - convert_to_same_type(y,self.y0))/convert_to_same_type(y,self.ystd)
+    def u_inv_transform(self, u):
+        return u*convert_to_same_type(u,self.ustd) + convert_to_same_type(u,self.u0)
+    def y_inv_transform(self, y):
+        return y*convert_to_same_type(y,self.ystd) + convert_to_same_type(y,self.y0)
 
     def __repr__(self):
         return f'System_data_norm: (u0={self.u0}, ustd={self.ustd}, y0={self.y0}, ystd={self.ystd})'
