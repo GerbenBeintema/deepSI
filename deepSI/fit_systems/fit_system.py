@@ -160,6 +160,27 @@ class System_torch(System_fittable):
         self.init_model_done = True
 
     @property
+    def nu_tuple(self):
+        if self.nu==None:
+            return tuple()
+        elif isinstance(self.nu, int):
+            return (self.nu,)
+        else:
+            return self.nu
+    @property
+    def ny_tuple(self):
+        if self.ny==None:
+            return tuple()
+        elif isinstance(self.ny, int):
+            return (self.ny,)
+        else:
+            return self.ny
+    def nu_num(self):
+        return np.prod(self.nu_tuple, dtype=int)
+    def ny_num(self):
+        return np.prod(self.ny_tuple, dtype=int)
+
+    @property
     def parameters(self):
         return [item for key,item in self.parameters_with_names.items()]
     @property
@@ -218,6 +239,7 @@ class System_torch(System_fittable):
             elif average_method=='last':
                 return n_step_error[-1]
         NotImplementedError(f'validation_measure={validation_measure} not implemented, use one as "sim-NRMS", "sim-NRMS_mean_channels", "10-step-average-NRMS", ect.')
+
 
     def fit(self, train_sys_data, val_sys_data, epochs=30, batch_size=256, loss_kwargs={}, \
             auto_fit_norm=True, validation_measure='sim-NRMS', optimizer_kwargs={}, concurrent_val=False, cuda=False, \
@@ -680,6 +702,37 @@ def print_array_byte_size(Dsize):
     else:
         dstr = f'{Dsize/2**10:.1f} kB'
     print('Size of the training array = ', dstr)
+
+
+class LoopDataloader:
+    def __init__(self, dataloader, iterations):
+        self.dataloader = dataloader
+        self.iterations = iterations
+    
+    def __iter__(self):
+        return LoopDataloaderIterator(self.dataloader, self.iterations)
+    def __len__(self):
+        return self.iterations
+    
+class LoopDataloaderIterator:
+    def __init__(self, dataloader, iterations):
+        self.dataloader = dataloader
+        self.iterations = iterations
+        self.dataloader_iter = self.dataloader.__iter__()
+        self.it_counter = 0
+
+    def __iter__(self):
+        return self
+    def __next__(self):
+        self.it_counter += 1
+        if self.it_counter>self.iterations:
+            raise StopIteration
+        try:
+            return self.dataloader_iter.__next__()
+        except StopIteration:
+            self.dataloader_iter = self.dataloader.__iter__()
+            return self.dataloader_iter.__next__()
+
 
 if __name__ == '__main__':
     # sys = deepSI.fit_systems.SS_encoder(nx=3,na=5,nb=5)
