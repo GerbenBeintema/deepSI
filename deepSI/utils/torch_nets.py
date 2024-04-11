@@ -88,6 +88,40 @@ class affine_input_net(nn.Module):
         gnow = self.g_net_now(z).view(-1,self.output_dim,self.input_dim)/self.input_dim**0.5
         return torch.einsum('nij,nj->ni', gnow, u)
 
+class Koopman_innovation_propogation(nn.Module):
+    def __init__(self, nx, nu, ny, u_in_B=True, B_net=simple_res_net, B_net_kwargs={}, \
+                                   u_in_K=True, K_net=simple_res_net, K_net_kwargs={}, use_inno=True,
+                                   output_scaler=0.2):
+        super().__init__()
+        self.nx = nx
+        self.nu = nu
+        self.ny = ny
+        self.nu_val = 1 if self.nu == None else self.nu
+        self.ny_val = 1 if self.ny == None else self.ny
+        self.output_scaler = output_scaler
+
+        self.Apart = nn.Linear(nx, nx, bias=False) #66%
+        self.use_inno = use_inno
+        
+        affine_dim = self.nx if u_in_B==False else self.nx + self.nu_val
+        self.u_in_B = u_in_B
+        self.Bpart = affine_input_net(output_dim=self.nx, input_dim=self.nu_val, \
+                                      affine_dim=affine_dim, g_net=B_net, g_net_kwargs=B_net_kwargs)
+        affine_dim = self.nx + self.ny_val if u_in_K==False else self.nx + self.nu_val + self.ny_val
+        self.u_in_K = u_in_K
+        self.Kpart = affine_input_net(output_dim=nx, input_dim=self.ny_val, \
+                                      affine_dim=affine_dim, g_net=K_net, g_net_kwargs=K_net_kwargs)
+    
+    def forward(self,  x, u, eps=None):
+        uflat = u.view(u.shape[0],-1) #u = [1,2,3,4] (Nb) -> (Nb,1)
+        B_net_in = torch.cat([x,uflat],axis=1) if self.u_in_B else x
+        first_two_term = (self.Apart(x) + self.Bpart(B_net_in, uflat))*self.output_scaler
+        if eps==None or self.use_inno==False:
+            return first_two_term #stability
+        eps = eps.view(eps.shape[0],-1) #u = [1,2,3,4] (Nb) -> (Nb,1)
+        K_net_in = torch.cat([x,uflat,eps],axis=1) if self.u_in_K else  torch.cat([x,eps],axis=1)
+        Knet_out = self.Kpart(K_net_in, eps)
+        return first_two_term + Knet_out*self.output_scaler
 
 
 class ConvShuffle(nn.Module):
@@ -267,7 +301,7 @@ class Down_Conv_block(nn.Module):
         #main line
         X = self.activation(X)  # (N, Cin, H, W)
         X = self.conv(X)        # (N, Cout, H, W)
-        X = self.activation(X)  # (N, Cout, H, W/r)
+        X = self.activation(X)  # (N, Cout, H, W)
         X = self.downscale(X)   # (N, Cout, H/r, W/r)
         
         #combine
@@ -316,6 +350,38 @@ class CNN_chained_downscales(nn.Module):
         if self.None_nchannels:
             Y = Y[:,None,:,:]
         return self.downblocks(Y).view(Y.shape[0],-1)
+
+
+#Psi(upast, ypast) where upast is an image and ypast an vector
+class CNN_encoder_image_input(nn.Module):
+    def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh, features_ups_factor=1.33):
+        super(CNN_encoder_image_input, self).__init__()
+        self.net = CNN_encoder(na, ny, nb, nu, nx, \
+                               n_nodes_per_layer=n_nodes_per_layer, \
+                               n_hidden_layers=n_hidden_layers, \
+                                activation=activation, \
+                                features_ups_factor=features_ups_factor)
+
+    def forward(self, upast, ypast):
+        return self.net(ypast, upast)
+
+class CNN_encoder_f_image(nn.Module):
+    def __init__(self, nx, nu, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh, features_ups_factor=1.33):
+        super(CNN_encoder_f_image, self).__init__()
+        self.net = CNN_encoder(1, nx, 1, nu, nx, \
+                               n_nodes_per_layer=n_nodes_per_layer, \
+                               n_hidden_layers=n_hidden_layers, \
+                                activation=activation, \
+                                features_ups_factor=features_ups_factor)
+
+    def forward(self, x, u):
+        #x.shape = (Nbatch, nx)
+        #u.shape = (Nbatch, C, H, W)
+
+        #self.net 
+        # x -> upast = (Nbatch, nb, nu)
+        # u -> ypast = (Nbatch, na, C, H, W)
+        return self.net(x[:,None], u[:,None])
 
 class CNN_encoder(nn.Module):
     def __init__(self, nb, nu, na, ny, nx, n_nodes_per_layer=64, n_hidden_layers=2, activation=nn.Tanh, features_ups_factor=1.33):
@@ -489,7 +555,7 @@ class general_koopman_forward_layer(nn.Module):
         super(general_koopman_forward_layer, self).__init__()
         self.nu = 1 if nu is None else nu
         self.include_u_in_g = include_u_in_g
-        affine_dim=nx+self.nu if include_u_in_g else nx
+        affine_dim = nx + self.nu if include_u_in_g else nx
         self.gpart = affine_input_net(output_dim=nx, input_dim=self.nu, affine_dim=affine_dim,\
                                       g_net=g_net, g_net_kwargs=g_net_kwargs)
         self.Apart = nn.Linear(nx, nx, bias=False)

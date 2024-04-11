@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 packages = [a for a in find_namespace_packages(where='.') if a[:6]=='deepSI']
 
 setup(name = 'deepSI',
-      version = '0.3.20',
+      version = '0.3.21',
       description = 'Dynamical system identification',
       author = 'Gerben Beintema',
       author_email = 'g.i.beintema@tue.nl',

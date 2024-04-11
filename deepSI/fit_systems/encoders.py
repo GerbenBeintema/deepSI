@@ -632,6 +632,21 @@ class SS_encoder_general_koopman(SS_encoder_general):
 
 
 from deepSI.utils import CNN_chained_upscales, CNN_encoder
+class SS_encoder_CNN_video_input(SS_encoder_general):
+    """The subspace encoder convolutonal neural network 
+
+    Notes
+    -----
+    The subspace encoder
+
+    """
+    def __init__(self, nx=10, na=20, nb=20, feedthrough=True, e_net=CNN_encoder, f_net=CNN_encoder, h_net=CNN_encoder, \
+                                            e_net_kwargs={}, f_net_kwargs={}, h_net_kwargs={}):
+        super(SS_encoder_CNN_video_input, self).__init__(nx=nx,na=na,nb=nb, feedthrough=feedthrough, \
+            e_net=e_net,               f_net=f_net,                h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+
+from deepSI.utils import CNN_chained_upscales, CNN_encoder
 class SS_encoder_CNN_video(SS_encoder_general):
     """The subspace encoder convolutonal neural network 
 
@@ -645,6 +660,7 @@ class SS_encoder_CNN_video(SS_encoder_general):
         super(SS_encoder_CNN_video, self).__init__(nx=nx,na=na,nb=nb, feedthrough=feedthrough, \
             e_net=e_net,               f_net=f_net,                h_net=h_net, \
             e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs,  h_net_kwargs=h_net_kwargs)
+
 
 from deepSI.utils import Shotgun_MLP
 class SS_encoder_shotgun_MLP(SS_encoder_general): #this is basicly a Neural radience field thing
