@@ -252,17 +252,18 @@ def SS_lsim_process_form(A, B, C, D, u, x0=None):
 
 class SS_linear(System_ss, System_fittable):
     def __init__(self,seed=None,A=None,B=None,C=None,D=None, nx=2, feedthrough=False, k0=None):
-        self.ny = None
-        self.nu = None
+        ny = None
+        nu = None
         self.A, self.B, self.C, self.D = A, B, C, D
         if A is not None:
             self.fitted = True
             nx = A.shape[0]
-            self.ny = C.shape[0] if C.shape[0]!=1 else None
-            self.nu = B.shape[1]
+            ny = C.shape[0] if C.shape[0]!=1 else None
+            nu = B.shape[1]
+
         self.feedthrough = feedthrough or (D is not None and np.sum(np.array(D)**2)!=0) #non-zero D
         self.k0 = k0
-        super(SS_linear, self).__init__(nx=nx)
+        super(SS_linear, self).__init__(nx=nx, ny=ny, nu=nu)
 
     def _fit(self,sys_data,SS_A_stability=False,SS_f=20):
         assert isinstance(sys_data,System_data), 'Using multiple datasets to estimate ss_linear is not yet implemented'
