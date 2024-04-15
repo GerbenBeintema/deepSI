@@ -85,8 +85,18 @@ class affine_input_net(nn.Module):
         self.affine_dim = affine_dim
 
     def forward(self,z,u):
-        gnow = self.g_net_now(z).view(-1,self.output_dim,self.input_dim)/self.input_dim**0.5
+        gnow = self.g_net_now(z).view(z.shape[0],self.output_dim,self.input_dim)/self.input_dim**0.5
         return torch.einsum('nij,nj->ni', gnow, u)
+
+
+class linear_output_net(nn.Module):
+    def __init__(self, nx, ny, bias=False):
+        super(linear_output_net, self).__init__()
+        self.ny = tuple() if ny is None else ((ny,) if isinstance(ny,int) else ny)
+        self.net = nn.Linear(in_features=nx, out_features=np.prod(self.ny,dtype=int),bias=bias) 
+        
+    def forward(self, x):
+        return self.net(x).view(*((x.shape[0],)+self.ny))
 
 class Koopman_innovation_propogation(nn.Module):
     def __init__(self, nx, nu, ny, u_in_B=True, B_net=simple_res_net, B_net_kwargs={}, \

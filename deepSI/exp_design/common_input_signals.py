@@ -54,7 +54,7 @@ def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p:
     for p in range(pmin,pmax) if par==None else par:
         if par==None and not prule(p):
             continue
-        uf[p] = np.exp(1j*np.random.uniform(0,np.pi*2))
+        uf[p] = np.exp(1j*rng.uniform(0,np.pi*2))
         uf[N-p] = np.conjugate(uf[p])
 
     uk = np.real(ifft(uf/2)*N)
