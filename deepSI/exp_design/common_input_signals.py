@@ -40,8 +40,9 @@ def multisine(N_points_per_period, N_periods=1, pmin=1, pmax=21, prule=lambda p:
     if n_crest_factor_optim>1:
         ybest = None
         crest_best = float('inf')
-        for _ in range(n_crest_factor_optim):
-            uk = multisine(N_points_per_period, N_periods=1, pmax=pmax, pmin=pmin, prule=prule, n_crest_factor_optim=1)
+        for i in range(n_crest_factor_optim):
+            seedi = None if seed is None else seed + i
+            uk = multisine(N_points_per_period, N_periods=1, pmax=pmax, pmin=pmin, prule=prule, n_crest_factor_optim=1, seed=seedi)
             crest = crest_factor(uk)
             if crest<crest_best:
                 ybest = uk

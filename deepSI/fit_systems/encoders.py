@@ -549,6 +549,7 @@ class SS_encoder_general_hf(SS_encoder_general):
         x = R(*(B + (self.nx,)))
         u = R(*(B + self.nu_tuple))
         y = R(*(B + self.ny_tuple))
+        torch.cat()
 
         ONNX_export(self.hf, 'hfn', f'{filename}-hfn.ONNX', output_names='xnext', batched=batched, x=x, u=u)
         ONNX_export(self.psi, 'encoder', f'{filename}-psi.ONNX', output_names='xinit', batched=batched, upast=upast, ypast=ypast)
@@ -904,6 +905,131 @@ class SS_encoder_innovation(SS_encoder_general):
             x = self.fn(x,u,eps=y-yhat)
         return torch.mean((torch.stack(y_predict,dim=1)-yfuture)**2)
         
+class LPV_with_schedul_net(nn.Module):
+    def __init__(self, nx, nu, ny, scheduling_dim, scheduling_network, scheduling_network_dependent_on_current_input=False, F=10):
+        super(LPV_with_schedul_net,self).__init__()
+        #without the 0.1 it sometimes was unstable? Might need to be adressed in the future
+        make_mat = lambda n_in, n_out: 1/F*(torch.rand(n_out,n_in)*2-1)/n_in**0.5 #returns a matrix of size (n_out, n_in) with uniform 
+        
+        self.nx = nx
+        self.nu = nu
+        self.ny = ny #=nx if it is the state equation
+        self.scheduling_dim = scheduling_dim #np=0 is linear
+        nu = 1 if nu==None else nu
+        ny = 1 if ny==None else ny
+        
+        self.A = nn.Parameter(make_mat(nx, ny))
+        self.B = nn.Parameter(make_mat(nu, ny))
+        
+        self.scheduling_network_dependent_on_current_input = scheduling_network_dependent_on_current_input
+        self.scheduling_network = scheduling_network
+        self.As = nn.Parameter(torch.stack([make_mat(nx, ny) for _ in range(scheduling_dim)]))
+        self.Bs = nn.Parameter(torch.stack([make_mat(nu, ny) for _ in range(scheduling_dim)]))
+    
+    def forward(self, x, u=None, xenc=None):
+        if self.nu==None:
+            u = u[:,None] #(Nb,1)
+        xp = x if xenc is None else xenc
+        pin = torch.cat([xp,u],dim=1) if self.scheduling_network_dependent_on_current_input else xp
+        pout = self.scheduling_network(pin)
+        
+        ylin = torch.einsum('ij,bj->bi',self.A,x) + torch.einsum('ij,bj->bi',self.B,u)
+        ynonlin = torch.einsum('pij,bp,bj->bi',self.As,pout,x) + torch.einsum('pij,bp,bj->bi',self.Bs,pout,u)
+        yout = ylin + ynonlin
+        return yout[:,0] if self.ny==None else yout
+
+    def parameters(self): #exclude scheduling_network from the parameters
+        return nn.ParameterList([self.A, self.B, self.As, self.Bs])
+
+
+from deepSI.fit_systems.encoders import default_encoder_net
+from deepSI.utils import simple_res_net
+class LPV_SUBNET_internally_scheduled(SS_encoder_general):
+    def __init__(self, nx=10, na=20, nb=20, scheduling_dim=2,           feedthrough=True,  scheduling_network_dependent_on_current_input=True, \
+        e_net=default_encoder_net, f_net=LPV_with_schedul_net,           h_net=LPV_with_schedul_net,   p_net=simple_res_net, \
+        e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}, p_net_kwargs={}):
+        assert feedthrough==True, 'non-feedthrough has not been implemented for this system yet'
+        super(LPV_SUBNET_internally_scheduled, self).__init__(nx=nx,na=na,nb=nb, feedthrough=feedthrough, \
+            e_net=e_net,f_net=f_net, h_net=h_net, \
+            e_net_kwargs=e_net_kwargs, f_net_kwargs=f_net_kwargs, \
+            h_net_kwargs=h_net_kwargs)
+        self.p_net = p_net
+        self.p_net_kwargs = p_net_kwargs
+        self.scheduling_network_dependent_on_current_input = scheduling_network_dependent_on_current_input
+        self.scheduling_dim = scheduling_dim
+    
+    def init_nets(self, nu, ny):
+        nuval = 1 if nu==None else nu
+        nyval = 1 if ny==None else ny
+        self.scheduling_network = self.p_net(n_in=self.nx + (nuval if self.scheduling_network_dependent_on_current_input else 0), n_out = self.scheduling_dim, **self.p_net_kwargs)
+        self.encoder = self.e_net(nb=self.nb, nu=nu, na=self.na, ny=ny, nx=self.nx, **self.e_net_kwargs)
+        #nx, nu, ny, np, scheduling_network
+        self.fn = self.f_net(nx=self.nx, nu=nu, ny=self.nx, scheduling_dim=self.scheduling_dim, scheduling_network=self.scheduling_network, scheduling_network_dependent_on_current_input=self.scheduling_network_dependent_on_current_input, **self.f_net_kwargs)
+        self.hn = self.h_net(nx=self.nx, nu=nu, ny=ny,      scheduling_dim=self.scheduling_dim, scheduling_network=self.scheduling_network, scheduling_network_dependent_on_current_input=self.scheduling_network_dependent_on_current_input, **self.h_net_kwargs)
+
+class LPV_SUBNET_externally_scheduled(LPV_SUBNET_internally_scheduled):
+    def __init__(self, nx=10, na=20, nb=20, scheduling_dim=2, feedthrough=True,  scheduling_network_dependent_on_current_input=True, use_predicted_output_for_encoder=False, \
+        e_net=default_encoder_net, f_net=LPV_with_schedul_net,  h_net=LPV_with_schedul_net, p_net=simple_res_net, \
+        e_net_kwargs={},           f_net_kwargs={},         h_net_kwargs={}, p_net_kwargs={}):
+        
+        super(LPV_SUBNET_externally_scheduled, self).__init__(nx=nx, na=na, nb=nb, scheduling_dim=scheduling_dim, feedthrough=feedthrough,  scheduling_network_dependent_on_current_input=scheduling_network_dependent_on_current_input, \
+        e_net=e_net, f_net=f_net,           h_net=h_net,   p_net=p_net, \
+        e_net_kwargs=e_net_kwargs,           f_net_kwargs=f_net_kwargs,         h_net_kwargs=h_net_kwargs, p_net_kwargs=p_net_kwargs)
+        
+        self.use_predicted_output_for_encoder = use_predicted_output_for_encoder
+    
+    def loss(self, uhist, yhist, ufuture, yfuture, loss_nf_cutoff=None, **Loss_kwargs):
+        x = self.encoder(uhist, yhist) #initialize Nbatch number of states
+        errors = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            xenc = self.encoder(uhist, yhist)
+            yhat = self.hn(x=x,u=u,xenc=xenc) if self.feedthrough else self.hn(x,u=None,xenc=xenc)
+            error = nn.functional.mse_loss(y, yhat)
+            errors.append(error) #calculate error after taking n-steps
+            if loss_nf_cutoff is not None and error.item()>loss_nf_cutoff:
+                print(len(errors), end=' ')
+                break
+            
+            #uhist = (Nb, nb, nu)
+            #yhist = (Nb, na, ny)
+            uhist = torch.cat([uhist[:,1:],u[:,None]],dim=1)
+            if self.use_predicted_output_for_encoder:
+                yhist = torch.cat([yhist[:,1:],yhat[:,None]],dim=1)
+            else:
+                yhist = torch.cat([yhist[:,1:],y[:,None]],dim=1)
+            
+            x = self.fn(x, u, xenc=xenc) 
+        return torch.mean(torch.stack(errors))
+    
+    def apply_experiment(self, data, use_predicted_output_for_encoder=False, verbose=True):
+        if verbose:
+            print(f'INFO: applying the input the LPV SUBNET model with {use_predicted_output_for_encoder=}')
+        if use_predicted_output_for_encoder:
+            return super().apply_experiment(data)
+        else:
+            return self.apply_experiment_with_measured_outputs_in_encoder(data)
+    
+    def apply_experiment_with_measured_outputs_in_encoder(self, sys_data): 
+        if isinstance(sys_data, System_data_list):
+            return System_data_list([self.apply_experiment_with_measured_outputs_in_encoder(s) for s in sys_data])
+        
+        sys_data_norm = self.norm.transform(sys_data)
+        
+        A = sys_data_norm.to_hist_future_data(na=self.na, nb=self.nb, nf=len(sys_data)-self.k0)
+        uhist, yhist, ufuture, yfuture = [torch.as_tensor(a,dtype=torch.float32) for a in A]
+        x = self.encoder(uhist, yhist) #initialize Nbatch number of states
+        yhats = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            xenc = self.encoder(uhist, yhist)
+            yhat = self.hn(x=x,u=u,xenc=xenc) if self.feedthrough else self.hn(x,u=None,xenc=xenc)
+            yhats.append(yhat.detach().numpy()[0]) #calculate error after taking n-steps
+            
+            uhist = torch.cat([uhist[:,1:],u[:,None]],dim=1)
+            yhist = torch.cat([yhist[:,1:],y[:,None]],dim=1)
+            x = self.fn(x,u, xenc=xenc) #advance state. 
+        yhats = np.concatenate([sys_data_norm.y[:self.k0], np.array(yhats)],axis=0)
+        return self.norm.inverse_transform(System_data(u=sys_data_norm.u, y=yhats,cheat_n=self.k0,normed=True))
+
 
 if __name__ == '__main__':
     sys = SS_encoder_general()
