@@ -241,8 +241,8 @@ class System_torch(System_fittable):
         NotImplementedError(f'validation_measure={validation_measure} not implemented, use one as "sim-NRMS", "sim-NRMS_mean_channels", "10-step-average-NRMS", ect.')
 
 
-    def fit(self, train_sys_data, val_sys_data, epochs=30, batch_size=256, loss_kwargs={}, \
-            auto_fit_norm=True, validation_measure='sim-NRMS', optimizer_kwargs={}, concurrent_val=False, cuda=False, \
+    def fit(self, train_sys_data, val_sys_data, epochs=30, n_its=None, batch_size=256, loss_kwargs={}, \
+            auto_fit_norm=True, validation_measure='sim-NRMS', optimizer_kwargs={}, its_per_val='epoch', concurrent_val=False, cuda=False, \
             timeout=None, verbose=1, sqrt_train=True, num_workers_data_loader=0, print_full_time_profile=False, scheduler_kwargs={}):
         '''The batch optimization method with parallel validation, 
 
@@ -342,10 +342,13 @@ class System_torch(System_fittable):
         self.Loss_val, self.Loss_train, self.batch_id, self.time, self.epoch_id = list(self.Loss_val), list(self.Loss_train), list(self.batch_id), list(self.time), list(self.epoch_id)
 
         #### init monitoring values ########
-        Loss_acc_val, N_batch_acc_val, val_counter, best_epoch, batch_id_start = 0, 0, 0, 0, self.batch_counter #to print the frequency of the validation step.
+        Loss_acc_val_loop, it_counter_per_val_loop, val_counter, best_it, batch_id_start = 0, 0, 0, 0, self.batch_counter #to print the frequency of the validation step.
         N_training_samples = len(data_train) if isinstance(data_train, Dataset) else len(data_train[0])
         batch_size = min(batch_size, N_training_samples)
         N_batch_updates_per_epoch = N_training_samples//batch_size
+        n_its = int(N_batch_updates_per_epoch*epochs) if n_its is None else n_its
+        Loss_acc_print_loop = 0.
+        its_per_val = N_batch_updates_per_epoch if its_per_val=='epoch' else its_per_val
         if verbose>0: 
             print(f'N_training_samples = {N_training_samples}, batch_size = {batch_size}, N_batch_updates_per_epoch = {N_batch_updates_per_epoch}')
         
@@ -368,82 +371,84 @@ class System_torch(System_fittable):
         try:
             t = Tictoctimer()
             start_t = time.time() #time keeping
-            epochsrange = range(epochs) if timeout is None else itertools.count(start=0)
+            rang = range(n_its) if timeout is None else itertools.count(start=0)
+            if verbose>0:
+                rang = tqdm(rang)
+
             if timeout is not None and verbose>0: 
                 print(f'Starting indefinite training until {timeout} seconds have passed due to provided timeout')
 
-            for epoch in (tqdm(epochsrange) if verbose>0 else epochsrange):
-                bestfit_old = self.bestfit #to check if a new lowest validation loss has been achieved
-                Loss_acc_epoch = 0.
-                t.start()
-                t.tic('data get')
-                for train_batch in data_train_loader:
-                    if cuda:
-                        train_batch = [b.cuda() for b in train_batch]
-                    t.toc('data get')
-                    def closure(backward=True):
-                        t.toc('optimizer start')
-                        t.tic('loss')
-                        Loss = self.loss(*train_batch, **loss_kwargs)
-                        t.toc('loss')
-                        if backward:
-                            t.tic('zero_grad')
-                            self.optimizer.zero_grad()
-                            t.toc('zero_grad')
-                            t.tic('backward')
-                            Loss.backward()
-                            t.toc('backward')
-                        t.tic('stepping')
-                        return Loss
 
-                    t.tic('optimizer start')
-                    training_loss = self.optimizer.step(closure).item()
-                    t.toc('stepping')
-                    if self.scheduler:
-                        t.tic('scheduler')
-                        self.scheduler.step()
-                        t.tic('scheduler')
-                    Loss_acc_val += training_loss
-                    Loss_acc_epoch += training_loss
-                    N_batch_acc_val += 1
-                    self.batch_counter += 1
-                    self.epoch_counter += 1/N_batch_updates_per_epoch
-
-                    t.tic('val')
-                    if concurrent_val and self.remote_recv(): ####### validation #######
-                        self.remote_send(Loss_acc_val/N_batch_acc_val, time.time()-start_t+extra_t)
-                        Loss_acc_val, N_batch_acc_val, val_counter = 0., 0, val_counter + 1
-                    t.toc('val')
-                    t.tic('data get')
+            bestfit_old = self.bestfit
+            t.start()
+            t.tic('data get')
+            for it_count, train_batch in zip(rang, loop_dataset(data_train_loader)):
+                #Loss_acc_print_loop=0
+                if cuda:
+                    train_batch = [b.cuda() for b in train_batch]
                 t.toc('data get')
+                def closure(backward=True):
+                    t.toc('optimizer start')
+                    t.tic('loss')
+                    Loss = self.loss(*train_batch, **loss_kwargs)
+                    t.toc('loss')
+                    if backward:
+                        t.tic('zero_grad')
+                        self.optimizer.zero_grad()
+                        t.toc('zero_grad')
+                        t.tic('backward')
+                        Loss.backward()
+                        t.toc('backward')
+                    t.tic('stepping')
+                    return Loss
 
-                ########## end of epoch clean up ##########
-                train_loss_epoch = Loss_acc_epoch/N_batch_updates_per_epoch
-                if np.isnan(train_loss_epoch):
-                    if verbose>0: print(f'&&&&&&&&&&&&& Encountered a NaN value in the training loss at epoch {epoch}, breaking from loop &&&&&&&&&&')
+                t.tic('optimizer start')
+                training_loss = self.optimizer.step(closure).item()
+
+                if np.isnan(training_loss):
+                    if verbose>0: print(f'&&&&&&&&&&&&& Encountered a NaN value in the training loss at it {it_count}, breaking from loop &&&&&&&&&&')
                     break
 
+                t.toc('stepping')
+                if self.scheduler:
+                    t.tic('scheduler')
+                    self.scheduler.step()
+                    t.tic('scheduler')
+                
+                Loss_acc_val_loop += training_loss
+                Loss_acc_print_loop += training_loss
+                it_counter_per_val_loop += 1
+                self.batch_counter += 1
+                self.epoch_counter += 1/N_batch_updates_per_epoch
+
                 t.tic('val')
-                if not concurrent_val:
-                    validation(train_loss=train_loss_epoch, \
+                if (it_count+1)%its_per_val==0:
+                    if concurrent_val:
+                        if self.remote_recv(): #only when it is idle
+                            self.remote_send(Loss_acc_val_loop/it_counter_per_val_loop, time.time()-start_t+extra_t)
+                            Loss_acc_val_loop, it_counter_per_val_loop, val_counter = 0., 0, val_counter + 1
+                    else:
+                        validation(train_loss=Loss_acc_val_loop/it_counter_per_val_loop, \
                                time_elapsed_total=time.time()-start_t+extra_t) #updates bestfit and goes back to cpu and back
+                        Loss_acc_val_loop, it_counter_per_val_loop, val_counter = 0., 0, val_counter + 1
                 t.toc('val')
-                t.pause()
+                # t.pause()
 
                 ######### Printing Routine ##########
-                if verbose>0:
-                    time_elapsed = time.time() - start_t
+                if verbose>0 and (it_count+1)%its_per_val==0:
                     if bestfit_old > self.bestfit:
                         print(f'########## New lowest validation loss achieved ########### {validation_measure} = {self.bestfit}')
-                        best_epoch = epoch+1
+                        best_it = it_count+1
+                        bestfit_old = self.bestfit
                     if concurrent_val: #if concurrent val than print validation freq
-                        val_feq = val_counter/(epoch+1)
-                        valfeqstr = f', {val_feq:4.3} vals/epoch' if (val_feq>1 or val_feq==0) else f', {1/val_feq:4.3} epochs/val'
+                        val_feq = val_counter/(it_count+1)
+                        valfeqstr = f', {val_feq:4.3} vals/it' if (val_feq>1 or val_feq==0) else f', {1/val_feq:4.3} its/val'
                     else: #else print validation time use
                         valfeqstr = f''
+                    train_loss_epoch, Loss_acc_print_loop = Loss_acc_print_loop/its_per_val, 0
                     trainstr = f'sqrt loss {train_loss_epoch**0.5:7.4}' if sqrt_train and train_loss_epoch>=0 else f'loss {train_loss_epoch:7.4}'
                     Loss_val_now = self.Loss_val[-1] if len(self.Loss_val)!=0 else float('nan')
-                    Loss_str = f'Epoch {epoch+1:4}, {trainstr}, Val {validation_measure} {Loss_val_now:6.4}'
+                    Loss_str = f'It {it_count+1:4}, {trainstr}, Val {validation_measure} {Loss_val_now:6.4}'
                     loss_time = (t.acc_times['loss'] + t.acc_times['optimizer start'] + t.acc_times['zero_grad'] + t.acc_times['backward'] + t.acc_times['stepping'])  /t.time_elapsed
                     time_str = f'Time Loss: {loss_time:.1%}, data: {t.acc_times["data get"]/t.time_elapsed:.1%}, val: {t.acc_times["val"]/t.time_elapsed:.1%}{valfeqstr}'
                     self.batch_feq = (self.batch_counter - batch_id_start)/(time.time() - start_t)
@@ -451,6 +456,7 @@ class System_torch(System_fittable):
                     print(f'{Loss_str}, {time_str}, {batch_str}')
                     if print_full_time_profile:
                         print('Time profile:',t.percent())
+                t.tic('data get')
 
                 ####### Timeout Breaking ##########
                 if timeout is not None:
@@ -467,8 +473,8 @@ class System_torch(System_fittable):
             if verbose: print(f'Waiting for started validation process to finish and one last validation... (receiving = {self.remote.receiving})',end='')
             if self.remote_recv(wait=True):
                 if verbose: print('Recv done... ',end='')
-                if N_batch_acc_val>0:
-                    self.remote_send(Loss_acc_val/N_batch_acc_val, time.time()-start_t+extra_t)
+                if it_counter_per_val_loop>0:
+                    self.remote_send(Loss_acc_val_loop/it_counter_per_val_loop, time.time()-start_t+extra_t)
                     self.remote_recv(wait=True)
             self.remote_close()
             if verbose: print('Done!')
@@ -481,7 +487,7 @@ class System_torch(System_fittable):
         except FileNotFoundError:
             print('no best checkpoint found keeping last')
         if verbose: 
-            print(f'Loaded model with best known validation {validation_measure} of {self.bestfit:6.4} which happened on epoch {best_epoch} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
+            print(f'Loaded model with best known validation {validation_measure} of {self.bestfit:6.4} which happened on epoch {best_it} (epoch_id={self.epoch_id[-1] if len(self.epoch_id)>0 else 0:.2f})')
 
     ########## Saving and loading ############
     def checkpoint_save_system(self, name='_best', directory=None):
@@ -563,7 +569,7 @@ class System_torch(System_fittable):
         work_remote.close()
         self.remote.process = process
 
-    def remote_send(self, Loss_acc_val, time_optimize):
+    def remote_send(self, Loss_acc_val_loop, time_optimize):
         assert self.remote.receiving==False
         remote = self.remote
         del self.remote #remote cannot be copyied by deepcopy
@@ -574,7 +580,7 @@ class System_torch(System_fittable):
         if b'__main__' in pickle.dumps(copy_self.scheduler):
             print('setting scheduler to None for there is some main function found')
             copy_self.scheduler = False
-        self.remote.send((copy_self, Loss_acc_val, time_optimize)) #time here does not matter
+        self.remote.send((copy_self, Loss_acc_val_loop, time_optimize)) #time here does not matter
         self.remote.receiving = True
 
     def remote_recv(self,wait=False):
@@ -589,6 +595,12 @@ class System_torch(System_fittable):
         self.remote.close()
         self.remote.process.join()
         del self.remote
+
+
+def loop_dataset(dataset):
+    while True:
+        for batch in dataset:
+            yield batch
 
 import signal
 import logging
@@ -668,13 +680,14 @@ class Tictoctimer(object):
                 f', others {1-R/elapsed:.1%}'
         
 class My_Simple_DataLoader:
-    def __init__(self, data, batch_size=32):
+    def __init__(self, data, batch_size=32, seed=0):
         self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data] #this copies the data again
         self.ids = np.arange(len(data[0]),dtype=int)
+        self.rng = np.random.default_rng(0)
         self.batch_size = batch_size
     
     def __iter__(self):
-        np.random.shuffle(self.ids)
+        self.rng.shuffle(self.ids)
         return My_Simple_DataLoaderIterator(self.data, self.ids, self.batch_size)
     
 class My_Simple_DataLoaderIterator:

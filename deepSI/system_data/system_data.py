@@ -626,6 +626,10 @@ class System_data_list(System_data):
     @property
     def normed(self):
         return self.sdl[0].normed
+    @normed.setter
+    def normed(self,value):
+        for sd in self.sdl:
+            sd.normed = value
     @property
     def N_samples(self):
         return sum(sys_data.u.shape[0] for sys_data in self.sdl)
@@ -816,7 +820,6 @@ class System_data_norm(object):
     @property
     def is_id(self):
         return np.all(self.u0==0) and np.all(self.ustd==1) and np.all(self.y0==0) and np.all(self.ystd==1)
-
 
 
     def make_training_data(self,sys_data):

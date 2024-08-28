@@ -250,7 +250,7 @@ class SS_encoder_general(System_torch):
         else:
             self.hn =      self.h_net(nx=self.nx, ny=ny,                            **self.h_net_kwargs) 
 
-    def loss(self, uhist, yhist, ufuture, yfuture, loss_nf_cutoff=None, **Loss_kwargs):
+    def loss_old(self, uhist, yhist, ufuture, yfuture, loss_nf_cutoff=None, **Loss_kwargs):
         x = self.encoder(uhist, yhist) #initialize Nbatch number of states
         errors = []
         for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
@@ -261,6 +261,24 @@ class SS_encoder_general(System_torch):
                 break
             x = self.fn(x,u) #advance state. 
         return torch.mean(torch.stack(errors))
+
+    def loss(self, uhist, yhist, ufuture, yfuture, loss_nf_cutoff=None, **Loss_kwargs):
+        assert loss_nf_cutoff==None
+        x = self.encoder(uhist, yhist) #initialize Nbatch number of states
+        X = []
+        for y, u in zip(torch.transpose(yfuture,0,1), torch.transpose(ufuture,0,1)): #iterate over time
+            X.append(x)
+            x = self.fn(x,u)
+        X = torch.stack(X,dim=1) #(Nbatch, nf, nx)
+
+        if self.feedthrough:
+            raise NotImplementedError
+        else:
+            yhat = self.hn(X.reshape(-1, X.shape[-1])) #image (Nbatch, nf, ...)
+        yhat = yhat.view(*((uhist.shape[0], ufuture.shape[1]) + yhat.shape[1:]))
+        loss = nn.functional.mse_loss(yfuture, yhat)
+        return loss
+
 
     ########## How to use ##############
     def init_state_multi(self, sys_data, nf=100, stride=1):
