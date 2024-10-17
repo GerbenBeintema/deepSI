@@ -681,7 +681,7 @@ class Tictoctimer(object):
         
 class My_Simple_DataLoader:
     def __init__(self, data, batch_size=32, seed=0):
-        self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data] #this copies the data again
+        self.data = [torch.as_tensor(d,dtype=torch.float32) for d in data]
         self.ids = np.arange(len(data[0]),dtype=int)
         self.rng = np.random.default_rng(0)
         self.batch_size = batch_size

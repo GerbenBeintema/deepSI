@@ -302,20 +302,33 @@ class System_data(object):
         if online_construct:
             return hist_future_dataset(self.u, self.y, na=na, nb=nb, nf=nf, force_multi_u=force_multi_u, force_multi_y=force_multi_y)
 
-        u, y = np.copy(self.u), np.copy(self.y)
-        yhist = []
-        uhist = []
-        ufuture = []
-        yfuture = []
-        k0 = max(nb, na)
-        k0_right = max(nf, na_right, nb_right)
-        for k in range(k0+k0_right,len(u)+1,stride):
-            kmid = k - k0_right
-            yhist.append(y[kmid-na:kmid+na_right])
-            uhist.append(u[kmid-nb:kmid+nb_right])
-            yfuture.append(y[kmid:kmid+nf])
-            ufuture.append(u[kmid:kmid+nf])
-        uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
+        if stride==1:
+            u, y = self.u.astype(np.float32, copy=False), self.y.astype(np.float32, copy=False)
+            def window(x,window_shape=nf): 
+                x = np.lib.stride_tricks.sliding_window_view(x, window_shape=window_shape,axis=0, writeable=True)
+                s = (0,len(x.shape)-1) + tuple(range(1,len(x.shape)-1))
+                return x.transpose(s)
+            npast = max(na, nb)
+            ufuture = window(u[npast:len(u)], window_shape=nf)
+            yfuture = window(y[npast:len(y)], window_shape=nf)
+            uhist = window(u[npast-nb:len(u)-nf], window_shape=nb)
+            yhist = window(y[npast-na:len(y)-nf], window_shape=na)
+        else:
+            u, y = np.copy(self.u), np.copy(self.y)
+            yhist = []
+            uhist = []
+            ufuture = []
+            yfuture = []
+            k0 = max(nb, na)
+            k0_right = max(nf, na_right, nb_right)
+            for k in range(k0+k0_right,len(u)+1,stride):
+                kmid = k - k0_right
+                yhist.append(y[kmid-na:kmid+na_right])
+                uhist.append(u[kmid-nb:kmid+nb_right])
+                yfuture.append(y[kmid:kmid+nf])
+                ufuture.append(u[kmid:kmid+nf])
+            uhist, yhist, ufuture, yfuture = np.array(uhist), np.array(yhist), np.array(ufuture), np.array(yfuture)
+    
         if force_multi_u and uhist.ndim==2: #(N, time_seq, nu)
             uhist = uhist[:,:,None]
             ufuture = ufuture[:,:,None]
@@ -323,7 +336,6 @@ class System_data(object):
             yhist = yhist[:,:,None]
             yfuture = yfuture[:,:,None]
         return uhist, yhist, ufuture, yfuture
-
 
     def to_ss_data(self,nf=20,stride=1,force_multi_u=False,force_multi_y=False,online_construct=False):
         if online_construct:
