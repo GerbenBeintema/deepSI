@@ -243,7 +243,7 @@ class System_torch(System_fittable):
 
     def fit(self, train_sys_data, val_sys_data, epochs=30, n_its=None, batch_size=256, loss_kwargs={}, \
             auto_fit_norm=True, validation_measure='sim-NRMS', optimizer_kwargs={}, its_per_val='epoch', concurrent_val=False, cuda=False, \
-            timeout=None, verbose=1, sqrt_train=True, num_workers_data_loader=0, print_full_time_profile=False, scheduler_kwargs={}):
+            timeout=None, verbose=2, sqrt_train=True, num_workers_data_loader=0, print_full_time_profile=False, scheduler_kwargs={}):
         '''The batch optimization method with parallel validation, 
 
         Parameters
@@ -271,7 +271,7 @@ class System_torch(System_fittable):
         timeout : None or number
             Alternative to epochs to run until a set amount of time has past. 
         verbose : int
-            Set to 0 for a silent run
+            Set to 0 for a silent run, 1 only print and 2 adds a progress bar.
         sqrt_train : boole
             will sqrt the loss while printing
         num_workers_data_loader : int
@@ -372,7 +372,7 @@ class System_torch(System_fittable):
             t = Tictoctimer()
             start_t = time.time() #time keeping
             rang = range(n_its) if timeout is None else itertools.count(start=0)
-            if verbose>0:
+            if verbose>1:
                 rang = tqdm(rang)
 
             if timeout is not None and verbose>0: 
