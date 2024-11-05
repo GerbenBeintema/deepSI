@@ -304,8 +304,12 @@ class BasicConvTranspose2d(nn.Module):
         super(BasicConvTranspose2d, self).__init__()
         if padding=='same':
             padding = (kernel_size-1)//2
-        self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, \
-                                       stride=upscale_factor, padding=padding, output_padding=upscale_factor//2 , padding_mode=padding_mode)
+        if upscale_factor!=1:
+            self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, \
+                                        stride=upscale_factor, padding=padding, output_padding=upscale_factor//2 , padding_mode=padding_mode)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, \
+                                           padding=padding, padding_mode=padding_mode)
         self.activation = activation
         self.Ch = Ch
         self.Cw = Cw
@@ -337,7 +341,7 @@ class CNN_ConvTranspose2d(nn.Module):
     def __init__(self, nx, ny, nu=-1, features_out = 1, kernel_size=3, padding='same', \
                  upscale_factor=2, feature_scale_factor=2, final_padding=4, padding_mode='zeros',\
                  activation=nn.LeakyReLU(negative_slope=0.2, inplace=False), groupnorm=True, \
-                 n_hidden_layers=1, n_nodes_per_layer=64, n_fourier_features=0):
+                 n_hidden_layers=1, n_nodes_per_layer=64, n_fourier_features=0, add_no_scaling_layer=False):
         super(CNN_ConvTranspose2d, self).__init__()
         self.feedthrough = nu!=-1
         if self.feedthrough:
@@ -371,13 +375,19 @@ class CNN_ConvTranspose2d(nn.Module):
         to_int = lambda x: int(x) + (-int(x))%2 #to int and increase by 1 if odd        
         self.upblocks = []
         while height_now>=2*upscale_factor+1 and width_now>=2*upscale_factor+1:
-            
+            if add_no_scaling_layer:
+                B = BasicConvTranspose2d(to_int(features_now), to_int(features_now), kernel_size, padding=padding, \
+                                upscale_factor=1, padding_mode=padding_mode, activation=activation, Cw=0, Ch=0, groupnorm=groupnorm)
+                self.upblocks.append(B)
+                
             Ch = (-height_now)%upscale_factor
             Cw = (-width_now)%upscale_factor
             # print(height_now, width_now, features_now, Ch, Cw)
+
             B = BasicConvTranspose2d(to_int(features_now*feature_scale_factor), to_int(features_now), kernel_size, padding=padding, \
                  upscale_factor=upscale_factor, padding_mode=padding_mode, activation=activation, Cw=Cw, Ch=Ch, groupnorm=groupnorm)
             self.upblocks.append(B)
+
             features_now *= feature_scale_factor
             #implement slicing 
             
