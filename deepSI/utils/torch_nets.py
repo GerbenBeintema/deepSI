@@ -186,7 +186,7 @@ class ClassicUpConv(nn.Module):
 class Upscale_Conv_block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding='same', \
                  upscale_factor=2, main_upscale=ConvShuffle, shortcut=ConvShuffle, \
-                 padding_mode='zeros', activation=nn.functional.relu, Ch=0, Cw=0):
+                 padding_mode='zeros', activation=nn.ReLU(), Ch=0, Cw=0):
         assert isinstance(upscale_factor, int)
         super(Upscale_Conv_block, self).__init__()
         #padding='valid' is weird????
@@ -293,6 +293,124 @@ class CNN_chained_upscales(nn.Module):
             Xout = Xout[:,:,self.final_padding:-self.final_padding,self.final_padding:-self.final_padding]
         return Xout[:,0,:,:] if self.None_nchannels else Xout
 
+######################################################
+################# New setup ##########################
+################# New setup ##########################
+
+class BasicConvTranspose2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, padding='same', \
+                 upscale_factor=2, padding_mode='zeros', activation=nn.LeakyReLU(negative_slope=0.2, inplace=False), Ch=0, Cw=0, groupnorm=True):
+        assert isinstance(upscale_factor, int)
+        super(BasicConvTranspose2d, self).__init__()
+        if padding=='same':
+            padding = (kernel_size-1)//2
+        self.conv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, \
+                                       stride=upscale_factor, padding=padding, output_padding=upscale_factor//2 , padding_mode=padding_mode)
+        self.activation = activation
+        self.Ch = Ch
+        self.Cw = Cw
+        if groupnorm:
+            self.norm = nn.GroupNorm(2, out_channels)
+        else:
+            self.norm = nn.Identity()
+
+        
+    def forward(self, X):
+        Y = self.conv(X)[:,:,self.Ch:,self.Cw:]
+        return self.activation(self.norm(Y))
+
+class Fourier_features(nn.Module):
+    def __init__(self, nx, n_fourier_features):
+        super().__init__()
+        self.n_out = nx *(1 + n_fourier_features*2)
+        self.n_fourier_features = n_fourier_features
+        
+    def forward(self, x):
+        if self.n_fourier_features==0:
+            return x
+        #for each component in x add sin(x*n), cos(x*n) for n in 1, n_fourier_features
+        cosx = torch.cat([torch.cos(x*n) for n in range(1,self.n_fourier_features+1)], dim=1) #(Nbatch, nx*n)
+        sinx = torch.cat([torch.sin(x*n) for n in range(1,self.n_fourier_features+1)], dim=1) #(Nbatch, nx*n)
+        return torch.cat([x, cosx, sinx], dim=1)
+
+class CNN_ConvTranspose2d(nn.Module):
+    def __init__(self, nx, ny, nu=-1, features_out = 1, kernel_size=3, padding='same', \
+                 upscale_factor=2, feature_scale_factor=2, final_padding=4, padding_mode='zeros',\
+                 activation=nn.LeakyReLU(negative_slope=0.2, inplace=False), groupnorm=True, \
+                 n_hidden_layers=1, n_nodes_per_layer=64, n_fourier_features=0):
+        super(CNN_ConvTranspose2d, self).__init__()
+        self.feedthrough = nu!=-1
+        if self.feedthrough:
+            self.nu = tuple() if nu is None else ((nu,) if isinstance(nu,int) else nu)
+            FCnet_in = nx + np.prod(self.nu, dtype=int)
+        else:
+            FCnet_in = nx
+        
+        self.activation  = activation
+        assert isinstance(ny,(list,tuple)) and (len(ny)==2 or len(ny)==3), 'ny should have 2 or 3 dimentions in the form (nchannels, height, width) or (height, width)'
+        if len(ny)==2:
+            self.nchannels = 1
+            self.None_nchannels = True
+            self.height_target, self.width_target = ny
+        else:
+            self.None_nchannels = False
+            self.nchannels, self.height_target, self.width_target = ny
+        
+        if self.nchannels>self.width_target or self.nchannels>self.height_target:
+            import warnings
+            text = f"Interpreting shape of data as (Nnchannels={self.nchannels}, Nheight={self.height_target}, Nwidth={self.width_target}), This might not be what you intended!"
+            warnings.warn(text)
+
+        #work backwards
+        features_out = int(features_out*(self.nchannels+(-self.nchannels)%2))
+        self.final_padding = final_padding
+        height_now = self.height_target + 2*self.final_padding
+        width_now  = self.width_target  + 2*self.final_padding
+        features_now = features_out
+
+        to_int = lambda x: int(x) + (-int(x))%2 #to int and increase by 1 if odd        
+        self.upblocks = []
+        while height_now>=2*upscale_factor+1 and width_now>=2*upscale_factor+1:
+            
+            Ch = (-height_now)%upscale_factor
+            Cw = (-width_now)%upscale_factor
+            # print(height_now, width_now, features_now, Ch, Cw)
+            B = BasicConvTranspose2d(to_int(features_now*feature_scale_factor), to_int(features_now), kernel_size, padding=padding, \
+                 upscale_factor=upscale_factor, padding_mode=padding_mode, activation=activation, Cw=Cw, Ch=Ch, groupnorm=groupnorm)
+            self.upblocks.append(B)
+            features_now *= feature_scale_factor
+            #implement slicing 
+            
+            height_now += Ch
+            width_now += Cw
+            height_now //= upscale_factor
+            width_now //= upscale_factor
+        # print(height_now, width_now, features_now)
+        self.width0 = width_now
+        self.height0 = height_now
+        self.features0 = to_int(features_now)
+        
+        self.upblocks = nn.Sequential(*list(reversed(self.upblocks)))
+        self.fourier_features = Fourier_features(FCnet_in, n_fourier_features=n_fourier_features)
+        n_in = self.fourier_features.n_out
+        self.FC = simple_res_net(n_in=n_in, n_out=self.width0*self.height0*self.features0, \
+                                 n_hidden_layers=n_hidden_layers, n_nodes_per_layer=n_nodes_per_layer)
+        self.final_conv = nn.Conv2d(features_out, self.nchannels, kernel_size=3, padding=padding, padding_mode='zeros')
+        
+    def forward(self, x, u=None):
+        if self.feedthrough:
+            xu = torch.cat([x,u.view(u.shape[0],-1)],dim=1)
+        else:
+            xu = x
+        xu_fourier = self.fourier_features(xu)
+        X = self.FC(xu_fourier).view(-1, self.features0, self.height0, self.width0) 
+        X = self.upblocks(X)
+        X = self.activation(X)
+        Xout = self.final_conv(X)
+        if self.final_padding>0:
+            Xout = Xout[:,:,self.final_padding:-self.final_padding,self.final_padding:-self.final_padding]
+        return Xout[:,0,:,:] if self.None_nchannels else Xout
+
 class Down_Conv_block(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, padding='same', \
                  downscale_factor=2, padding_mode='zeros', activation=nn.functional.relu):
@@ -359,7 +477,7 @@ class CNN_chained_downscales(nn.Module):
     def forward(self, Y):
         if self.None_nchannels:
             Y = Y[:,None,:,:]
-        return self.downblocks(Y).view(Y.shape[0],-1)
+        return self.downblocks(Y).reshape(Y.shape[0],-1)
 
 
 #Psi(upast, ypast) where upast is an image and ypast an vector
