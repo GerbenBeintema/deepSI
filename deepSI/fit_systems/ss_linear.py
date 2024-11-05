@@ -160,15 +160,15 @@ def K_calc(A, C, Q, R, S):
     return K, Calculated
 
 
-def OLSims(y, u, future, weights='N4SID', threshold=0.1, max_order=np.NaN, fixed_order=np.NaN,
+def OLSims(y, u, future, weights='N4SID', threshold=0.1, max_order=np.nan, fixed_order=np.nan,
            D_required=False, A_stability=False):
     ''' y array 
         u array
         SS_f = future = 20, #future?
         id_method = weights = 'N4SID' or 'MOESP' or 'CVA'
         SS_threshold = threshold = 0.1
-        SS_max_order = np.NaN order of the model
-        SS_fixed_order = (np.NaN) or 2
+        SS_max_order = np.nan order of the model
+        SS_fixed_order = (np.nan) or 2
         SS_D_required = False
         SS_A_stability = False'''
 
@@ -275,7 +275,7 @@ class SS_linear(System_ss, System_fittable):
         SS_fixed_order = self.nx
         id_method = 'N4SID' #'N4SID' or 'MOESP' or 'CVA'
         SS_threshold = 0.1
-        SS_max_order = np.NaN
+        SS_max_order = np.nan
         SS_D_required = self.feedthrough
         tsample = 1.
 
