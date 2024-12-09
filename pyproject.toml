@@ -16,6 +16,9 @@ nonlinear_benchmarks = "^0.1.2"
 torch = "^2.0.0"
 cloudpickle = "*"
 
+[tool.poetry.urls]
+Homepage = "https://github.com/GerbenBeintema/deepSI"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

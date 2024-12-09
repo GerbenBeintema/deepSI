@@ -58,8 +58,7 @@ plt.show()
 ## Installation
 
 ```bash
-conda install -c anaconda git
-pip install git+https://github.com/GerbenBeintema/deepSI@main
+pip install deepSI
 ```
 
 ## Features
