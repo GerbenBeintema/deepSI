@@ -2,7 +2,7 @@
 
 deepSI provides a lightweight pytorch based framework for data-driven learning of dynamical systems (i.e. system identification). It contains a large forcus on the SUBNET method which is able to robustly model many systems.
 
-### ⚠️ deepSI has been refractored without backward compatibility as of 5 December 2024. ⚠️
+### ⚠️ deepSI has been refractored without backward compatibility (5 December 2024) ⚠️
 
 If you need to install the legacy version you can do this with 
 ```bash
@@ -17,15 +17,15 @@ and using the legacy documentation provided in [https://github.com/GerbenBeintem
 import numpy as np
 import deepSI as dsi
 
-# Generate data or load
+# Generate or load data 
 np.random.seed(0)
-ulist = np.random.randn(10_000) #input sequence
-x = [0, 0] #initial state
-ylist = [] #output sequence
+ulist = np.random.randn(10_000) # Input sequence
+x = [0, 0] # Initial state
+ylist = [] # Output sequence
 for uk in ulist:
-    ylist.append(x[1]*x[0]*0.1 + x[0] + np.random.randn()*1e-3)  #compute output
+    ylist.append(x[1]*x[0]*0.1 + x[0] + np.random.randn()*1e-3)  # Compute output
     x = x[0]/(1.2+x[1]**2) + x[1]*0.4, \
-        x[1]/(1.2+x[0]**2) + x[0]*0.4 + uk*(1+x[0]**2/10) #advance state
+        x[1]/(1.2+x[0]**2) + x[0]*0.4 + uk*(1+x[0]**2/10) # Advance state
 
 # Put the input and output sequence in the Input_output_data format
 data = dsi.Input_output_data(u=ulist, y=np.array(ylist)) 
@@ -77,7 +77,7 @@ pip install git+https://github.com/GerbenBeintema/deepSI@main
 
 ## Futher documentation
 
-Check out [`examples/Demonstration deepSI.ipynb`](examples/Demonstration%20deepSI.ipynb).
+Check out [`examples/Demonstration deepSI.ipynb`](examples/1.%20Overview%20deepSI.ipynb).
 
 ## Contributing
 
