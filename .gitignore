@@ -1,7 +1,9 @@
-/development/
-/deepSI.egg-info/
 __pycache__/
-/build/
-
-## ignore hidden files!
-.*  
+deepSI.egg-info/
+testing/
+.ipynb_checkpoints/
+examples/.ipynb_checkpoints/
+examples/f.onnx
+examples/model*
+.vscode/
+build/

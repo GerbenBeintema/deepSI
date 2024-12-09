@@ -1,0 +1,21 @@
+
+[tool.poetry]
+name = "deepSI"
+version = "0.4.1"
+description = "Data-driven learning of dynamical system in the SUBNET structure and ANNs"
+authors = ["Gerben I. Beintema"]
+license = "BSD 3-Clause License"
+readme = "README.md"
+packages = [{include = "deepSI"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = ">=1.25"
+tqdm = "^4.0.0"
+nonlinear_benchmarks = "^0.1.2"
+torch = "^2.0.0"
+cloudpickle = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
