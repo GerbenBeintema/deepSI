@@ -1,7 +1,7 @@
 
 [tool.poetry]
 name = "deepSI"
-version = "0.4.1"
+version = "0.4.2"
 description = "Data-driven learning of dynamical system in the SUBNET structure and ANNs"
 authors = ["Gerben I. Beintema"]
 license = "BSD 3-Clause License"
