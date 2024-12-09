@@ -1,5 +1,0 @@
-Systems
-=======
-
-
-.. automodule:: deepSI.systems
