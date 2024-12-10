@@ -14,7 +14,7 @@ from warnings import warn
 ### Helper Function ###
 #######################
 
-def past_future_arrays(data : Input_output_data | list, na : int, nb : int, T : int | str, stride : int=1, add_sampling_time=False):
+def past_future_arrays(data : Input_output_data | list, na : int, nb : int, T : int | str, stride : int=1, add_sampling_time : bool=False):
     '''
     This function extracts sections from the givne data as to be used in the SUBNET structure in the format (upast, ypast, ufuture, yfuture), ids. 
     
@@ -340,8 +340,8 @@ class CNN_SUBNET(SUBNET):
 
 from deepSI.networks import Ham_converter, ELU_lower_bound, Skew_sym_converter, Sym_pos_semidef_converter, Matrix_converter
 class pHNN_SUBNET(Custom_SUBNET_CT):
-    def __init__(self, nu, ny, norm, nx, na, nb, Hnet=None, Jnet=None, \
-                 Rnet=None, Gnet=None, encoder=None, integrator=None, tau=None):
+    def __init__(self, nu : int | str, ny: int | str, norm : Norm, nx : int, na : int, nb : int, Hnet : None | nn.Module =None, Jnet : None | nn.Module =None, \
+                 Rnet : None | nn.Module =None, Gnet : None | nn.Module =None, encoder : None | nn.Module =None, integrator=None, tau : float =None):
         super().__init__()
         assert nu==ny
         self.nu, self.ny, self.norm, self.nx, self.na, self.nb = nu, ny, norm, nx, na, nb
@@ -444,7 +444,7 @@ class Koopman_SUBNET(Custom_SUBNET):
         for u in ufuture.swapaxes(0,1): #iterate over time
             y = mv(C, x) + (0 if self.feedthrough==False else mv(D, u))
             yfuture_sim.append(y)
-            B = self.Bnet(x) if self.B_depends_on_u==False else self.Bnet(x, u[:,:,0] if self.nu=='scalar' else u) #removes the vector dim if it is scalar
+            B = self.Bnet(x) if self.B_depends_on_u==False else self.Bnet(x, u[:,0] if self.nu=='scalar' else u) #removes the vector dim if it is scalar
             x = mv(A,x) + mv(B, u)
         yfuture_sim = torch.stack(yfuture_sim, dim=1)
         if self.ny=='scalar':

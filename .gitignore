@@ -7,3 +7,4 @@ examples/f.onnx
 examples/model*
 .vscode/
 build/
+dist/

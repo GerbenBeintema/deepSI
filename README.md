@@ -2,7 +2,7 @@
 
 deepSI provides a lightweight pytorch based framework for data-driven learning of dynamical systems (i.e. system identification). It contains a large forcus on the SUBNET method which is able to robustly model many systems.
 
-### ⚠️ deepSI has been refractored without backward compatibility (5 December 2024) ⚠️
+### ⚠️ deepSI has been refactored without backward compatibility (5 December 2024) ⚠️
 
 If you need to install the legacy version you can do this with 
 ```bash
@@ -65,12 +65,12 @@ pip install deepSI
 
 * A number of popular SUBNET model structures
   * SUBNET encoder structue (`deepSI.models.SUBNET`). Featuring in: [\[1\]](https://proceedings.mlr.press/v144/beintema21a), [\[2\]](https://www.sciencedirect.com/science/article/pii/S2405896321012167), [\[3\]](https://www.sciencedirect.com/science/article/pii/S2405896321012180), [\[4\]](https://arxiv.org/abs/2303.17305), [\[5\]](https://arxiv.org/abs/2304.02119)
-  * Continuous time SUBNET encoder structure (`deepSI.models.SUBNET_CT`). Featuring in: [\[1\]](https://arxiv.org/abs/2204.09405), [\[2\]](https://www.sciencedirect.com/science/article/pii/S2405896324013223), [\[3\]](https://www.sciencedirect.com/science/article/pii/S240589632401317X)
+  * Continuous time SUBNET encoder structure (`deepSI.models.SUBNET_CT`). Featuring in: [\[6\]](https://arxiv.org/abs/2204.09405), [\[7\]](https://www.sciencedirect.com/science/article/pii/S2405896324013223), [\[8\]](https://www.sciencedirect.com/science/article/pii/S240589632401317X)
   * Base class for fully custom SUBNET structures with shared parameters between `f`, `h` or `encoder`. (`deepSI.models.Custom_SUBNET`) as used in:
-  * CNN SUBNET (`CNN_SUBNET`). Featuring in: [\[1\]](https://research.tue.nl/files/318935789/20240321_Beintema_hf.pdf) Chapter 4, [\[2\]](https://www.sciencedirect.com/science/article/pii/S2405896321012167)
-  * LPV SUBNET (`SUBNET_LPV` and `SUBNET_LPV_ext_scheduled`). Featuring in: [\[1\]](https://arxiv.org/abs/2204.04060)
-  * port HNN SUBNET (`pHNN_SUBNET`). Featuring in: [\[1\]](https://arxiv.org/abs/2305.01338)
-  * Koopman SUBNET (`Koopman_SUBNET`). Featuring in: [\[1\]](https://ieeexplore.ieee.org/abstract/document/9682946)
+  * CNN SUBNET (`CNN_SUBNET`). Featuring in: [\[9\]](https://research.tue.nl/files/318935789/20240321_Beintema_hf.pdf) Chapter 4, [\[10\]](https://www.sciencedirect.com/science/article/pii/S2405896321012167)
+  * LPV SUBNET (`SUBNET_LPV` and `SUBNET_LPV_ext_scheduled`). Featuring in: [\[11\]](https://arxiv.org/abs/2204.04060)
+  * port HNN SUBNET (`pHNN_SUBNET`). Featuring in: [\[12\]](https://arxiv.org/abs/2305.01338)
+  * Koopman SUBNET (`Koopman_SUBNET`). Featuring in: [\[13\]](https://ieeexplore.ieee.org/abstract/document/9682946)
 * Connection to [`nonlinear_benchmarks`](https://github.com/GerbenBeintema/nonlinear_benchmarks) to easily load and evaluate on benchmarks.
 * Low amount of code such that it can be easily forked and edited to add missing features.
 
@@ -88,6 +88,5 @@ deepSI is in ongoing development and anyone can contribute to any part of module
 * Issue where discrete time is printed in Input_output_data with torch.Tensors, and np.arrays sample time.
 * General documentation 
 * known issue: CT SUBNET and DT SUBNET does not produce the correct initial when the sampling time is altered. (the encoder assumes that the sampling time does not change)
-* pypi data upload such that it can be easily installed with `pip install deepSI`
-* Improve speed with copy if enough memory is available. Also pre-transfer to GPU and maybe asyncroness getting of arrays.
+* Possibel improvement: Improve speed with copy if enough memory is available. Also pre-transfer to GPU and maybe asyncroness getting of arrays.
 * Known issue: Using the compile function in `fit` will sometimes result in a memory leak
